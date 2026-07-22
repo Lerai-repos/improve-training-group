@@ -1,0 +1,10 @@
+node_modules
+.next
+.vercel
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+public
+*.md
+lib/db/migrations
+
