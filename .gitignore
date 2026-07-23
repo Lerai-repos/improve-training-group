@@ -46,3 +46,9 @@ yarn-error.log*
 /playwright/*
 # Claude Code (installed automatically by postinstall)
 .claude/
+
+/docs
+
+# Raw Airtable snapshot dumps (real client data / PII — not for commit).
+# Anonymized parity fixtures are committed separately.
+/snapshots

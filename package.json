@@ -5,7 +5,8 @@
   "scripts": {
     "postinstall": "[ -d .claude/.git ] || (rm -rf .claude && git clone --quiet git@github.com:Lerai-repos/Claude-settings.git .claude) || true",
     "prepare": "husky",
-    "dev": "next dev --turbo",
+    "dev": "doppler run -- next dev --turbo",
+    "dev:local": "next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -17,7 +18,15 @@
     "ui:add": "pnpm dlx shadcn@latest add",
     "test": "pnpm exec playwright test",
     "test:e2e": "pnpm exec playwright test --project=e2e",
-    "test:routes": "pnpm exec playwright test --project=routes"
+    "test:routes": "pnpm exec playwright test --project=routes",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --local > lib/types/database.gen.ts",
+    "seed": "tsx scripts/seed.ts",
+    "snapshot:airtable": "tsx scripts/snapshot-airtable.ts",
+    "parity": "tsx scripts/parity-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",
@@ -69,6 +78,7 @@
     "@types/node": "^22.18.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.0",
     "eslint-config-prettier": "^9.1.0",
@@ -81,7 +91,9 @@
     "supabase": "^2.78.1",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.19.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.10"
   },
   "packageManager": "pnpm@9.12.3"
 }

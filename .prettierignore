@@ -7,4 +7,6 @@ yarn.lock
 public
 *.md
 lib/db/migrations
+lib/types/database.gen.ts
+supabase/migrations
 
