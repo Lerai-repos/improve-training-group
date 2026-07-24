@@ -30,6 +30,7 @@ export async function truncateDomain(admin: SupabaseClient<Database>): Promise<v
     'training_trainers',
     'training_themas',
     'training_klanten',
+    'trainer_theme_qual_observations',
     'trainer_theme_qualifications',
     'trainings',
     'trainers',
@@ -42,5 +43,10 @@ export async function truncateDomain(admin: SupabaseClient<Database>): Promise<v
     if (error) {
       throw new Error(`truncateDomain ${table}: ${error.message}`);
     }
+  }
+
+  const runs = await admin.from('sync_runs').delete().gte('started_at', ANCIENT);
+  if (runs.error) {
+    throw new Error(`truncateDomain sync_runs: ${runs.error.message}`);
   }
 }

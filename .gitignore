@@ -47,7 +47,12 @@ yarn-error.log*
 # Claude Code (installed automatically by postinstall)
 .claude/
 
-/docs
+# /docs is ignored, EXCEPT the M2a reviewed evidence (sanitized audit + acknowledgement
+# lists). A bare `!/docs/m2a/` can't override a parent-dir ignore, so ignore /docs contents
+# and re-include m2a explicitly.
+/docs/*
+!/docs/m2a/
+!/docs/m2a/**
 
 # Raw Airtable snapshot dumps (real client data / PII — not for commit).
 # Anonymized parity fixtures are committed separately.

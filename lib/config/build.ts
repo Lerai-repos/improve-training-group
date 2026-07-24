@@ -45,11 +45,6 @@ const FIELD_SPECS: Record<keyof AppConfig, FieldSpec> = {
     financial: true,
     parse: asNumber,
   },
-  mondayApiVersion: {
-    dbKey: 'MONDAY_API_VERSION',
-    financial: false,
-    parse: asString,
-  },
 };
 
 const FIELDS = Object.keys(FIELD_SPECS) as (keyof AppConfig)[];

@@ -33,7 +33,8 @@ describe('mirrorValue', () => {
 
 describe('decodeTraining', () => {
   it('normalizes a full raw item using the real Agenda column ids', () => {
-    const t = decodeTraining(RAW_TRAINING_ITEM, AGENDA_2026_COLUMN_MAP);
+    const { value: t, diagnostics } = decodeTraining(RAW_TRAINING_ITEM, AGENDA_2026_COLUMN_MAP);
+    expect(diagnostics).toEqual([]);
 
     expect(t.externalItemId).toBe('5087400001');
     expect(t.externalBoardId).toBe('5087396949');
@@ -54,16 +55,21 @@ describe('decodeTraining', () => {
   });
 
   it('decodes an empty item without throwing (coverage-gap style)', () => {
-    const t = decodeTraining(RAW_TRAINING_ITEM_EMPTY, AGENDA_2026_COLUMN_MAP);
+    const { value: t, diagnostics } = decodeTraining(
+      RAW_TRAINING_ITEM_EMPTY,
+      AGENDA_2026_COLUMN_MAP
+    );
 
     expect(t.trainerExternalIds).toEqual([]);
     expect(t.themaExternalIds).toEqual([]);
     expect(t.duurTraining).toBeNull();
     expect(t.locatie).toBeNull();
     expect(t.companyName).toBeNull();
+    // Empty is NOT malformed — no diagnostics.
+    expect(diagnostics).toEqual([]);
   });
 
-  it('returns null (not NaN) for non-numeric number columns', () => {
+  it('flags non-numeric number columns as MALFORMED (diagnostic), not silent null', () => {
     const raw: RawMondayItem = {
       id: 'x',
       name: 'x',
@@ -74,8 +80,10 @@ describe('decodeTraining', () => {
         { id: 'nummers_mkmvc0rk', type: 'numeric', text: 'n/a', value: null },
       ],
     };
-    const t = decodeTraining(raw, AGENDA_2026_COLUMN_MAP);
+    const { value: t, diagnostics } = decodeTraining(raw, AGENDA_2026_COLUMN_MAP);
     expect(t.omzetCents).toBeNull();
     expect(t.duurTraining).toBeNull();
+    expect(diagnostics.map((d) => d.field).sort()).toEqual(['duur', 'omzet']);
+    expect(diagnostics.every((d) => d.kind === 'malformed_number')).toBe(true);
   });
 });

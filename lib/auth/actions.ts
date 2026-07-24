@@ -1,9 +1,9 @@
-'use server'
+'use server';
 
-import { createServerSupabaseClient } from '@lib/db'
+import { createServerSupabaseClient } from '@lib/db';
 
-import { loginSchema, registerSchema } from './schema'
-import type { LoginActionState, RegisterActionState } from './types'
+import { loginSchema, registerSchema } from './schema';
+import type { LoginActionState, RegisterActionState } from './types';
 
 export async function login(
   prevState: LoginActionState,
@@ -12,29 +12,29 @@ export async function login(
   const validatedFields = loginSchema.safeParse({
     email: formData.get('email'),
     password: formData.get('password'),
-  })
+  });
 
   if (!validatedFields.success) {
-    return { status: 'invalid_data' }
+    return { status: 'invalid_data' };
   }
 
-  const { email, password } = validatedFields.data
+  const { email, password } = validatedFields.data;
 
   try {
-    const supabase = await createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient();
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
-    })
+    });
 
     if (error) {
-      throw error
+      throw error;
     }
 
-    return { status: 'success' }
+    return { status: 'success' };
   } catch {
-    return { status: 'failed' }
+    return { status: 'failed' };
   }
 }
 
@@ -45,33 +45,33 @@ export async function register(
   const validatedFields = registerSchema.safeParse({
     email: formData.get('email'),
     password: formData.get('password'),
-  })
+  });
 
   if (!validatedFields.success) {
-    return { status: 'invalid_data' }
+    return { status: 'invalid_data' };
   }
 
-  const { email, password } = validatedFields.data
+  const { email, password } = validatedFields.data;
 
   try {
-    const supabase = await createServerSupabaseClient()
+    const supabase = await createServerSupabaseClient();
 
     const { error } = await supabase.auth.signUp({
       email,
       password,
-    })
+    });
 
     if (error) {
-      throw error
+      throw error;
     }
 
-    return { status: 'success' }
+    return { status: 'success' };
   } catch {
-    return { status: 'failed' }
+    return { status: 'failed' };
   }
 }
 
 export async function signOutAction(): Promise<void> {
-  const supabase = await createServerSupabaseClient()
-  await supabase.auth.signOut()
+  const supabase = await createServerSupabaseClient();
+  await supabase.auth.signOut();
 }

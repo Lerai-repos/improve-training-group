@@ -8,8 +8,9 @@ insert into config (key, value, description) values
   ('TRAVEL_RATE_CLIENT_CENTS_PER_KM', '45', 'Client travel charge per km (cents)'),
   ('TRAVEL_TIME_THRESHOLD_MINUTES', '90', 'Free travel-time minutes before compensation'),
   ('TRAVEL_TIME_MODE', 'per_minute', 'Travel-time comp mode: per_minute | hourly_rate (OPEN question)'),
-  ('TRAVEL_TIME_FEE_PER_MINUTE_CENTS', '100', 'Travel-time fee per minute (cents) — legacy €1/min'),
-  ('MONDAY_API_VERSION', '2025-04', 'Pinned Monday API version')
+  ('TRAVEL_TIME_FEE_PER_MINUTE_CENTS', '100', 'Travel-time fee per minute (cents) — legacy €1/min')
+-- NOTE: the pinned Monday API version is intentionally NOT config — it lives in
+-- board-config `MONDAY_API_VERSION` (single source of truth; dry-run is DB-free).
 on conflict (key) do nothing;
 
 -- Default rate cards. The rate_key is a trainer COHORT label ("started 2020-2024"

@@ -7,7 +7,18 @@
  * (transport→domain) is built and tested now so that implementation is a small,
  * well-understood step.
  */
-export type { MondayPort } from './port';
+export type { MondayPort, MondayReadPort, MondayWritePort } from './port';
+export {
+  validateSnapshot,
+  parseAcknowledgements,
+  acknowledgementsSchema,
+  EMPTY_ACK,
+  type Acknowledgements,
+  type Anomaly,
+  type Severity,
+  type ValidationInput,
+  type ValidationResult,
+} from './validate';
 export type {
   MondayBoardScope,
   Page,
@@ -26,9 +37,17 @@ export {
 } from './mock';
 export {
   decodeTraining,
+  decodeTrainer,
+  decodeThema,
+  decodeQualificationsFromThema,
   linkedItemIds,
   mirrorValue,
   type RawMondayItem,
   type RawColumnValue,
   type TrainingColumnMap,
+  type TrainerColumnMap,
+  type QualificationColourMap,
+  type Diagnostic,
+  type DiagnosticKind,
+  type Decoded,
 } from './decode';

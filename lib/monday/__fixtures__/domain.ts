@@ -24,6 +24,7 @@ export const DEFAULT_TRAINERS: MondayTrainer[] = [
     adres: 'Keizersgracht 1, Amsterdam',
     email: 'anna@example.com',
     telefoon: '0612345678',
+    mondayGroup: 'nieuwe_groep__1',
     rateKey: '2024-heden',
   },
   {
@@ -33,6 +34,7 @@ export const DEFAULT_TRAINERS: MondayTrainer[] = [
     adres: 'Coolsingel 10, Rotterdam',
     email: 'ben@example.com',
     telefoon: '0687654321',
+    mondayGroup: 'topics',
     rateKey: '2020-2024',
   },
 ];

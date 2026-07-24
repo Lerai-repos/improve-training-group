@@ -34,7 +34,10 @@ describe('sync ownership contract + idempotency', () => {
     const first = await syncPlanningFromMonday(admin, monday, scope);
     const second = await syncPlanningFromMonday(admin, monday, scope);
 
-    expect(second).toEqual(first);
+    // Same counts each run (runId differs per run).
+    const { runId: _r1, ...firstCounts } = first;
+    const { runId: _r2, ...secondCounts } = second;
+    expect(secondCounts).toEqual(firstCounts);
 
     const { count } = await admin.from('trainings').select('*', { count: 'exact', head: true });
     expect(count).toBe(first.trainings);

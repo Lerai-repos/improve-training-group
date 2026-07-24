@@ -19,5 +19,4 @@ export const CONFIG_DEFAULTS: AppConfig = {
   travelTimeThresholdMinutes: 90,
   travelTimeMode: 'per_minute',
   travelTimeFeePerMinuteCents: 100,
-  mondayApiVersion: '2025-04',
 };

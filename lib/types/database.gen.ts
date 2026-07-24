@@ -64,6 +64,7 @@ export type Database = {
       klanten: {
         Row: {
           created_at: string
+          deleted_at: string | null
           external_item_id: string | null
           id: string
           klantnaam: string
@@ -72,6 +73,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           external_item_id?: string | null
           id?: string
           klantnaam: string
@@ -80,6 +82,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           external_item_id?: string | null
           id?: string
           klantnaam?: string
@@ -177,9 +180,64 @@ export type Database = {
           },
         ]
       }
+      sync_runs: {
+        Row: {
+          anomalies: Json | null
+          artifact_counts: Json | null
+          artifact_hash: string | null
+          board_totals: Json | null
+          config_hash: string | null
+          failing_stage: string | null
+          finished_at: string | null
+          id: string
+          mode: string
+          monday_request_ids: Json | null
+          schema_hash: string | null
+          scope: Json
+          started_at: string
+          status: string
+          target: string | null
+        }
+        Insert: {
+          anomalies?: Json | null
+          artifact_counts?: Json | null
+          artifact_hash?: string | null
+          board_totals?: Json | null
+          config_hash?: string | null
+          failing_stage?: string | null
+          finished_at?: string | null
+          id?: string
+          mode: string
+          monday_request_ids?: Json | null
+          schema_hash?: string | null
+          scope: Json
+          started_at?: string
+          status?: string
+          target?: string | null
+        }
+        Update: {
+          anomalies?: Json | null
+          artifact_counts?: Json | null
+          artifact_hash?: string | null
+          board_totals?: Json | null
+          config_hash?: string | null
+          failing_stage?: string | null
+          finished_at?: string | null
+          id?: string
+          mode?: string
+          monday_request_ids?: Json | null
+          schema_hash?: string | null
+          scope?: Json
+          started_at?: string
+          status?: string
+          target?: string | null
+        }
+        Relationships: []
+      }
       themas: {
         Row: {
           created_at: string
+          deleted_at: string | null
           external_board_id: string | null
           external_item_id: string | null
           id: string
@@ -189,6 +247,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           external_board_id?: string | null
           external_item_id?: string | null
           id?: string
@@ -198,6 +257,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           external_board_id?: string | null
           external_item_id?: string | null
           id?: string
@@ -207,27 +267,78 @@ export type Database = {
         }
         Relationships: []
       }
-      trainer_theme_qualifications: {
+      trainer_theme_qual_observations: {
         Row: {
+          colour: Database["public"]["Enums"]["qualification"]
           created_at: string
           id: string
-          qualification: Database["public"]["Enums"]["qualification"]
+          source_column: string | null
+          thema_id: string
+          trainer_id: string
+        }
+        Insert: {
+          colour: Database["public"]["Enums"]["qualification"]
+          created_at?: string
+          id?: string
+          source_column?: string | null
+          thema_id: string
+          trainer_id: string
+        }
+        Update: {
+          colour?: Database["public"]["Enums"]["qualification"]
+          created_at?: string
+          id?: string
+          source_column?: string | null
+          thema_id?: string
+          trainer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trainer_theme_qual_observations_thema_id_fkey"
+            columns: ["thema_id"]
+            isOneToOne: false
+            referencedRelation: "themas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainer_theme_qual_observations_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trainer_theme_qualifications: {
+        Row: {
+          conflict_resolution: Json | null
+          created_at: string
+          effective_qualification:
+            | Database["public"]["Enums"]["effective_qualification"]
+            | null
+          id: string
           thema_id: string
           trainer_id: string
           updated_at: string
         }
         Insert: {
+          conflict_resolution?: Json | null
           created_at?: string
+          effective_qualification?:
+            | Database["public"]["Enums"]["effective_qualification"]
+            | null
           id?: string
-          qualification: Database["public"]["Enums"]["qualification"]
           thema_id: string
           trainer_id: string
           updated_at?: string
         }
         Update: {
+          conflict_resolution?: Json | null
           created_at?: string
+          effective_qualification?:
+            | Database["public"]["Enums"]["effective_qualification"]
+            | null
           id?: string
-          qualification?: Database["public"]["Enums"]["qualification"]
           thema_id?: string
           trainer_id?: string
           updated_at?: string
@@ -253,12 +364,14 @@ export type Database = {
         Row: {
           adres: string | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           external_board_id: string | null
           external_item_id: string | null
           id: string
+          monday_group: string | null
           naam: string
-          rate_key: string
+          rate_key: string | null
           source_system: string
           telefoon: string | null
           updated_at: string
@@ -266,12 +379,14 @@ export type Database = {
         Insert: {
           adres?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           external_board_id?: string | null
           external_item_id?: string | null
           id?: string
+          monday_group?: string | null
           naam: string
-          rate_key: string
+          rate_key?: string | null
           source_system?: string
           telefoon?: string | null
           updated_at?: string
@@ -279,12 +394,14 @@ export type Database = {
         Update: {
           adres?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           external_board_id?: string | null
           external_item_id?: string | null
           id?: string
+          monday_group?: string | null
           naam?: string
-          rate_key?: string
+          rate_key?: string | null
           source_system?: string
           telefoon?: string | null
           updated_at?: string
@@ -400,6 +517,7 @@ export type Database = {
           avg_trainer_competence_snapshot: number | null
           created_at: string
           datum: string | null
+          deleted_at: string | null
           duur_training: number | null
           evaluatie_status: string | null
           evaluation_count_snapshot: number | null
@@ -428,6 +546,7 @@ export type Database = {
           avg_trainer_competence_snapshot?: number | null
           created_at?: string
           datum?: string | null
+          deleted_at?: string | null
           duur_training?: number | null
           evaluatie_status?: string | null
           evaluation_count_snapshot?: number | null
@@ -456,6 +575,7 @@ export type Database = {
           avg_trainer_competence_snapshot?: number | null
           created_at?: string
           datum?: string | null
+          deleted_at?: string | null
           duur_training?: number | null
           evaluatie_status?: string | null
           evaluation_count_snapshot?: number | null
@@ -482,9 +602,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      apply_monday_snapshot: {
+        Args: { p_artifact: Json; p_run_id: string }
+        Returns: Json
+      }
+      jsonb_content_md5: { Args: { p: Json }; Returns: string }
     }
     Enums: {
+      effective_qualification: "green" | "red"
       qualification: "groen" | "oranje" | "rood" | "grijs"
     }
     CompositeTypes: {
@@ -616,6 +741,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      effective_qualification: ["green", "red"],
       qualification: ["groen", "oranje", "rood", "grijs"],
     },
   },

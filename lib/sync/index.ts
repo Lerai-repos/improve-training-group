@@ -4,6 +4,11 @@
  * writes only evaluation snapshots. Neither touches the other's columns, so a
  * planning sync can never clobber imported evaluation data (and vice versa).
  */
-export { trainerToInsert, themaToInsert, klantToInsert, trainingToPlanningInsert } from './mappers';
 export { syncPlanningFromMonday, type PlanningSyncResult } from './planning';
 export { updateEvaluationSnapshot, type EvaluationSnapshotInput } from './evaluation';
+export {
+  buildArtifact,
+  deriveEffective,
+  type MondaySnapshotArtifact,
+  type BuildArtifactInput,
+} from './artifact';

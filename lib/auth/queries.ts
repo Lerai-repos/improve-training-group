@@ -1,39 +1,39 @@
-import { redirect } from 'next/navigation'
+import { redirect } from 'next/navigation';
 
-import { createServerSupabaseClient } from '@lib/db'
+import { createServerSupabaseClient } from '@lib/db';
 
-import type { AuthUser, UserType } from './types'
+import type { AuthUser, UserType } from './types';
 
 export async function getSession() {
-  const supabase = await createServerSupabaseClient()
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
     error,
-  } = await supabase.auth.getSession()
+  } = await supabase.auth.getSession();
 
   if (error) {
-    throw error
+    throw error;
   }
-  return session
+  return session;
 }
 
 export async function getUser(): Promise<AuthUser> {
-  const supabase = await createServerSupabaseClient()
+  const supabase = await createServerSupabaseClient();
 
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser();
 
   if (error || !user) {
-    redirect('/login')
+    redirect('/login');
   }
 
-  const userType: UserType = user.email?.includes('guest') ? 'guest' : 'regular'
+  const userType: UserType = user.email?.includes('guest') ? 'guest' : 'regular';
 
   return {
     id: user.id,
     email: user.email || '',
     type: userType,
-  }
+  };
 }

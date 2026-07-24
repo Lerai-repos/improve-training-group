@@ -72,4 +72,16 @@ describe('RLS deny-all', () => {
       .insert({ naam: 'Blocked', rate_key: 'variabel' });
     expect(error).not.toBeNull();
   });
+
+  it('anon cannot read the new M2a tables (sync_runs, qual observations)', async () => {
+    const runs = await anon.from('sync_runs').select('*');
+    expect(runs.data ?? []).toHaveLength(0);
+    const obs = await anon.from('trainer_theme_qual_observations').select('*');
+    expect(obs.data ?? []).toHaveLength(0);
+  });
+
+  it('anon cannot write the new M2a tables', async () => {
+    const runs = await anon.from('sync_runs').insert({ mode: 'apply', scope: { boardId: 'x' } });
+    expect(runs.error).not.toBeNull();
+  });
 });

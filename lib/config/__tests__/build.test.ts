@@ -14,7 +14,6 @@ const allRows: ConfigRowLike[] = [
   { key: 'TRAVEL_TIME_THRESHOLD_MINUTES', value: '60' },
   { key: 'TRAVEL_TIME_MODE', value: 'hourly_rate' },
   { key: 'TRAVEL_TIME_FEE_PER_MINUTE_CENTS', value: '120' },
-  { key: 'MONDAY_API_VERSION', value: '2025-10' },
 ];
 
 describe('buildAppConfig', () => {

@@ -136,14 +136,14 @@ describe('schema constraints', () => {
     const first = await admin.from('trainer_theme_qualifications').insert({
       trainer_id: trainerId,
       thema_id: themaId,
-      qualification: 'groen',
+      effective_qualification: 'green',
     });
     expect(first.error).toBeNull();
 
     const dup = await admin.from('trainer_theme_qualifications').insert({
       trainer_id: trainerId,
       thema_id: themaId,
-      qualification: 'rood',
+      effective_qualification: 'red',
     });
     expect(dup.error).not.toBeNull();
   });

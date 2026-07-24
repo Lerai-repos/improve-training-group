@@ -28,8 +28,13 @@ export interface MondayTrainer {
   adres: string | null;
   email: string | null;
   telefoon: string | null;
-  /** Rate schedule key, derived from the trainer's Monday group. */
-  rateKey: string;
+  /** The raw Monday group id — stored on every trainer (ingestion is never filtered). */
+  mondayGroup: string | null;
+  /**
+   * Rate schedule key, resolved downstream from the group-policy map. Null when
+   * the group is unmapped (variabel/unset) — never blocks the import.
+   */
+  rateKey: string | null;
 }
 
 export interface MondayThema {
@@ -74,6 +79,8 @@ export interface MondayQualification {
   trainerExternalId: string;
   themaExternalId: string;
   qualification: Qualification;
+  /** Which colour board_relation column this observation came from (provenance). */
+  sourceColumn?: string | null;
 }
 
 /**

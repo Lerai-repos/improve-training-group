@@ -12,7 +12,9 @@ export const appConfigSchema = z.object({
   travelTimeThresholdMinutes: z.number().int().nonnegative(),
   travelTimeMode: z.enum(['per_minute', 'hourly_rate']),
   travelTimeFeePerMinuteCents: z.number().int().nonnegative(),
-  mondayApiVersion: z.string().min(1),
+  // NOTE: the pinned Monday API version is NOT config here — it lives in
+  // board-config `MONDAY_API_VERSION` (a code constant, the single source of
+  // truth). Dry-run is DB-free, so the version can't come from the DB anyway.
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
