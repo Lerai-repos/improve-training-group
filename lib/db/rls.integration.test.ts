@@ -84,4 +84,18 @@ describe('RLS deny-all', () => {
     const runs = await anon.from('sync_runs').insert({ mode: 'apply', scope: { boardId: 'x' } });
     expect(runs.error).not.toBeNull();
   });
+
+  it('anon cannot read the M2b recommendation tables', async () => {
+    const runs = await anon.from('recommendation_runs').select('*');
+    expect(runs.data ?? []).toHaveLength(0);
+    const recs = await anon.from('recommendations').select('*');
+    expect(recs.data ?? []).toHaveLength(0);
+    const cache = await anon.from('travel_cache').select('*');
+    expect(cache.data ?? []).toHaveLength(0);
+  });
+
+  it('anon cannot read the current_recommendations view (security_invoker deny-all)', async () => {
+    const { data } = await anon.from('current_recommendations').select('*');
+    expect(data ?? []).toHaveLength(0);
+  });
 });

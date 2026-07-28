@@ -180,6 +180,232 @@ export type Database = {
           },
         ]
       }
+      recommendation_generation: {
+        Row: {
+          next_gen: number
+          training_external_id: string
+        }
+        Insert: {
+          next_gen?: number
+          training_external_id: string
+        }
+        Update: {
+          next_gen?: number
+          training_external_id?: string
+        }
+        Relationships: []
+      }
+      recommendation_runs: {
+        Row: {
+          ack_version: string | null
+          address_decision: Json | null
+          attempts: number
+          candidate_count: number | null
+          created_at: string
+          delivery_lease_expires_at: string | null
+          delivery_lease_owner: string | null
+          eligible_count: number | null
+          excluded_trainers: Json | null
+          failing_stage: string | null
+          finished_at: string | null
+          generation: number
+          id: string
+          input_artifact: Json | null
+          input_artifact_hash: string | null
+          input_sync_run_id: string | null
+          lease_expires_at: string | null
+          lease_owner: string | null
+          monday_item_id: string
+          monday_item_revision: string | null
+          provider_errors: Json | null
+          recommendation_count: number | null
+          result_status: string | null
+          started_at: string | null
+          status: string
+          training_external_id: string
+          training_id: string | null
+          travel_cache_hits: number | null
+          trigger_kind: string
+          trigger_uuid: string
+          writeback_attempts: number
+          writeback_error: string | null
+          writeback_status: string | null
+        }
+        Insert: {
+          ack_version?: string | null
+          address_decision?: Json | null
+          attempts?: number
+          candidate_count?: number | null
+          created_at?: string
+          delivery_lease_expires_at?: string | null
+          delivery_lease_owner?: string | null
+          eligible_count?: number | null
+          excluded_trainers?: Json | null
+          failing_stage?: string | null
+          finished_at?: string | null
+          generation: number
+          id?: string
+          input_artifact?: Json | null
+          input_artifact_hash?: string | null
+          input_sync_run_id?: string | null
+          lease_expires_at?: string | null
+          lease_owner?: string | null
+          monday_item_id: string
+          monday_item_revision?: string | null
+          provider_errors?: Json | null
+          recommendation_count?: number | null
+          result_status?: string | null
+          started_at?: string | null
+          status?: string
+          training_external_id: string
+          training_id?: string | null
+          travel_cache_hits?: number | null
+          trigger_kind: string
+          trigger_uuid: string
+          writeback_attempts?: number
+          writeback_error?: string | null
+          writeback_status?: string | null
+        }
+        Update: {
+          ack_version?: string | null
+          address_decision?: Json | null
+          attempts?: number
+          candidate_count?: number | null
+          created_at?: string
+          delivery_lease_expires_at?: string | null
+          delivery_lease_owner?: string | null
+          eligible_count?: number | null
+          excluded_trainers?: Json | null
+          failing_stage?: string | null
+          finished_at?: string | null
+          generation?: number
+          id?: string
+          input_artifact?: Json | null
+          input_artifact_hash?: string | null
+          input_sync_run_id?: string | null
+          lease_expires_at?: string | null
+          lease_owner?: string | null
+          monday_item_id?: string
+          monday_item_revision?: string | null
+          provider_errors?: Json | null
+          recommendation_count?: number | null
+          result_status?: string | null
+          started_at?: string | null
+          status?: string
+          training_external_id?: string
+          training_id?: string | null
+          travel_cache_hits?: number | null
+          trigger_kind?: string
+          trigger_uuid?: string
+          writeback_attempts?: number
+          writeback_error?: string | null
+          writeback_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_runs_input_sync_run_id_fkey"
+            columns: ["input_sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_runs_training_id_fkey"
+            columns: ["training_id"]
+            isOneToOne: false
+            referencedRelation: "trainings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recommendations: {
+        Row: {
+          billable_hours: number | null
+          calculate_travel: boolean | null
+          client_travel_charge_cents: number | null
+          created_at: string
+          hourly_rate_cents: number | null
+          hq_round_trip_distance_km: number | null
+          id: string
+          overall_avg_score: number | null
+          rank: number
+          round_trip_distance_km: number | null
+          round_trip_duration_minutes: number | null
+          run_id: string
+          theme_avg_score: number | null
+          total_cost_cents: number | null
+          trainer_id: string
+          trainer_travel_cost_cents: number | null
+          training_fee_cents: number | null
+          training_id: string
+          travel_time_compensation_cents: number | null
+        }
+        Insert: {
+          billable_hours?: number | null
+          calculate_travel?: boolean | null
+          client_travel_charge_cents?: number | null
+          created_at?: string
+          hourly_rate_cents?: number | null
+          hq_round_trip_distance_km?: number | null
+          id?: string
+          overall_avg_score?: number | null
+          rank: number
+          round_trip_distance_km?: number | null
+          round_trip_duration_minutes?: number | null
+          run_id: string
+          theme_avg_score?: number | null
+          total_cost_cents?: number | null
+          trainer_id: string
+          trainer_travel_cost_cents?: number | null
+          training_fee_cents?: number | null
+          training_id: string
+          travel_time_compensation_cents?: number | null
+        }
+        Update: {
+          billable_hours?: number | null
+          calculate_travel?: boolean | null
+          client_travel_charge_cents?: number | null
+          created_at?: string
+          hourly_rate_cents?: number | null
+          hq_round_trip_distance_km?: number | null
+          id?: string
+          overall_avg_score?: number | null
+          rank?: number
+          round_trip_distance_km?: number | null
+          round_trip_duration_minutes?: number | null
+          run_id?: string
+          theme_avg_score?: number | null
+          total_cost_cents?: number | null
+          trainer_id?: string
+          trainer_travel_cost_cents?: number | null
+          training_fee_cents?: number | null
+          training_id?: string
+          travel_time_compensation_cents?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendations_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "recommendation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendations_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendations_training_id_fkey"
+            columns: ["training_id"]
+            isOneToOne: false
+            referencedRelation: "trainings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_runs: {
         Row: {
           anomalies: Json | null
@@ -597,16 +823,280 @@ export type Database = {
         }
         Relationships: []
       }
+      travel_cache: {
+        Row: {
+          condition: string
+          destination_key: string
+          distance_km: number | null
+          duration_minutes: number | null
+          fetched_at: string
+          id: string
+          origin_key: string
+          routing_key: string
+        }
+        Insert: {
+          condition: string
+          destination_key: string
+          distance_km?: number | null
+          duration_minutes?: number | null
+          fetched_at?: string
+          id?: string
+          origin_key: string
+          routing_key: string
+        }
+        Update: {
+          condition?: string
+          destination_key?: string
+          distance_km?: number | null
+          duration_minutes?: number | null
+          fetched_at?: string
+          id?: string
+          origin_key?: string
+          routing_key?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      current_recommendations: {
+        Row: {
+          billable_hours: number | null
+          calculate_travel: boolean | null
+          client_travel_charge_cents: number | null
+          created_at: string | null
+          hourly_rate_cents: number | null
+          hq_round_trip_distance_km: number | null
+          id: string | null
+          overall_avg_score: number | null
+          rank: number | null
+          round_trip_distance_km: number | null
+          round_trip_duration_minutes: number | null
+          run_id: string | null
+          theme_avg_score: number | null
+          total_cost_cents: number | null
+          trainer_id: string | null
+          trainer_travel_cost_cents: number | null
+          training_fee_cents: number | null
+          training_id: string | null
+          travel_time_compensation_cents: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendations_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "recommendation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendations_trainer_id_fkey"
+            columns: ["trainer_id"]
+            isOneToOne: false
+            referencedRelation: "trainers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendations_training_id_fkey"
+            columns: ["training_id"]
+            isOneToOne: false
+            referencedRelation: "trainings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      acquire_delivery_lease: {
+        Args: { p_lease_seconds: number; p_owner: string; p_run_id: string }
+        Returns: Json
+      }
       apply_monday_snapshot: {
         Args: { p_artifact: Json; p_run_id: string }
         Returns: Json
       }
+      apply_recommendations: {
+        Args: {
+          p_generation: number
+          p_recs: Json
+          p_run_id: string
+          p_training_id: string
+        }
+        Returns: Json
+      }
+      claim_recommendation_run: {
+        Args: { p_lease_seconds: number; p_owner: string }
+        Returns: {
+          ack_version: string | null
+          address_decision: Json | null
+          attempts: number
+          candidate_count: number | null
+          created_at: string
+          delivery_lease_expires_at: string | null
+          delivery_lease_owner: string | null
+          eligible_count: number | null
+          excluded_trainers: Json | null
+          failing_stage: string | null
+          finished_at: string | null
+          generation: number
+          id: string
+          input_artifact: Json | null
+          input_artifact_hash: string | null
+          input_sync_run_id: string | null
+          lease_expires_at: string | null
+          lease_owner: string | null
+          monday_item_id: string
+          monday_item_revision: string | null
+          provider_errors: Json | null
+          recommendation_count: number | null
+          result_status: string | null
+          started_at: string | null
+          status: string
+          training_external_id: string
+          training_id: string | null
+          travel_cache_hits: number | null
+          trigger_kind: string
+          trigger_uuid: string
+          writeback_attempts: number
+          writeback_error: string | null
+          writeback_status: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "recommendation_runs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_recommendation_run_by_id: {
+        Args: { p_lease_seconds: number; p_owner: string; p_run_id: string }
+        Returns: {
+          ack_version: string | null
+          address_decision: Json | null
+          attempts: number
+          candidate_count: number | null
+          created_at: string
+          delivery_lease_expires_at: string | null
+          delivery_lease_owner: string | null
+          eligible_count: number | null
+          excluded_trainers: Json | null
+          failing_stage: string | null
+          finished_at: string | null
+          generation: number
+          id: string
+          input_artifact: Json | null
+          input_artifact_hash: string | null
+          input_sync_run_id: string | null
+          lease_expires_at: string | null
+          lease_owner: string | null
+          monday_item_id: string
+          monday_item_revision: string | null
+          provider_errors: Json | null
+          recommendation_count: number | null
+          result_status: string | null
+          started_at: string | null
+          status: string
+          training_external_id: string
+          training_id: string | null
+          travel_cache_hits: number | null
+          trigger_kind: string
+          trigger_uuid: string
+          writeback_attempts: number
+          writeback_error: string | null
+          writeback_status: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "recommendation_runs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      eligible_trainers_for_training: {
+        Args: { p_groups: string[]; p_training_id: string }
+        Returns: {
+          adres: string | null
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          external_board_id: string | null
+          external_item_id: string | null
+          id: string
+          monday_group: string | null
+          naam: string
+          rate_key: string | null
+          source_system: string
+          telefoon: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "trainers"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      enqueue_recommendation_run: {
+        Args: {
+          p_monday_item_id: string
+          p_trigger_kind: string
+          p_trigger_uuid: string
+        }
+        Returns: {
+          ack_version: string | null
+          address_decision: Json | null
+          attempts: number
+          candidate_count: number | null
+          created_at: string
+          delivery_lease_expires_at: string | null
+          delivery_lease_owner: string | null
+          eligible_count: number | null
+          excluded_trainers: Json | null
+          failing_stage: string | null
+          finished_at: string | null
+          generation: number
+          id: string
+          input_artifact: Json | null
+          input_artifact_hash: string | null
+          input_sync_run_id: string | null
+          lease_expires_at: string | null
+          lease_owner: string | null
+          monday_item_id: string
+          monday_item_revision: string | null
+          provider_errors: Json | null
+          recommendation_count: number | null
+          result_status: string | null
+          started_at: string | null
+          status: string
+          training_external_id: string
+          training_id: string | null
+          travel_cache_hits: number | null
+          trigger_kind: string
+          trigger_uuid: string
+          writeback_attempts: number
+          writeback_error: string | null
+          writeback_status: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recommendation_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      finalize_delivery: {
+        Args: {
+          p_error: string
+          p_owner: string
+          p_run_id: string
+          p_success: boolean
+        }
+        Returns: Json
+      }
       jsonb_content_md5: { Args: { p: Json }; Returns: string }
+      read_recommendation_inputs: {
+        Args: { p_groups: string[] }
+        Returns: Json
+      }
     }
     Enums: {
       effective_qualification: "green" | "red"

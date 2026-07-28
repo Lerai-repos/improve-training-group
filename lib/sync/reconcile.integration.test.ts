@@ -168,7 +168,7 @@ describe('full-sync reconcile via apply RPC', () => {
     expect(second.data?.updated_at).toBe(first.data?.updated_at);
   });
 
-  it('REJECTS an unlisted qualification conflict (fail-closed)', async () => {
+  it('ALLOWS an unlisted conflict below the ceiling: both observations kept, effective NULL', async () => {
     const qualifications = [
       ...DEFAULT_QUALIFICATIONS,
       {
@@ -177,9 +177,20 @@ describe('full-sync reconcile via apply RPC', () => {
         qualification: 'rood' as const,
       },
     ];
-    await expect(
-      syncPlanningFromMonday(admin, createMockMondayPort({ qualifications }), scope)
-    ).rejects.toThrow(/conflict/i);
+    // A single unlisted colour conflict is flagged/allowed (below the spike ceiling),
+    // not fatal — it imports with effective left NULL (deprecated). See validate.ts §Round-7.
+    await syncPlanningFromMonday(admin, createMockMondayPort({ qualifications }), scope);
+
+    const trainerId = await masterId('trainers', '1661150001');
+    const themaId = await masterId('themas', '5067920001');
+    const obs = await admin
+      .from('trainer_theme_qual_observations')
+      .select('colour')
+      .eq('trainer_id', trainerId)
+      .eq('thema_id', themaId);
+    expect((obs.data ?? []).map((o) => o.colour).sort()).toEqual(['groen', 'rood']);
+    // Unlisted → effective is left unresolved (NULL), not guessed.
+    expect(await effectiveFor('1661150001', '5067920001')).toBeNull();
   });
 
   it('applies an ALLOWLISTED conflict: reviewed effective + both raw observations', async () => {

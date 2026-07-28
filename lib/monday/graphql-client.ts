@@ -15,6 +15,11 @@ import {
  *  - **Read-only:** any document containing a `mutation` operation is rejected
  *    before it leaves the process (the read port must not be able to write).
  *  - Per-request timeout (AbortController); retries on 429/5xx/timeout with backoff.
+ *  - Optional `deadlineMs`: an ABSOLUTE wall-clock bound supplied by the caller. When
+ *    present, each attempt's timeout AND every retry sleep are capped to the time
+ *    remaining, and an exhausted budget fails fast — so a caller running under a
+ *    serverless duration limit (the recommendation worker) can finalize before it is
+ *    killed. Omitted (the M2a sync scripts) → unbounded, as before.
  *
  * `fetchBoardItems` additionally proves completeness (count == items_count, no
  * duplicate ids) and coherence (before/after `updated_at` inventory unchanged).
@@ -34,6 +39,11 @@ export interface MondayClientOptions {
   endpoint?: string;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * Absolute deadline (ms epoch) for the work in flight, or null for none. Injected
+   * (not imported) so this low-level port stays independent of the caller's runtime.
+   */
+  deadlineMs?: () => number | null;
 }
 
 export interface BoardMeta {
@@ -85,15 +95,32 @@ export function createMondayGraphQLClient(opts: MondayClientOptions): MondayGrap
   const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
   let reportedVersion: string | null = null;
 
+  /** Time left before the injected deadline; Infinity when no deadline was supplied. */
+  function remainingMs(): number {
+    const deadline = opts.deadlineMs?.() ?? null;
+    return deadline === null ? Number.POSITIVE_INFINITY : deadline - Date.now();
+  }
+
+  /** Sleep, but never past the deadline (the next attempt then fails fast). */
+  function boundedSleep(ms: number): Promise<void> {
+    return sleep(Math.max(0, Math.min(ms, remainingMs())));
+  }
+
   async function query<T>(document: string, variables: Record<string, unknown> = {}): Promise<T> {
     if (/\bmutation\b/i.test(document)) {
       throw new Error('MondayReadPort: mutation documents are rejected (read-only)');
     }
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      // Out of budget → fail fast so the caller can finalize before it is killed.
+      const remaining = remainingMs();
+      if (remaining <= 0) {
+        throw new Error('Monday GraphQL: deadline exceeded');
+      }
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs, remaining));
       let res: Response;
+      let rawBody: string;
       try {
         res = await fetch(endpoint, {
           method: 'POST',
@@ -105,9 +132,13 @@ export function createMondayGraphQLClient(opts: MondayClientOptions): MondayGrap
           body: JSON.stringify({ query: document, variables }),
           signal: controller.signal,
         });
+        // Buffer the body WHILE the abort timer is still armed: fetch resolves as soon
+        // as headers arrive, so a server that stalls the body would otherwise stream
+        // unbounded (past the per-attempt timeout AND the injected deadline).
+        rawBody = await res.text();
       } catch (err) {
         if (attempt < maxRetries) {
-          await sleep(BASE_BACKOFF_MS * Math.pow(2, attempt));
+          await boundedSleep(BASE_BACKOFF_MS * Math.pow(2, attempt));
           continue;
         }
         throw err;
@@ -119,21 +150,27 @@ export function createMondayGraphQLClient(opts: MondayClientOptions): MondayGrap
 
       if (res.status === 429 || res.status >= 500) {
         if (attempt < maxRetries) {
-          await sleep(retryAfterMs(res.headers.get('Retry-After'), attempt));
+          // Retry-After is honored but bounded by the deadline (it is uncapped otherwise).
+          await boundedSleep(retryAfterMs(res.headers.get('Retry-After'), attempt));
           continue;
         }
       }
       if (!res.ok) {
-        throw new Error(`Monday API ${res.status}: ${await res.text()}`);
+        throw new Error(`Monday API ${res.status}: ${rawBody}`);
       }
 
       assertApiVersion(res.headers.get('API-Version'), opts.apiVersion);
 
-      const body: { data?: T; errors?: Array<{ message: string }> } = await res.json();
+      let body: { data?: T; errors?: Array<{ message: string }> };
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        throw new Error(`Monday GraphQL: unparseable response body (HTTP ${res.status})`);
+      }
       if (body.errors && body.errors.length > 0) {
         const msg = body.errors.map((e) => e.message).join('; ');
         if (/complexity|minute|budget/i.test(msg) && attempt < maxRetries) {
-          await sleep(BASE_BACKOFF_MS * Math.pow(2, attempt + 1));
+          await boundedSleep(BASE_BACKOFF_MS * Math.pow(2, attempt + 1));
           continue;
         }
         throw new Error(`Monday GraphQL error: ${msg}`);

@@ -157,3 +157,31 @@ export function resolveGroupPolicy(groupId: string | null): GroupPolicy | null {
   }
   return GROUP_POLICY[groupId] ?? null;
 }
+
+/** The recommendable-cohort group ids (from GROUP_POLICY) — the eligibility prefilter. */
+export function recommendableGroups(): string[] {
+  return Object.keys(GROUP_POLICY).filter((g) => GROUP_POLICY[g].recommendable);
+}
+
+// --- M2b recommendation-engine columns on Agenda 2026 (from the live board dump) ---
+/** Status column written by the engine: RUN (button) → GEREED | GEEN MATCH | FOUT. */
+export const RECOMMENDATION_STATUS_COLUMN = 'color_mkzwfy42';
+/** The "Aanbevelingen" button that triggers a manual run (sets the status to RUN). */
+export const RECOMMENDATION_BUTTON_COLUMN = 'button_mkzw7xx2';
+/** "Trainers contactgegevens" board_relation (the confirmed-trainer link, flow-7). */
+export const TRAINER_LINK_COLUMN = 'board_relation_mkz4y7tb';
+/** The "Inplannen" group (verified live) — moving a training here triggers a run. */
+export const INPLANNEN_GROUP_ID = 'group_mkwtj07a';
+
+export interface RecommendationStatusLabels {
+  run: string;
+  done: string;
+  noMatch: string;
+  error: string;
+}
+export const RECOMMENDATION_STATUS_LABELS: RecommendationStatusLabels = {
+  run: 'RUN',
+  done: 'GEREED',
+  noMatch: 'GEEN MATCH',
+  error: 'FOUT',
+};
