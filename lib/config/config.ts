@@ -7,19 +7,33 @@ import { buildAppConfig } from './build';
 import type { AppConfig } from './schema';
 
 /**
- * In-memory config cache. Config changes rarely and is small, so a single
- * process-wide cached value is enough. Call {@link clearConfigCache} after a
- * config write (or on a scheduled refresh) to force a reload.
+ * In-memory config cache with a short TTL. The config is small and changes rarely,
+ * but it is now EDITABLE (recommendable trainer groups), so an unbounded cache
+ * would let warm serverless instances disagree with each other indefinitely — a
+ * config change would appear to do nothing on some instances. The TTL bounds that
+ * divergence to {@link CONFIG_TTL_MS}. {@link clearConfigCache} forces a reload.
  */
+export const CONFIG_TTL_MS = 60_000;
+
 let cache: AppConfig | null = null;
+let cachedAtMs = 0;
+
+/** Injectable clock so tests can advance time instead of waiting a real minute. */
+let now: () => number = Date.now;
 
 export function clearConfigCache(): void {
   cache = null;
+  cachedAtMs = 0;
+}
+
+/** Test seam: override the clock used for TTL expiry (pass nothing to restore). */
+export function setConfigClock(clock: () => number = Date.now): void {
+  now = clock;
 }
 
 /** Load, validate, and cache the application config from the `config` table. */
 export async function getAppConfig(supabase: SupabaseClient<Database>): Promise<AppConfig> {
-  if (cache) {
+  if (cache && now() - cachedAtMs < CONFIG_TTL_MS) {
     return cache;
   }
 
@@ -31,5 +45,6 @@ export async function getAppConfig(supabase: SupabaseClient<Database>): Promise<
   cache = buildAppConfig(data ?? [], {
     isProduction: isProductionEnvironment,
   });
+  cachedAtMs = now();
   return cache;
 }

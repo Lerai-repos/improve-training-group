@@ -135,16 +135,22 @@ export const THEMA_EXPECTED_COLUMNS: ExpectedColumn[] = [
 export interface GroupPolicy {
   /** rate_cards key, or null for no cohort (variabel/unset). */
   rateKey: string | null;
-  /** Whether M2b may recommend trainers from this group. */
+  /**
+   * Seeds the DEFAULT recommendable selection only. The live selection is config
+   * (`RECOMMENDABLE_TRAINER_GROUPS`); nothing reads this flag at runtime.
+   */
   recommendable: boolean;
 }
 
 /**
- * Group → rate/eligibility policy. INGESTION IS NEVER FILTERED BY THIS — every
- * trainer is imported with its raw group; this only drives downstream rate
- * resolution + M2b recommendation. Only the two rate cohorts are seeded; the
- * other live groups (Acteurs, Schaduwpool, Inactief, …) are CLIENT decisions —
- * an unmapped group is flagged as an anomaly but the trainer is still imported.
+ * Group → RATE policy. INGESTION IS NEVER FILTERED BY THIS — every trainer is
+ * imported with its raw group; this drives downstream rate resolution only. Which
+ * groups M2b may recommend from is NO LONGER decided here: it is configurable via
+ * the `RECOMMENDABLE_TRAINER_GROUPS` config key (fase-2a "selecteerbare
+ * trainergroepen"), and this table merely seeds that config's default.
+ * Only the two rate cohorts are mapped; the other live groups (Acteurs,
+ * Schaduwpool, Inactief, …) are CLIENT decisions — an unmapped group is flagged as
+ * an anomaly but the trainer is still imported.
  */
 export const GROUP_POLICY: Record<string, GroupPolicy> = {
   topics: { rateKey: '2020-2024', recommendable: true },
@@ -158,7 +164,10 @@ export function resolveGroupPolicy(groupId: string | null): GroupPolicy | null {
   return GROUP_POLICY[groupId] ?? null;
 }
 
-/** The recommendable-cohort group ids (from GROUP_POLICY) — the eligibility prefilter. */
+/**
+ * The DEFAULT recommendable group ids, used only to seed `CONFIG_DEFAULTS`. The
+ * effective selection is the `RECOMMENDABLE_TRAINER_GROUPS` config row.
+ */
 export function recommendableGroups(): string[] {
   return Object.keys(GROUP_POLICY).filter((g) => GROUP_POLICY[g].recommendable);
 }

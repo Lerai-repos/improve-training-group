@@ -20,7 +20,11 @@ export {
   travelTimeCompensation,
   type TravelTimeConfig,
 } from './travel';
-export { resolveHourlyRateCents, type RateCard } from './rate-resolution';
+export {
+  resolveHourlyRateCents,
+  tryResolveHourlyRateCents,
+  type RateCard,
+} from './rate-resolution';
 export { trainingFeeCents, totalCostCents, type TrainerCostComponents } from './cost';
 export { rankRecommendations, type Rankable } from './rank';
 export { resolveQualification } from './qualification';

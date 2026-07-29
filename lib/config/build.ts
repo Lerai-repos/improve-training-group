@@ -16,6 +16,16 @@ interface FieldSpec {
 
 const asString = (s: string): string => s;
 const asNumber = (s: string): number => Number(s);
+/**
+ * Comma-separated list → trimmed, non-empty entries. A PRESENT-but-empty value
+ * yields `[]`, which the schema then rejects — clearing the field is a loud error,
+ * not a silent fallback to the defaults (only an ABSENT row defaults).
+ */
+const asStringArray = (s: string): string[] =>
+  s
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 
 const FIELD_SPECS: Record<keyof AppConfig, FieldSpec> = {
   hqAddress: { dbKey: 'HQ_ADRES', financial: false, parse: asString },
@@ -44,6 +54,11 @@ const FIELD_SPECS: Record<keyof AppConfig, FieldSpec> = {
     dbKey: 'TRAVEL_TIME_FEE_PER_MINUTE_CENTS',
     financial: true,
     parse: asNumber,
+  },
+  recommendableTrainerGroups: {
+    dbKey: 'RECOMMENDABLE_TRAINER_GROUPS',
+    financial: false,
+    parse: asStringArray,
   },
 };
 

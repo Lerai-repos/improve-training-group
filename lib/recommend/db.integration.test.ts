@@ -22,15 +22,28 @@ function jsonField(v: Json | null, key: string): Json | undefined {
   return undefined;
 }
 
+/** The seeded rate keys; anything else is test-created and must not leak between runs. */
+const SEEDED_RATE_KEYS = ['2020-2024', '2024-heden'];
+
 async function cleanRecommendations(): Promise<void> {
   const ANCIENT = '1900-01-01';
   await admin.from('recommendations').delete().gte('created_at', ANCIENT);
   await admin.from('recommendation_runs').delete().gte('created_at', ANCIENT);
   await admin.from('recommendation_generation').delete().neq('training_external_id', '');
   await admin.from('travel_cache').delete().gte('fetched_at', ANCIENT);
+  // A DEFAULT card (trainer_id null) is not cascaded by trainer cleanup, so it would
+  // survive and trip the no-overlap exclusion constraint on the next run.
+  await admin
+    .from('rate_cards')
+    .delete()
+    .not('rate_key', 'in', `(${SEEDED_RATE_KEYS.join(',')})`);
 }
 
-async function insertTrainer(ext: string, group = 'topics'): Promise<string> {
+async function insertTrainer(
+  ext: string,
+  group = 'topics',
+  over: { rateKey?: string | null; deleted?: boolean } = {}
+): Promise<string> {
   const { data, error } = await admin
     .from('trainers')
     .insert({
@@ -38,6 +51,8 @@ async function insertTrainer(ext: string, group = 'topics'): Promise<string> {
       external_item_id: ext,
       naam: `T${ext}`,
       monday_group: group,
+      rate_key: over.rateKey ?? null,
+      deleted_at: over.deleted ? new Date().toISOString() : null,
     })
     .select('id')
     .single();
@@ -369,6 +384,103 @@ describe('acquire_delivery_lease same-run fence', () => {
       p_lease_seconds: 60,
     });
     expect(jsonField(again.data, 'acquired')).toBe(true);
+  });
+});
+
+describe('trainer_group_readiness', () => {
+  const TODAY = '2026-07-28';
+
+  async function readiness(): Promise<
+    Array<{
+      monday_group: string;
+      trainers: number;
+      green_trainers: number;
+      green_with_resolvable_rate: number;
+      green_without_rate: number;
+    }>
+  > {
+    const { data, error } = await admin.rpc('trainer_group_readiness', { p_ref_date: TODAY });
+    if (error) {
+      throw new Error(error.message);
+    }
+    const groups = jsonField(data, 'groups');
+    return Array.isArray(groups) ? JSON.parse(JSON.stringify(groups)) : [];
+  }
+
+  it('counts the INTERSECTION of green and priceable, not independent totals', async () => {
+    const th = await insertThema('th-r');
+    // green + a resolvable default rate → priceable
+    const rated = await insertTrainer('tr-rated', 'topics', { rateKey: '2020-2024' });
+    await green(rated, th);
+    // green but no rate_key at all → green, not priceable
+    const unrated = await insertTrainer('tr-unrated', 'topics');
+    await green(unrated, th);
+    // has a rate but is NOT green → must not make the group look ready
+    await insertTrainer('tr-notgreen', 'topics', { rateKey: '2020-2024' });
+
+    const row = (await readiness()).find((g) => g.monday_group === 'topics');
+    expect(row).toMatchObject({
+      trainers: 3,
+      green_trainers: 2,
+      green_with_resolvable_rate: 1,
+      green_without_rate: 1,
+    });
+  });
+
+  it('a rate_key with no matching card counts as green_without_rate', async () => {
+    const th = await insertThema('th-x');
+    const t = await insertTrainer('tr-orphan', 'topics', { rateKey: 'geen-kaart' });
+    await green(t, th);
+
+    const row = (await readiness()).find((g) => g.monday_group === 'topics');
+    expect(row?.green_trainers).toBe(1);
+    expect(row?.green_with_resolvable_rate).toBe(0);
+  });
+
+  it('resolves a trainer-scoped override keyed on the UUID', async () => {
+    const th = await insertThema('th-o');
+    const t = await insertTrainer('tr-override', 'topics', { rateKey: 'persoonlijk' });
+    await green(t, th);
+    // Override-only key: resolvable ONLY if matched on the internal uuid.
+    const { error } = await admin.from('rate_cards').insert({
+      rate_key: 'persoonlijk',
+      trainer_id: t,
+      valid_from: '2000-01-01',
+      hourly_rate_cents: 12_000,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const row = (await readiness()).find((g) => g.monday_group === 'topics');
+    expect(row?.green_with_resolvable_rate).toBe(1);
+  });
+
+  it('ignores a rate card that does not cover the reference date', async () => {
+    const th = await insertThema('th-d');
+    const t = await insertTrainer('tr-expired', 'topics', { rateKey: 'verlopen' });
+    await green(t, th);
+    const { error } = await admin.from('rate_cards').insert({
+      rate_key: 'verlopen',
+      trainer_id: null,
+      valid_from: '2000-01-01',
+      valid_until: '2020-01-01', // exclusive end, well before TODAY
+      hourly_rate_cents: 5000,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const row = (await readiness()).find((g) => g.monday_group === 'topics');
+    expect(row?.green_with_resolvable_rate).toBe(0);
+  });
+
+  it('excludes tombstoned trainers entirely', async () => {
+    await insertTrainer('tr-live', 'schaduw');
+    await insertTrainer('tr-dead', 'schaduw', { deleted: true });
+
+    const row = (await readiness()).find((g) => g.monday_group === 'schaduw');
+    expect(row?.trainers).toBe(1);
   });
 });
 

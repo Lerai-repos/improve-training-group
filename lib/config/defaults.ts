@@ -1,3 +1,5 @@
+import { recommendableGroups } from '@lib/monday/board-config';
+
 import type { AppConfig } from './schema';
 
 /**
@@ -19,4 +21,7 @@ export const CONFIG_DEFAULTS: AppConfig = {
   travelTimeThresholdMinutes: 90,
   travelTimeMode: 'per_minute',
   travelTimeFeePerMinuteCents: 100,
+  // Seeded from GROUP_POLICY so "the groups we shipped with" has ONE source of
+  // truth; the DB row takes over once set.
+  recommendableTrainerGroups: recommendableGroups(),
 };

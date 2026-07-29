@@ -48,11 +48,13 @@ yarn-error.log*
 .claude/
 
 # /docs is ignored, EXCEPT the M2a reviewed evidence (sanitized audit + acknowledgement
-# lists). A bare `!/docs/m2a/` can't override a parent-dir ignore, so ignore /docs contents
-# and re-include m2a explicitly.
+# lists) and the M2b runbook (the operational handoff doc). A bare `!/docs/m2a/` can't
+# override a parent-dir ignore, so ignore /docs contents and re-include explicitly.
 /docs/*
 !/docs/m2a/
 !/docs/m2a/**
+!/docs/m2b/
+!/docs/m2b/**
 
 # Raw Airtable snapshot dumps (real client data / PII — not for commit).
 # Anonymized parity fixtures are committed separately.

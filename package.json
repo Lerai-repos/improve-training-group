@@ -29,6 +29,7 @@
     "snapshot:monday": "tsx scripts/snapshot-monday.ts",
     "audit:mapping": "tsx scripts/audit-mapping.ts",
     "sync:monday": "tsx scripts/sync-monday.ts",
+    "groups:list": "tsx scripts/trainer-groups.ts",
     "recommend:once": "tsx scripts/recommend-once.ts",
     "recommend:parity": "tsx scripts/recommend-parity.ts",
     "parity": "tsx scripts/parity-check.ts"

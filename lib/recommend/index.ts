@@ -22,6 +22,7 @@ export * from './signature';
 export * from './webhook';
 export * from './cron';
 export * from './deadline';
+export * from './trainer-groups';
 export * from './engine-config';
 export * from './completion';
 export * from './monday-reader';

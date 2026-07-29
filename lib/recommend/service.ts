@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { log } from '@lib/logger';
 import type { Acknowledgements } from '@lib/monday';
-import type { RateCard, TravelTimeConfig } from '@lib/calc';
+import { tryResolveHourlyRateCents, type RateCard, type TravelTimeConfig } from '@lib/calc';
 import type { Database } from '@lib/types/database';
 
 import {
@@ -90,6 +90,7 @@ const inputsSchema = z.object({
   sync_run_started_at: z.string().nullable(),
   trainers: z.array(
     z.object({
+      id: z.string(),
       external_item_id: z.string(),
       naam: z.string().nullable(),
       adres: z.string().nullable(),
@@ -124,6 +125,7 @@ async function readInputs(admin: Admin, groups: string[]): Promise<SnapshotInput
     syncRunId: parsed.sync_run_id,
     syncStartedAt: parsed.sync_run_started_at,
     trainers: parsed.trainers.map((t) => ({
+      id: t.id,
       externalItemId: t.external_item_id,
       naam: t.naam ?? '',
       adres: t.adres,
@@ -222,16 +224,48 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
     const effective = computeEffectiveQuals(observations, deps.ack);
     const eligible = filterEligible(live.themeExternalIds, inputs.trainers, effective);
 
-    // With NO eligible trainer, GEEN MATCH is already definitive: there is nothing to
+    // Resolve rates BEFORE any provider call. A trainer we cannot price is dropped
+    // here with a reason instead of throwing at the pricing stage — otherwise a
+    // configured-but-unrated group (e.g. one selected in RECOMMENDABLE_TRAINER_GROUPS
+    // whose trainers have no rate card) would fail the WHOLE run as FOUT. Doing it
+    // before address/travel also means such a trainer can't trigger a transient route
+    // failure that would fail a run we were going to exclude them from anyway.
+    stage = 'rates';
+    const excluded: Array<{ externalItemId: string; reason: string }> = [];
+    const priceable = eligible.filter((t) => {
+      const rate =
+        t.rateKey === null
+          ? null
+          : tryResolveHourlyRateCents(config.rateCards, t.rateKey, t.id, live.datum ?? '');
+      if (rate === null) {
+        excluded.push({ externalItemId: t.externalItemId, reason: 'no_rate' });
+        return false;
+      }
+      return true;
+    });
+
+    // Qualified trainers existed but NONE could be priced. On the board that is
+    // indistinguishable from a genuine no-match, so say so loudly here — it means a
+    // selected group has no usable rate cards (see `pnpm groups:list`), which is a
+    // configuration fault, not an answer.
+    if (eligible.length > 0 && priceable.length === 0) {
+      log.error('all eligible trainers excluded as no_rate — check RECOMMENDABLE_TRAINER_GROUPS', {
+        runId: run.id,
+        mondayItemId: run.monday_item_id,
+        eligible: eligible.length,
+        excludedNoRate: excluded.length,
+      });
+    }
+
+    // With NO priceable trainer, GEEN MATCH is already definitive: there is nothing to
     // price, so the address LLM and the Routes calls are pure risk — a provider hiccup
     // there would turn a decided GEEN MATCH into a spurious FOUT. Skip both.
     const travelByTrainer = new Map<string, TrainerTravel | null>();
     let addr: AddressDecision | null = null;
-    let excluded: Array<{ externalItemId: string; reason: string }> = [];
     let routes: InputArtifact['enrichment']['routes'] = [];
     let travelCacheHits = 0;
 
-    if (eligible.length > 0) {
+    if (priceable.length > 0) {
       stage = 'address';
       const decision = await deps.addressFormatter.format(live.locatie);
       if (decision.kind === 'error' || decision.kind === 'unresolved_location') {
@@ -241,22 +275,23 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
 
       stage = 'travel';
       if (decision.kind === 'no_travel_confirmed') {
-        for (const t of eligible) {
+        for (const t of priceable) {
           travelByTrainer.set(t.externalItemId, null);
         }
       } else {
         const resolved = await resolveTravel(deps.travelCache, deps.travelProvider, {
           destination: decision.formatted,
           hqAddress: config.hqAddress,
-          trainers: eligible,
+          trainers: priceable,
         });
         if (resolved.kind === 'fout') {
           return fail('travel', resolved.detail);
         }
-        excluded = resolved.excluded;
+        // APPEND — assigning here would discard the no_rate exclusions collected above.
+        excluded.push(...resolved.excluded);
         routes = resolved.routes;
         travelCacheHits = resolved.cacheHits;
-        for (const t of eligible) {
+        for (const t of priceable) {
           travelByTrainer.set(t.externalItemId, resolved.byTrainer.get(t.externalItemId) ?? null);
         }
       }
@@ -264,9 +299,10 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
 
     stage = 'pricing';
     const excludedIds = new Set(excluded.map((e) => e.externalItemId));
-    const included = eligible.filter((t) => !excludedIds.has(t.externalItemId));
+    const included = priceable.filter((t) => !excludedIds.has(t.externalItemId));
     // Duration/date were validated up front (any eligible trainer implies themes > 0,
-    // which the validate_training stage already gated) so pricing input is sound here.
+    // which the validate_training stage already gated) and every remaining trainer has
+    // a resolvable rate, so pricing input is sound here.
     const ctx: PricingContext = {
       trainingDate: live.datum ?? '',
       duurTraining: live.duurTraining ?? 0,
@@ -287,7 +323,7 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
 
     stage = 'persist';
     const artifact: InputArtifact = {
-      version: 1,
+      version: 2,
       code: { gitSha: config.gitSha, calcVersion: '1' },
       training: {
         externalItemId: live.externalItemId,
@@ -310,6 +346,7 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
         ackVersion: config.ackVersion,
       },
       trainers: eligible.map((t) => ({
+        id: t.id,
         externalItemId: t.externalItemId,
         mondayGroup: t.mondayGroup,
         rateKey: t.rateKey,

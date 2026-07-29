@@ -7,5 +7,5 @@
 export { appConfigSchema, type AppConfig } from './schema';
 export { CONFIG_DEFAULTS } from './defaults';
 export { buildAppConfig, type ConfigRowLike } from './build';
-export { getAppConfig, clearConfigCache } from './config';
+export { getAppConfig, clearConfigCache, setConfigClock, CONFIG_TTL_MS } from './config';
 export { getRateCards, mapRateCardRow } from './rate-cards';

@@ -34,15 +34,32 @@ export function resolveHourlyRateCents(
   trainerId: string,
   date: string
 ): Cents {
+  const rate = tryResolveHourlyRateCents(cards, rateKey, trainerId, date);
+  if (rate === null) {
+    throw new Error(`No rate_card for rateKey=${rateKey} trainer=${trainerId} date=${date}`);
+  }
+  return rate;
+}
+
+/**
+ * Same resolution order as {@link resolveHourlyRateCents} but returns null instead
+ * of throwing, so a caller can *decide* what an unpriceable trainer means (the
+ * recommendation engine excludes them as `no_rate` rather than failing the run).
+ *
+ * NOTE: `trainerId` must be the INTERNAL uuid — `rate_cards.trainer_id` is a uuid,
+ * so passing a Monday external id makes every override silently unmatchable.
+ */
+export function tryResolveHourlyRateCents(
+  cards: readonly RateCard[],
+  rateKey: string,
+  trainerId: string,
+  date: string
+): Cents | null {
   const override = cards.find((c) => c.trainerId === trainerId && coversDate(c, rateKey, date));
   if (override) {
     return override.hourlyRateCents;
   }
 
   const fallback = cards.find((c) => c.trainerId === null && coversDate(c, rateKey, date));
-  if (fallback) {
-    return fallback.hourlyRateCents;
-  }
-
-  throw new Error(`No rate_card for rateKey=${rateKey} trainer=${trainerId} date=${date}`);
+  return fallback ? fallback.hourlyRateCents : null;
 }

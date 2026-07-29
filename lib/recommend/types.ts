@@ -28,6 +28,11 @@ export interface EffectiveQual {
 
 /** A candidate trainer from the coherent snapshot read (recommendable cohort). */
 export interface CandidateTrainer {
+  /**
+   * Internal DB uuid. Required because `rate_cards.trainer_id` is a uuid — matching
+   * overrides on the Monday `externalItemId` silently never resolves.
+   */
+  id: string;
   externalItemId: string;
   naam: string;
   adres: string | null;

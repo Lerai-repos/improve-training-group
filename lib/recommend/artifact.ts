@@ -23,7 +23,14 @@ export interface ArtifactRoute {
 }
 
 export interface InputArtifact {
-  version: 1;
+  /**
+   * v1 → v2 added `trainers[].id`. The bump is load-bearing, not cosmetic: a v1
+   * artifact records only the Monday external id, so its pricing stage is NOT
+   * replayable (trainer-scoped rate overrides are unmatchable). Any future replay
+   * tool must refuse to re-price a v1 artifact rather than silently falling back
+   * to the rateKey default.
+   */
+  version: 2;
   code: { gitSha: string | null; calcVersion: string };
   training: {
     externalItemId: string;
@@ -47,6 +54,15 @@ export interface InputArtifact {
     ackVersion: string | null;
   };
   trainers: Array<{
+    /**
+     * Internal DB uuid. REQUIRED for replay: pricing resolves the rate via
+     * `tryResolveHourlyRateCents(rateCards, rateKey, id, date)`, and
+     * `rate_cards.trainer_id` is a uuid — with only `externalItemId` a replay
+     * cannot tell which trainer-scoped override applied once the trainer row
+     * changes or is deleted. Not a new PII class: `rates.rateCards` below
+     * already carries these same uuids.
+     */
+    id: string;
     externalItemId: string;
     mondayGroup: string | null;
     rateKey: string | null;

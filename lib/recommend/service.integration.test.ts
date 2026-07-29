@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
+import { tryResolveHourlyRateCents } from '@lib/calc';
 import { EMPTY_ACK } from '@lib/monday';
 import { adminClient, truncateDomain } from '@lib/testing/supabase-clients';
 
@@ -46,6 +48,33 @@ const CONFIG: EngineConfig = {
 
 const OK: RouteElement = { status: 'ok', leg: { distanceKm: 10, durationMinutes: 30 } };
 
+/**
+ * The slice of the stored `input_artifact` a pricing replay needs. Parsed (not cast)
+ * because the column is `Json` — this also asserts the shape survives the round-trip.
+ */
+const artifactReplaySchema = z.object({
+  version: z.number(),
+  training: z.object({ datum: z.string() }),
+  trainers: z.array(
+    z.object({
+      id: z.string(),
+      externalItemId: z.string(),
+      rateKey: z.string().nullable(),
+    })
+  ),
+  rates: z.object({
+    rateCards: z.array(
+      z.object({
+        rateKey: z.string(),
+        trainerId: z.string().nullable(),
+        validFrom: z.string(),
+        validUntil: z.string().nullable(),
+        hourlyRateCents: z.number(),
+      })
+    ),
+  }),
+});
+
 function memCache(): TravelCache {
   const store = new Map<string, CachedLeg>();
   const k = (o: string, d: string, r: string): string => `${o}|${d}|${r}`;
@@ -77,6 +106,7 @@ function deps(over: {
   observations?: QualObservation[];
   address?: AddressDecision;
   element?: RouteElement;
+  config?: EngineConfig;
 }): ServiceDeps {
   return {
     admin,
@@ -87,22 +117,30 @@ function deps(over: {
     travelProvider: createStubTravelProvider(() => over.element ?? OK),
     travelCache: memCache(),
     ack: EMPTY_ACK,
-    config: CONFIG,
+    config: over.config ?? CONFIG,
   };
 }
 
-async function insertTrainer(ext: string): Promise<void> {
-  const { error } = await admin.from('trainers').insert({
-    source_system: 'monday',
-    external_item_id: ext,
-    naam: ext,
-    adres: 'Trainer Street 1',
-    monday_group: 'topics',
-    rate_key: '2020-2024',
-  });
-  if (error) {
-    throw new Error(error.message);
+async function insertTrainer(
+  ext: string,
+  over: { rateKey?: string | null; group?: string } = {}
+): Promise<string> {
+  const { data, error } = await admin
+    .from('trainers')
+    .insert({
+      source_system: 'monday',
+      external_item_id: ext,
+      naam: ext,
+      adres: `${ext} Street 1`, // per-trainer so a travel stub can single one out
+      monday_group: over.group ?? 'topics',
+      rate_key: over.rateKey === undefined ? '2020-2024' : over.rateKey,
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    throw new Error(error?.message ?? 'no trainer id');
   }
+  return data.id;
 }
 
 async function insertTrainingWithTheme(itemId: string, themaExt: string): Promise<void> {
@@ -194,6 +232,68 @@ describe('runRecommendation', () => {
     expect(runRow?.status).toBe('computed');
     expect(runRow?.input_artifact_hash).toBeTruthy();
     expect(runRow?.monday_item_revision).toBe('rev-1');
+  });
+
+  it('artifact records the internal trainer uuid, so a trainer-scoped rate override replays', async () => {
+    // Regression: the artifact used to store only `externalItemId`, while pricing
+    // resolves on the internal uuid (`rate_cards.trainer_id`). A replay could then
+    // not tell which override applied and would silently fall back to the rateKey
+    // default — the run's own price would be unreproducible from its own artifact.
+    await insertTrainingWithTheme('T1', 'TH1');
+    const trainerId = await insertTrainer('TR1');
+    const OVERRIDE_CENTS = 12345;
+    const rateCards = [
+      ...CONFIG.rateCards,
+      {
+        rateKey: '2020-2024',
+        trainerId,
+        validFrom: '2000-01-01',
+        validUntil: null,
+        hourlyRateCents: OVERRIDE_CENTS,
+      },
+    ];
+
+    const run = await claimNew('T1');
+    const out = await runRecommendation(
+      deps({
+        training: liveTraining('T1', ['TH1']),
+        observations: [{ trainerExternalId: 'TR1', themaExternalId: 'TH1', colour: 'groen' }],
+        config: { ...CONFIG, rateCards },
+      }),
+      run
+    );
+    expect(out).toMatchObject({ ok: true, resultStatus: 'GEREED' });
+
+    // The override actually drove the persisted price (not the 8800 default).
+    const { data: recs } = await admin
+      .from('recommendations')
+      .select('hourly_rate_cents')
+      .eq('run_id', run.id);
+    expect(recs?.[0]?.hourly_rate_cents).toBe(OVERRIDE_CENTS);
+
+    const { data: runRow } = await admin
+      .from('recommendation_runs')
+      .select('input_artifact')
+      .eq('id', run.id)
+      .single();
+    const parsed = artifactReplaySchema.parse(runRow?.input_artifact);
+    expect(parsed.version).toBe(2);
+
+    const entry = parsed.trainers.find((t) => t.externalItemId === 'TR1');
+    if (!entry || entry.rateKey === null) {
+      throw new Error('artifact did not record the trainer');
+    }
+    expect(entry.id).toBe(trainerId);
+
+    // The point of the fix: re-resolve the price from artifact contents ALONE.
+    expect(
+      tryResolveHourlyRateCents(
+        parsed.rates.rateCards,
+        entry.rateKey,
+        entry.id,
+        parsed.training.datum
+      )
+    ).toBe(OVERRIDE_CENTS);
   });
 
   it('GEEN MATCH: no effective-green trainer → empty, GEEN MATCH', async () => {
@@ -395,6 +495,152 @@ describe('zero-eligible short-circuit', () => {
     expect(out.resultStatus).toBe('GEEN MATCH');
     expect(addressCalls).toBe(0);
     expect(travelCalls).toBe(0);
+  });
+});
+
+describe('no_rate exclusion (half-configured group degrades, never FOUT)', () => {
+  const GREEN = (ext: string): QualObservation[] => [
+    { trainerExternalId: ext, themaExternalId: 'TH1', colour: 'groen' },
+  ];
+
+  async function excludedOf(
+    runId: string
+  ): Promise<Array<{ externalItemId: string; reason: string }>> {
+    const { data } = await admin
+      .from('recommendation_runs')
+      .select('excluded_trainers')
+      .eq('id', runId)
+      .single();
+    const raw = data?.excluded_trainers;
+    return Array.isArray(raw) ? (raw as Array<{ externalItemId: string; reason: string }>) : [];
+  }
+
+  it('an unpriceable trainer is skipped as no_rate; the run still GEREEDs with the rest', async () => {
+    await insertTrainingWithTheme('T1', 'TH1');
+    await insertTrainer('TR1'); // priceable
+    await insertTrainer('TR2', { rateKey: null }); // no cohort → unpriceable
+    const run = await claimNew('T1');
+
+    const out = await runRecommendation(
+      deps({
+        training: liveTraining('T1', ['TH1']),
+        observations: [...GREEN('TR1'), ...GREEN('TR2')],
+      }),
+      run
+    );
+
+    expect(out.resultStatus).toBe('GEREED'); // pre-fix this threw → FOUT
+    const { data: recs } = await admin
+      .from('recommendations')
+      .select('trainers(external_item_id)')
+      .eq('run_id', run.id);
+    expect(recs).toHaveLength(1);
+    expect(await excludedOf(run.id)).toContainEqual({ externalItemId: 'TR2', reason: 'no_rate' });
+  });
+
+  it('when NO trainer is priceable → GEEN MATCH and no provider is called', async () => {
+    await insertTrainingWithTheme('T1', 'TH1');
+    await insertTrainer('TR1', { rateKey: null });
+    const run = await claimNew('T1');
+
+    let addressCalls = 0;
+    let travelCalls = 0;
+    const base = deps({ training: liveTraining('T1', ['TH1']), observations: GREEN('TR1') });
+    const out = await runRecommendation(
+      {
+        ...base,
+        addressFormatter: {
+          format: () => {
+            addressCalls += 1;
+            return Promise.resolve<AddressDecision>({ kind: 'error', detail: 'llm down' });
+          },
+        },
+        travelProvider: createStubTravelProvider(() => {
+          travelCalls += 1;
+          return { status: 'transient', detail: 'routes down' };
+        }),
+      },
+      run
+    );
+
+    expect(out.resultStatus).toBe('GEEN MATCH');
+    expect(addressCalls).toBe(0);
+    expect(travelCalls).toBe(0);
+  });
+
+  it('reports BOTH no_rate and travel exclusions (append, never overwrite)', async () => {
+    await insertTrainingWithTheme('T1', 'TH1');
+    await insertTrainer('TR1'); // priceable, routable
+    await insertTrainer('TR2', { rateKey: null }); // → no_rate
+    await insertTrainer('TR3'); // priceable but unroutable → route_not_found
+    const run = await claimNew('T1');
+
+    const base = deps({
+      training: liveTraining('T1', ['TH1']),
+      observations: [...GREEN('TR1'), ...GREEN('TR2'), ...GREEN('TR3')],
+    });
+    // Only TR3's origin is unroutable; HQ and the others resolve normally.
+    const out = await runRecommendation(
+      {
+        ...base,
+        travelProvider: createStubTravelProvider((origin) =>
+          origin === 'TR3 Street 1' ? { status: 'not_found' } : OK
+        ),
+      },
+      run
+    );
+
+    expect(out.resultStatus).toBe('GEREED');
+    const reasons = await excludedOf(run.id);
+    expect(reasons).toContainEqual({ externalItemId: 'TR2', reason: 'no_rate' });
+    expect(reasons.some((r) => r.reason === 'route_not_found')).toBe(true);
+  });
+
+  it('a trainer-scoped rate OVERRIDE resolves (uuid identity), not excluded as no_rate', async () => {
+    await insertTrainingWithTheme('T1', 'TH1');
+    // Override-only key: no default card exists for it, so the trainer is priceable
+    // ONLY if the override matches on the internal uuid.
+    const trainerId = await insertTrainer('TR1', { rateKey: 'persoonlijk' });
+    const { error } = await admin.from('rate_cards').insert({
+      rate_key: 'persoonlijk',
+      trainer_id: trainerId,
+      valid_from: '2000-01-01',
+      valid_until: null,
+      hourly_rate_cents: 12_000,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+    const run = await claimNew('T1');
+
+    const base = deps({ training: liveTraining('T1', ['TH1']), observations: GREEN('TR1') });
+    const out = await runRecommendation(
+      {
+        ...base,
+        config: {
+          ...CONFIG,
+          rateCards: [
+            ...CONFIG.rateCards,
+            {
+              rateKey: 'persoonlijk',
+              trainerId,
+              validFrom: '2000-01-01',
+              validUntil: null,
+              hourlyRateCents: 12_000,
+            },
+          ],
+        },
+      },
+      run
+    );
+
+    expect(out.resultStatus).toBe('GEREED');
+    expect(await excludedOf(run.id)).toHaveLength(0);
+    const { data: recs } = await admin
+      .from('recommendations')
+      .select('hourly_rate_cents')
+      .eq('run_id', run.id);
+    expect(recs?.[0]?.hourly_rate_cents).toBe(12_000); // the override rate, not a default
   });
 });
 

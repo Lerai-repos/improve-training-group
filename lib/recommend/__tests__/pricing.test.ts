@@ -26,6 +26,7 @@ const ctx: PricingContext = {
   clientTravelRateCentsPerKm: 45,
 };
 const trainer = (ext: string): CandidateTrainer => ({
+  id: `uuid-${ext}`,
   externalItemId: ext,
   naam: `T${ext}`,
   adres: 'A',

@@ -6,6 +6,7 @@ import { computeEffectiveQuals, filterEligible } from '../eligibility';
 import type { CandidateTrainer, QualObservation } from '../types';
 
 const trainer = (ext: string): CandidateTrainer => ({
+  id: `uuid-${ext}`,
   externalItemId: ext,
   naam: `T${ext}`,
   adres: 'Somewhere 1',

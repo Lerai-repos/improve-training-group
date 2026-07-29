@@ -21,8 +21,17 @@ const DEFAULT_BUDGET_MS = 270_000;
 // Don't START a compute job without at least this much left (it would just truncate).
 const DEFAULT_JOB_RESERVE_MS = 120_000;
 
-export function authorizeCron(authHeader: string | null, secret: string | undefined): boolean {
+/**
+ * Constant-shape bearer check for the self-authenticating `/api` routes (middleware
+ * auth excludes `/api`). An unset/empty secret NEVER authorizes — a missing env var
+ * must not silently open the endpoint.
+ */
+export function authorizeBearer(authHeader: string | null, secret: string | undefined): boolean {
   return typeof secret === 'string' && secret.length > 0 && authHeader === `Bearer ${secret}`;
+}
+
+export function authorizeCron(authHeader: string | null, secret: string | undefined): boolean {
+  return authorizeBearer(authHeader, secret);
 }
 
 export async function runCronDrain(

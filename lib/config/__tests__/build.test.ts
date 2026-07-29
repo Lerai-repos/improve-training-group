@@ -61,3 +61,36 @@ describe('buildAppConfig', () => {
     expect(() => buildAppConfig(rows, dev)).toThrow();
   });
 });
+
+describe('RECOMMENDABLE_TRAINER_GROUPS', () => {
+  const withGroups = (value: string): ConfigRowLike[] => [
+    ...allRows,
+    { key: 'RECOMMENDABLE_TRAINER_GROUPS', value },
+  ];
+
+  it('parses a comma-separated list, trimming whitespace', () => {
+    const cfg = buildAppConfig(withGroups(' topics , group_x,group_y '), dev);
+    expect(cfg.recommendableTrainerGroups).toEqual(['topics', 'group_x', 'group_y']);
+  });
+
+  it('accepts a single group', () => {
+    expect(buildAppConfig(withGroups('topics'), dev).recommendableTrainerGroups).toEqual([
+      'topics',
+    ]);
+  });
+
+  it('an ABSENT row falls back to the default', () => {
+    const cfg = buildAppConfig(allRows, dev);
+    expect(cfg.recommendableTrainerGroups).toEqual(CONFIG_DEFAULTS.recommendableTrainerGroups);
+  });
+
+  it('a PRESENT but empty row THROWS (never silently re-enables the defaults)', () => {
+    expect(() => buildAppConfig(withGroups(''), dev)).toThrow();
+    expect(() => buildAppConfig(withGroups('   ,  , '), dev)).toThrow();
+  });
+
+  it('passes unknown group ids through — the readiness listing surfaces them, not the parser', () => {
+    const cfg = buildAppConfig(withGroups('topics,typo_group'), dev);
+    expect(cfg.recommendableTrainerGroups).toEqual(['topics', 'typo_group']);
+  });
+});

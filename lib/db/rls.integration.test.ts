@@ -98,4 +98,19 @@ describe('RLS deny-all', () => {
     const { data } = await anon.from('current_recommendations').select('*');
     expect(data ?? []).toHaveLength(0);
   });
+
+  it('anon cannot execute the trainer_group_readiness RPC (service_role only)', async () => {
+    const { error } = await anon.rpc('trainer_group_readiness', { p_ref_date: '2026-07-28' });
+    expect(error).not.toBeNull();
+  });
+
+  it('anon cannot execute apply_monday_snapshot (the snapshot-overwrite RPC)', async () => {
+    // A plain `revoke ... from public` does NOT drop Supabase's explicit anon grant,
+    // so this asserts the grant itself — not just the RLS behind it.
+    const { error } = await anon.rpc('apply_monday_snapshot', {
+      p_run_id: '00000000-0000-0000-0000-000000000000',
+      p_artifact: {},
+    });
+    expect(error).not.toBeNull();
+  });
 });

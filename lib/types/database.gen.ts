@@ -1097,6 +1097,7 @@ export type Database = {
         Args: { p_groups: string[] }
         Returns: Json
       }
+      trainer_group_readiness: { Args: { p_ref_date: string }; Returns: Json }
     }
     Enums: {
       effective_qualification: "green" | "red"
