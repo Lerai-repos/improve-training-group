@@ -1,4 +1,4 @@
-import type { Qualification } from '@lib/calc';
+import { assessedColours, type Qualification } from '@lib/calc';
 import type {
   MondayKlant,
   MondayQualification,
@@ -123,7 +123,8 @@ export function deriveEffective(colours: readonly Qualification[]): {
   effective: EffectiveQualification | null;
   conflict_resolution: { colours: Qualification[] } | null;
 } {
-  const unique = [...new Set(colours)];
+  // grijs is "not assessed", not a rival opinion — see assessedColours.
+  const unique = assessedColours(colours);
   if (unique.length > 1) {
     return { effective: null, conflict_resolution: { colours: unique } };
   }

@@ -36,3 +36,61 @@ diffs in opposite directions for one person on the same day.
 
 **Not tested:** whether the legacy flow, re-run today, would also detect Annemiek's simultaneous
 groen+rood membership. Only its stored output was inspected, and that simply reads `Groen`.
+
+---
+
+## 2026-08-04 — after the Supabase strip (live reads)
+
+Re-ran `pnpm recommend:parity --limit=8` against live Monday with no database.
+Raw counts looked alarming next to the July run: **21 "unexplained"** (was 2) and
+**33 only-M2b** (was 1).
+
+**Investigated, not assumed.** Traced training `3084042054` trainer-by-trainer
+against the live board. **All six** only-legacy trainers there carry legacy
+`Qualification = "Groen"` but are **`rood` on the live board today** for theme
+`5072549197`. Every one is present in the roster, in a selected group, with a
+resolvable rate — so they are excluded at eligibility, correctly.
+
+(Individuals are deliberately not named here. This file is committed, and a
+qualification colour is a competence judgement about a named contractor; the
+training id + theme id above are what make the finding reproducible. Re-run
+`pnpm recommend:parity` and inspect the live board if you need the names.)
+
+**Mechanism (the same one as the July finding, at larger scale):** Airtable
+Aanbevelingen is an append-only log; rows are never recomputed. ITG switched to a
+groen/rood working method on 30 July 2026 and has been re-qualifying in bulk —
+qualification observations went 3555 → 4620 in a single day on 4 August. The legacy
+rows record a board that no longer exists.
+
+**Fix applied to the harness, not to the engine.** `recommend-parity.ts` now
+classifies an only-legacy trainer against the LIVE effective qualification rather
+than the frozen legacy string, adding a `requalified` bucket. Re-running:
+
+```
+matched 63, oranje-excluded 32, requalified 21, unexplained 0, only-m2b 33, fout 0
+```
+
+**All 21 were requalified. Zero genuinely unexplained.** `unexplained` now means
+what it says — green then AND green now, yet missing from our result — and is the
+only bucket that should be read as a defect.
+
+**only-M2b 33 is NOT explained.** An earlier draft of this note called it "the
+mirror image" of `requalified`. That was an overreach and is withdrawn: an only-M2b
+row proves only that **no legacy row exists**, which is not the same as "legacy would
+have recommended them but for their colour". Legacy could have omitted a trainer for
+a group, rate, route or workflow reason, and Airtable does not record *why* a trainer
+was left out — so the data needed to close this bucket does not exist in the snapshot.
+
+4 of the 33 were spot-checked on `3084042054`. One of them is among the three
+trainers the grijs fix restored the same day — groen+grijs, which the old conflict
+rule treated as unresolvable. That explains *those* rows and nothing else.
+
+**These 33 stay in the review bucket.** Closing them means either sampling them
+against the live board one by one, or accepting that legacy's omission reasons are
+unrecoverable and saying so explicitly. Until then, do not read this report as
+"parity verified" — read it as "no only-legacy discrepancy remains, only-M2b
+outstanding".
+
+**Caveat:** this is an 8-training sample of a live, moving board, and it is not a
+regression gate. `pnpm replay:verify` is the deterministic check; parity shows
+current drift versus legacy.

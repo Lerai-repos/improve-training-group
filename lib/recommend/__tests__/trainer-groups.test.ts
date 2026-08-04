@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deriveTrainerGroupReadiness,
-  snapshotProblem,
   unusableSelections,
   type TrainerGroupCounts,
 } from '../trainer-groups';
@@ -154,41 +153,5 @@ describe('unusableSelections', () => {
       selected: [],
     });
     expect(unusableSelections(rows)).toHaveLength(0);
-  });
-});
-
-describe('snapshotProblem', () => {
-  const NOW = Date.parse('2026-07-28T12:00:00Z');
-  const DAY = 24 * 3_600_000;
-
-  it('rejects a missing snapshot', () => {
-    const issue = snapshotProblem({ syncRunId: null, syncStartedAt: null }, DAY, NOW);
-    expect(issue?.kind).toBe('no_sync');
-    expect(issue?.message).toMatch(/no succ/i);
-  });
-
-  it('rejects a stale snapshot with its age', () => {
-    const started = new Date(NOW - 3 * DAY).toISOString();
-    const issue = snapshotProblem({ syncRunId: 'r1', syncStartedAt: started }, DAY, NOW);
-    expect(issue?.kind).toBe('stale');
-    expect(issue?.message).toMatch(/72h old/);
-  });
-
-  it('reports an unparseable timestamp as a DATA DEFECT, not as staleness', () => {
-    // Would previously say "stale (NaNh old)" and send the operator to re-sync.
-    const issue = snapshotProblem({ syncRunId: 'r1', syncStartedAt: 'not-a-date' }, DAY, NOW);
-    expect(issue?.kind).toBe('invalid_timestamp');
-    expect(issue?.message).not.toMatch(/NaN/);
-    expect(issue?.message).toMatch(/unparseable/i);
-  });
-
-  it('accepts a fresh snapshot', () => {
-    const started = new Date(NOW - 3_600_000).toISOString();
-    expect(snapshotProblem({ syncRunId: 'r1', syncStartedAt: started }, DAY, NOW)).toBeNull();
-  });
-
-  it('accepts a snapshot exactly at the age limit (boundary is >, not >=)', () => {
-    const started = new Date(NOW - DAY).toISOString();
-    expect(snapshotProblem({ syncRunId: 'r1', syncStartedAt: started }, DAY, NOW)).toBeNull();
   });
 });

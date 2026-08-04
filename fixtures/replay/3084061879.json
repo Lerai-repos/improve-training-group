@@ -1,0 +1,1980 @@
+{
+  "itemId": "3084061879",
+  "recorded": {
+    "training": {
+      "externalItemId": "3084061879",
+      "themeExternalIds": [
+        "5072549678"
+      ],
+      "locatie": "Teststraat 35, 1034 IE Voorbeeldstad",
+      "datum": "2026-11-10",
+      "duurTraining": 4,
+      "updatedAt": "2026-07-31T13:09:27Z"
+    },
+    "qualifications": [
+      {
+        "trainerExternalId": "1661151207",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151272",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151229",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2088658159",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151187",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2089285207",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2089272843",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151217",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151200",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151251",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2101460744",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151195",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151220",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2110975043",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151128",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2031898681",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2089297187",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151129",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151163",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151233",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151286",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1664242084",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120852944",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120841835",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151177",
+        "themaExternalId": "5072549678",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151248",
+        "themaExternalId": "5072549678",
+        "colour": "oranje"
+      },
+      {
+        "trainerExternalId": "2089293826",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151242",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151237",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151241",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2146470772",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2148911291",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151135",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151193",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "5017769700",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1835035504",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2148720471",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "3120846891",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "5002182140",
+        "themaExternalId": "5072549678",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151255",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151260",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151193",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151219",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1664242084",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151233",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151183",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151155",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151129",
+        "themaExternalId": "5072549678",
+        "colour": "grijs"
+      }
+    ],
+    "addressCalls": [
+      {
+        "raw": "Teststraat 35, 1034 IE Voorbeeldstad",
+        "decision": {
+          "kind": "travel_required",
+          "formatted": "Teststraat 6, 1005 FJ Voorbeeldstad"
+        }
+      }
+    ],
+    "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+    "travelCalls": [
+      {
+        "origins": [
+          "Teststraat 49, 1048 WY Voorbeeldstad"
+        ],
+        "destination": "Teststraat 6, 1005 FJ Voorbeeldstad",
+        "elements": [
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 114.96,
+              "durationMinutes": 82.21666666666667
+            }
+          }
+        ]
+      },
+      {
+        "origins": [
+          "Teststraat 17, 1016 QI Voorbeeldstad",
+          "Teststraat 43, 1042 QI Voorbeeldstad",
+          "Teststraat 33, 1032 GQ Voorbeeldstad",
+          "Teststraat 16, 1015 PB Voorbeeldstad",
+          "Teststraat 30, 1029 DV Voorbeeldstad",
+          "Teststraat 46, 1045 TD Voorbeeldstad",
+          "Teststraat 22, 1021 VR Voorbeeldstad",
+          "Teststraat 27, 1026 AA Voorbeeldstad",
+          "Teststraat 11, 1010 KS Voorbeeldstad",
+          "Teststraat 15, 1014 OU Voorbeeldstad",
+          "Teststraat 47, 1046 UK Voorbeeldstad",
+          "Teststraat 34, 1033 HX Voorbeeldstad",
+          "Teststraat 25, 1024 YM Voorbeeldstad",
+          "Teststraat 18, 1017 RP Voorbeeldstad",
+          "Teststraat 39, 1038 MG Voorbeeldstad",
+          "Teststraat 3, 1002 CO Voorbeeldstad",
+          "Teststraat 1, 1000 AA Voorbeeldstad",
+          "Teststraat 8, 1007 HX Voorbeeldstad",
+          "Teststraat 19, 1018 SW Voorbeeldstad",
+          "Teststraat 45, 1044 SW Voorbeeldstad",
+          "Teststraat 21, 1020 UK Voorbeeldstad"
+        ],
+        "destination": "Teststraat 6, 1005 FJ Voorbeeldstad",
+        "elements": [
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 73.625,
+              "durationMinutes": 53.63333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 86.842,
+              "durationMinutes": 73.11666666666666
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 120.631,
+              "durationMinutes": 84.85
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 115.483,
+              "durationMinutes": 84.08333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 124.283,
+              "durationMinutes": 89.3
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 67.994,
+              "durationMinutes": 53.016666666666666
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 80.872,
+              "durationMinutes": 58.1
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 212.448,
+              "durationMinutes": 152.03333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 154.843,
+              "durationMinutes": 112.78333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 106.581,
+              "durationMinutes": 74.88333333333334
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 107.908,
+              "durationMinutes": 80.46666666666667
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 141.614,
+              "durationMinutes": 96.33333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 28.617,
+              "durationMinutes": 29.7
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 161.092,
+              "durationMinutes": 107.28333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 100.834,
+              "durationMinutes": 76.98333333333333
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 132.346,
+              "durationMinutes": 94.75
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 44.63,
+              "durationMinutes": 54.45
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 153.158,
+              "durationMinutes": 106.5
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 110.241,
+              "durationMinutes": 75.38333333333334
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 122.961,
+              "durationMinutes": 92.3
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 143.754,
+              "durationMinutes": 102.91666666666667
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "outcome": {
+    "ok": true,
+    "resultStatus": "GEREED"
+  },
+  "expected": {
+    "run": {
+      "result_status": "GEREED",
+      "failing_stage": null,
+      "candidate_count": 41,
+      "eligible_count": 21,
+      "recommendation_count": 21,
+      "excluded_trainers": [],
+      "address_decision": {
+        "kind": "travel_required",
+        "formatted": "Teststraat 6, 1005 FJ Voorbeeldstad"
+      },
+      "provider_errors": null,
+      "monday_item_revision": "2026-07-31T13:09:27Z",
+      "travel_cache_hits": 0,
+      "input_artifact": {
+        "code": {
+          "gitSha": null,
+          "calcVersion": "1"
+        },
+        "rates": {
+          "rateCards": [
+            {
+              "rateKey": "2020-2024",
+              "trainerId": null,
+              "validFrom": "2000-01-01",
+              "validUntil": null,
+              "hourlyRateCents": 8800
+            },
+            {
+              "rateKey": "2024-heden",
+              "trainerId": null,
+              "validFrom": "2000-01-01",
+              "validUntil": null,
+              "hourlyRateCents": 8400
+            }
+          ],
+          "inputSyncRunId": "0c963246-17d1-48de-9a61-b09fd04930f7",
+          "travelTimeConfig": {
+            "mode": "per_minute",
+            "thresholdMinutes": 90,
+            "feePerMinuteCents": 100
+          },
+          "clientTravelRateCentsPerKm": 45,
+          "trainerTravelRateCentsPerKm": 23
+        },
+        "scores": [
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1664242084"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2089297187"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151220"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151229"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151233"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151177"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2089272843"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2031898681"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151251"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151187"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151286"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "3120841835"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151272"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2089285207"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151128"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151217"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "3120852944"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2101460744"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2088658159"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151163"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151129"
+          }
+        ],
+        "version": 2,
+        "trainers": [
+          {
+            "id": "dc1f962b-5a32-4775-8dcf-54ab4b6aa2cd",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151229"
+          },
+          {
+            "id": "d9898998-fb38-49a1-95d4-7f6219a90b36",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151251"
+          },
+          {
+            "id": "1397007e-9a01-4d90-b0f3-93b52c36d557",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151272"
+          },
+          {
+            "id": "e5bc782f-d3c6-45b8-8786-0106710e90f6",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151286"
+          },
+          {
+            "id": "0107a91f-8f06-4294-9aef-69abed5e22cd",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151128"
+          },
+          {
+            "id": "80cc8f2c-c237-48a5-8fdb-f4361be7b619",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151220"
+          },
+          {
+            "id": "0430e5e9-b0fb-4acf-bc0c-31378f6b6cae",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151233"
+          },
+          {
+            "id": "6034a375-aa05-40de-a10e-6c39841b4a6c",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151129"
+          },
+          {
+            "id": "9ef71f72-7b65-4096-a03b-1f211c69a2fb",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "1661151163"
+          },
+          {
+            "id": "dc2cc5f2-4c00-4c12-b3d6-798a05b65cc9",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "1661151177"
+          },
+          {
+            "id": "ec65a423-ead0-4d3d-ada4-5ed782b6d9c6",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "1661151187"
+          },
+          {
+            "id": "e5eae91b-ac6c-42de-a2a3-3af8dc7f9dae",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "1661151217"
+          },
+          {
+            "id": "21099e87-5999-4108-b10b-667b7a0ba633",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "1664242084"
+          },
+          {
+            "id": "7200dd1d-1279-441f-bfbc-64425d9d2e3b",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2088658159"
+          },
+          {
+            "id": "088bdfc2-6174-43cd-8975-4fab5090763b",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2089272843"
+          },
+          {
+            "id": "179a02fb-6500-458c-a697-c888144a1580",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2089285207"
+          },
+          {
+            "id": "85e82d8e-f4b0-4971-b019-577cfa947c34",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2089297187"
+          },
+          {
+            "id": "bc3ccd57-fcf2-4c98-a4b6-ca8e7c089b8e",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2101460744"
+          },
+          {
+            "id": "75970fe0-2cfd-43f8-b0ab-271727f43ed4",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2031898681"
+          },
+          {
+            "id": "31b5a4da-4a61-4fea-8383-b05697f7fe75",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "3120841835"
+          },
+          {
+            "id": "aa5e3967-4645-4521-982d-577ae5b9b98f",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "3120852944"
+          }
+        ],
+        "training": {
+          "datum": "2026-11-10",
+          "duurTraining": 4,
+          "externalItemId": "3084061879",
+          "themeExternalIds": [
+            "5072549678"
+          ]
+        },
+        "enrichment": {
+          "model": "anthropic/claude-haiku-4.5",
+          "routes": [
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 114.96,
+              "originFingerprint": "59ffe776a0065c88",
+              "oneWayDurationMinutes": 82.21666666666667,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 73.625,
+              "originFingerprint": "112a6b0d812318c3",
+              "oneWayDurationMinutes": 53.63333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 86.842,
+              "originFingerprint": "563b665eae5444de",
+              "oneWayDurationMinutes": 73.11666666666666,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 120.631,
+              "originFingerprint": "2fcc0238c3246979",
+              "oneWayDurationMinutes": 84.85,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 115.483,
+              "originFingerprint": "45bc77ca64bdd37d",
+              "oneWayDurationMinutes": 84.08333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 124.283,
+              "originFingerprint": "a3eea661872b9bd1",
+              "oneWayDurationMinutes": 89.3,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 67.994,
+              "originFingerprint": "87d59a3f0a00e003",
+              "oneWayDurationMinutes": 53.016666666666666,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 80.872,
+              "originFingerprint": "c69d4a903f0b0978",
+              "oneWayDurationMinutes": 58.1,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 212.448,
+              "originFingerprint": "9783c7a9549144f8",
+              "oneWayDurationMinutes": 152.03333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 154.843,
+              "originFingerprint": "a470283b77177265",
+              "oneWayDurationMinutes": 112.78333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 106.581,
+              "originFingerprint": "d197c35851163d01",
+              "oneWayDurationMinutes": 74.88333333333334,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 107.908,
+              "originFingerprint": "e2fa70f76cd0fd71",
+              "oneWayDurationMinutes": 80.46666666666667,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 141.614,
+              "originFingerprint": "2c1f220ef718a00f",
+              "oneWayDurationMinutes": 96.33333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 28.617,
+              "originFingerprint": "55256f5ac4b3f3ad",
+              "oneWayDurationMinutes": 29.7,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 161.092,
+              "originFingerprint": "4dcc55ddecf6476e",
+              "oneWayDurationMinutes": 107.28333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 100.834,
+              "originFingerprint": "20c9cd85d65fe55b",
+              "oneWayDurationMinutes": 76.98333333333333,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 132.346,
+              "originFingerprint": "9d6cb3735259970b",
+              "oneWayDurationMinutes": 94.75,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 44.63,
+              "originFingerprint": "a0afc16577967edb",
+              "oneWayDurationMinutes": 54.45,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 153.158,
+              "originFingerprint": "0a5c159656106c2a",
+              "oneWayDurationMinutes": 106.5,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 110.241,
+              "originFingerprint": "e6288966178415d4",
+              "oneWayDurationMinutes": 75.38333333333334,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 122.961,
+              "originFingerprint": "5a8ae9aab2e320ef",
+              "oneWayDurationMinutes": 92.3,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 143.754,
+              "originFingerprint": "0dff6e54d8e89b4d",
+              "oneWayDurationMinutes": 102.91666666666667,
+              "destinationFingerprint": "3d70b5f40c646d15"
+            }
+          ],
+          "addressReason": null,
+          "promptVersion": "v1",
+          "routingProfile": "TRAFFIC_UNAWARE",
+          "addressDecisionKind": "travel_required"
+        },
+        "qualifications": {
+          "effective": [
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151207"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151272"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151229"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2088658159"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151187"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089285207"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089272843"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151217"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151200"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151251"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2101460744"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151195"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151220"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2110975043"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151128"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2031898681"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089297187"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151129"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151163"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151286"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "3120852944"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "3120841835"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151177"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151248"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089293826"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151242"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151237"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151241"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2146470772"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2148911291"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151135"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "5017769700"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1835035504"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2148720471"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "3120846891"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "5002182140"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151255"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151260"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151219"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151183"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151155"
+            }
+          ],
+          "ackVersion": null,
+          "observations": [
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151207"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151272"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151229"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2088658159"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151187"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089285207"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089272843"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151217"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151200"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151251"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2101460744"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151195"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151220"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2110975043"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151128"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2031898681"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089297187"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151129"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151163"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151286"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "3120852944"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "3120841835"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151177"
+            },
+            {
+              "colour": "oranje",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151248"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2089293826"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151242"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151237"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151241"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2146470772"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2148911291"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151135"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "5017769700"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1835035504"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "2148720471"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "3120846891"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "5002182140"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151255"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151260"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151219"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151183"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151155"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072549678",
+              "trainerExternalId": "1661151129"
+            }
+          ]
+        }
+      },
+      "input_artifact_hash": "d5a827fc0958f76db65e3d2a16dfb53a2de9a9ee267a0d628f551fc8bf784064"
+    },
+    "recommendations": [
+      {
+        "id": "69efc14d-4cb0-43ce-9aad-35cd7020df90",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "21099e87-5999-4108-b10b-667b7a0ba633",
+        "rank": 1,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 1316,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 0,
+        "total_cost_cents": 34916,
+        "round_trip_distance_km": 57.234,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 59.4,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 031",
+          "external_item_id": "1664242084"
+        }
+      },
+      {
+        "id": "40ebf079-eda5-41ee-9951-eebf0ac37f23",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "85e82d8e-f4b0-4971-b019-577cfa947c34",
+        "rank": 2,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 2053,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 1890,
+        "total_cost_cents": 37543,
+        "round_trip_distance_km": 89.26,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 108.9,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 013",
+          "external_item_id": "2089297187"
+        }
+      },
+      {
+        "id": "786c5c29-4a31-433d-9977-44f1d254842b",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "80cc8f2c-c237-48a5-8fdb-f4361be7b619",
+        "rank": 3,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 3128,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 1603,
+        "total_cost_cents": 39931,
+        "round_trip_distance_km": 135.988,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 106.03333333333333,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 003",
+          "external_item_id": "1661151220"
+        }
+      },
+      {
+        "id": "acb72fdf-409b-481d-9eb1-0306396c991a",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "dc1f962b-5a32-4775-8dcf-54ab4b6aa2cd",
+        "rank": 4,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 3387,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 1727,
+        "total_cost_cents": 40314,
+        "round_trip_distance_km": 147.25,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 107.26666666666667,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 020",
+          "external_item_id": "1661151229"
+        }
+      },
+      {
+        "id": "4c0ad0b6-d0da-445f-a9be-662779bc7bd8",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "0430e5e9-b0fb-4acf-bc0c-31378f6b6cae",
+        "rank": 5,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 3720,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 2620,
+        "total_cost_cents": 41540,
+        "round_trip_distance_km": 161.744,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 116.2,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 028",
+          "external_item_id": "1661151233"
+        }
+      },
+      {
+        "id": "3d789f3f-8a26-46f2-9e7d-d77aaf900b43",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "dc2cc5f2-4c00-4c12-b3d6-798a05b65cc9",
+        "rank": 6,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 4903,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 5977,
+        "total_cost_cents": 44480,
+        "round_trip_distance_km": 213.162,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 149.76666666666668,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 015",
+          "external_item_id": "1661151177"
+        }
+      },
+      {
+        "id": "aed6db17-531e-40dc-98ce-2216eab20c95",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "088bdfc2-6174-43cd-8975-4fab5090763b",
+        "rank": 7,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 4638,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 6397,
+        "total_cost_cents": 44635,
+        "round_trip_distance_km": 201.668,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 153.96666666666667,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 029",
+          "external_item_id": "2089272843"
+        }
+      },
+      {
+        "id": "12828104-aaa8-4ec8-a74d-6e678950a4f6",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "75970fe0-2cfd-43f8-b0ab-271727f43ed4",
+        "rank": 8,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 5071,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 6077,
+        "total_cost_cents": 44748,
+        "round_trip_distance_km": 220.482,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 150.76666666666668,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 035",
+          "external_item_id": "2031898681"
+        }
+      },
+      {
+        "id": "43aec944-2da2-4ac6-b832-5a08751779cd",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "d9898998-fb38-49a1-95d4-7f6219a90b36",
+        "rank": 9,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 3995,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 5623,
+        "total_cost_cents": 44818,
+        "round_trip_distance_km": 173.684,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 146.23333333333332,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 021",
+          "external_item_id": "1661151251"
+        }
+      },
+      {
+        "id": "91eac6cf-c2d6-4a74-958b-e178ed1fe121",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "ec65a423-ead0-4d3d-ada4-5ed782b6d9c6",
+        "rank": 10,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 4964,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 7093,
+        "total_cost_cents": 45657,
+        "round_trip_distance_km": 215.816,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 160.93333333333334,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 009",
+          "external_item_id": "1661151187"
+        }
+      },
+      {
+        "id": "c1a621d0-7f79-48ee-82d0-4ca8d4b70856",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "e5bc782f-d3c6-45b8-8786-0106710e90f6",
+        "rank": 11,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 5312,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 7817,
+        "total_cost_cents": 48329,
+        "round_trip_distance_km": 230.966,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 168.16666666666666,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 039",
+          "external_item_id": "1661151286"
+        }
+      },
+      {
+        "id": "2d581051-9699-4d2b-99ed-f2f7bc3d2891",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "31b5a4da-4a61-4fea-8383-b05697f7fe75",
+        "rank": 12,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 5656,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 9460,
+        "total_cost_cents": 48716,
+        "round_trip_distance_km": 245.922,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 184.6,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 011",
+          "external_item_id": "3120841835"
+        }
+      },
+      {
+        "id": "d3317372-33c6-447c-9af9-698c2975f83e",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "1397007e-9a01-4d90-b0f3-93b52c36d557",
+        "rank": 13,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 5549,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 7970,
+        "total_cost_cents": 48719,
+        "round_trip_distance_km": 241.262,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 169.7,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 022",
+          "external_item_id": "1661151272"
+        }
+      },
+      {
+        "id": "ba5bdbf5-ad07-4f25-a57b-5d02deb365ab",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "179a02fb-6500-458c-a697-c888144a1580",
+        "rank": 14,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6088,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 9950,
+        "total_cost_cents": 49638,
+        "round_trip_distance_km": 264.692,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 189.5,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 016",
+          "external_item_id": "2089285207"
+        }
+      },
+      {
+        "id": "1fb5d725-7b7e-45b6-a18a-8f62e75aea7e",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "0107a91f-8f06-4294-9aef-69abed5e22cd",
+        "rank": 15,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 5717,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 8860,
+        "total_cost_cents": 49777,
+        "round_trip_distance_km": 248.566,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 178.6,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 004",
+          "external_item_id": "1661151128"
+        }
+      },
+      {
+        "id": "a3059f4d-ef90-4509-bae9-a2b0576e7438",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "e5eae91b-ac6c-42de-a2a3-3af8dc7f9dae",
+        "rank": 16,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6514,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 10267,
+        "total_cost_cents": 50381,
+        "round_trip_distance_km": 283.228,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 192.66666666666666,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 030",
+          "external_item_id": "1661151217"
+        }
+      },
+      {
+        "id": "4ea40a64-8409-4054-9821-218bee75f8eb",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "aa5e3967-4645-4521-982d-577ae5b9b98f",
+        "rank": 17,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6613,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 11583,
+        "total_cost_cents": 51796,
+        "round_trip_distance_km": 287.508,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 205.83333333333334,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 033",
+          "external_item_id": "3120852944"
+        }
+      },
+      {
+        "id": "86c806f6-815a-4499-89a8-3da4491f7b1a",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "bc3ccd57-fcf2-4c98-a4b6-ca8e7c089b8e",
+        "rank": 18,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 7045,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 12300,
+        "total_cost_cents": 52945,
+        "round_trip_distance_km": 306.316,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 213,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 040",
+          "external_item_id": "2101460744"
+        }
+      },
+      {
+        "id": "86593900-d02e-4e0a-992e-827c111e002c",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "7200dd1d-1279-441f-bfbc-64425d9d2e3b",
+        "rank": 19,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 7410,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 12457,
+        "total_cost_cents": 53467,
+        "round_trip_distance_km": 322.184,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 214.56666666666666,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 034",
+          "external_item_id": "2088658159"
+        }
+      },
+      {
+        "id": "b524dc14-0cbe-42ac-b768-1a80a4111418",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "9ef71f72-7b65-4096-a03b-1f211c69a2fb",
+        "rank": 20,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 7123,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 13557,
+        "total_cost_cents": 54280,
+        "round_trip_distance_km": 309.686,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 225.56666666666666,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 002",
+          "external_item_id": "1661151163"
+        }
+      },
+      {
+        "id": "abf103ae-5293-44a0-ab27-49e81b318793",
+        "run_id": "906b15f2-6c95-42f3-bd57-5c6e32215ea0",
+        "training_id": "220a4773-7153-488b-baa4-5c29adea837a",
+        "trainer_id": "6034a375-aa05-40de-a10e-6c39841b4a6c",
+        "rank": 21,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 9773,
+        "client_travel_charge_cents": 10346,
+        "travel_time_compensation_cents": 21407,
+        "total_cost_cents": 66380,
+        "round_trip_distance_km": 424.896,
+        "hq_round_trip_distance_km": 229.92,
+        "round_trip_duration_minutes": 304.06666666666666,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:25.735149+00:00",
+        "trainers": {
+          "naam": "Trainer 025",
+          "external_item_id": "1661151129"
+        }
+      }
+    ]
+  }
+}

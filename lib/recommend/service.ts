@@ -1,11 +1,6 @@
-import { z } from 'zod';
-
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import { log } from '@lib/logger';
 import type { Acknowledgements } from '@lib/monday';
 import { tryResolveHourlyRateCents, type RateCard, type TravelTimeConfig } from '@lib/calc';
-import type { Database } from '@lib/types/database';
 
 import {
   ADDRESS_MODEL,
@@ -16,7 +11,6 @@ import {
 import type { InputArtifact } from './artifact';
 import { hashArtifact } from './artifact';
 import { computeEffectiveQuals, filterEligible } from './eligibility';
-import { markRunFailed, persistRecommendations, updateRunProvenance } from './persist';
 import { priceTrainer, rankTrainers, type PricingContext } from './pricing';
 import { computeScores } from './scores';
 import type { TravelProvider } from './travel';
@@ -28,8 +22,6 @@ import type {
   TrainerThemeEval,
   TrainerTravel,
 } from './types';
-
-type Admin = SupabaseClient<Database>;
 
 /** The just-edited training, live-read from Monday (authoritative for the trigger). */
 export interface LiveTraining {
@@ -55,15 +47,19 @@ export interface EngineConfig {
   travelTimeConfig: TravelTimeConfig;
   trainerTravelRateCentsPerKm: number;
   clientTravelRateCentsPerKm: number;
-  /** Max age of the latest OK M2a sync before the snapshot is too stale to recommend on. */
-  snapshotMaxAgeMs: number;
   gitSha: string | null;
   ackVersion: string | null;
 }
 
 export interface ServiceDeps {
-  admin: Admin;
   reader: LiveMondayReader;
+  /**
+   * The FULL live trainer roster, every group included, fetched ONCE per execution
+   * and injected. The board read costs several Monday calls, so re-reading it per
+   * training would multiply that against a 25.000/day budget. Group filtering
+   * happens below, not in the roster adapter — see `lib/recommend/roster.ts`.
+   */
+  roster: readonly CandidateTrainer[];
   addressFormatter: AddressFormatter;
   travelProvider: TravelProvider;
   travelCache: TravelCache;
@@ -71,89 +67,69 @@ export interface ServiceDeps {
   config: EngineConfig;
 }
 
-/** The minimal shape of a claimed run this pipeline needs. */
-export interface ClaimedRun {
-  id: string;
-  monday_item_id: string;
-  generation: number;
+/** Where a run stopped. `freshness`/`persist` are gone with the snapshot and the DB. */
+export type Stage =
+  | 'load_training'
+  | 'validate_training'
+  | 'invalid_duration'
+  | 'invalid_date'
+  | 'eligibility'
+  | 'rates'
+  | 'address'
+  | 'travel'
+  | 'pricing';
+
+/** Recorded as-is on the run; nothing populates it yet, so it stays null. */
+export type ProviderErrors = null;
+
+interface Counts {
+  candidate: number;
+  eligible: number;
+  recommended: number;
 }
 
-export interface RunOutcome {
-  ok: boolean;
-  resultStatus: 'GEREED' | 'GEEN MATCH' | 'FOUT' | null;
-  superseded?: boolean;
-  failingStage?: string;
+interface Provenance {
+  artifact: InputArtifact;
+  artifactHash: string;
+  counts: Counts;
+  excluded: Array<{ externalItemId: string; reason: string }>;
+  /**
+   * `null` means the address stage was NOT EVALUATED (we short-circuited before any
+   * provider call). A confirmed-online training is a real decision — kind
+   * `no_travel_confirmed` — and must be preserved, not flattened to null.
+   */
+  addressDecision: AddressDecision | null;
+  providerErrors: ProviderErrors;
+  /** `LiveTraining.updatedAt` — which revision of the training this answer came from. */
+  mondayItemRevision: string | null;
+  travelCacheHits: number;
 }
 
-const inputsSchema = z.object({
-  sync_run_id: z.string().nullable(),
-  sync_run_started_at: z.string().nullable(),
-  trainers: z.array(
-    z.object({
-      id: z.string(),
-      external_item_id: z.string(),
-      naam: z.string().nullable(),
-      adres: z.string().nullable(),
-      monday_group: z.string().nullable(),
-      rate_key: z.string().nullable(),
-    })
-  ),
-  trainer_theme_evals: z.array(
-    z.object({
-      trainer_ext: z.string(),
-      thema_ext: z.string(),
-      avg_overall_grade: z.number().nullable(),
-      evaluation_count: z.number().nullable(),
-    })
-  ),
-});
+/**
+ * The complete outcome. A discriminated union because provenance accumulates as
+ * the pipeline runs: a failure at `load_training` has no artifact and no counts,
+ * so a flat all-required shape would be a lie.
+ */
+export type RecommendationResult =
+  | ({
+      ok: true;
+      resultStatus: 'GEREED' | 'GEEN MATCH';
+      recommendations: RankedRecommendation[];
+    } & Provenance)
+  | {
+      ok: false;
+      resultStatus: 'FOUT';
+      failure: { stage: Stage; message: string | null };
+      partial: Partial<Provenance>;
+    };
 
-interface SnapshotInputs {
-  syncRunId: string | null;
-  syncStartedAt: string | null;
-  trainers: CandidateTrainer[];
-  evals: TrainerThemeEval[];
-}
-
-async function readInputs(admin: Admin, groups: string[]): Promise<SnapshotInputs> {
-  const { data, error } = await admin.rpc('read_recommendation_inputs', { p_groups: groups });
-  if (error) {
-    throw new Error(`read_recommendation_inputs: ${error.message}`);
-  }
-  const parsed = inputsSchema.parse(data);
-  return {
-    syncRunId: parsed.sync_run_id,
-    syncStartedAt: parsed.sync_run_started_at,
-    trainers: parsed.trainers.map((t) => ({
-      id: t.id,
-      externalItemId: t.external_item_id,
-      naam: t.naam ?? '',
-      adres: t.adres,
-      mondayGroup: t.monday_group,
-      rateKey: t.rate_key,
-    })),
-    evals: parsed.trainer_theme_evals.map((e) => ({
-      trainerExternalId: e.trainer_ext,
-      themaExternalId: e.thema_ext,
-      avgOverallGrade: e.avg_overall_grade,
-      evaluationCount: e.evaluation_count ?? 0,
-    })),
-  };
-}
-
-async function resolveTrainingId(admin: Admin, itemId: string): Promise<string | null> {
-  const { data, error } = await admin
-    .from('trainings')
-    .select('id')
-    .eq('source_system', 'monday')
-    .eq('external_item_id', itemId)
-    .is('deleted_at', null)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`resolveTrainingId: ${error.message}`);
-  }
-  return data?.id ?? null;
-}
+/**
+ * Evaluation aggregates are INERT until M3 (see scores.ts): every input row is
+ * absent today, so scores are (null, 0) and ranking falls back to cost then travel.
+ * They were the one input with no live-Monday equivalent — derived history, not a
+ * column — so they are dropped here and will return from the Trainer x Thema board.
+ */
+const NO_EVALS: readonly TrainerThemeEval[] = [];
 
 function addressReason(addr: AddressDecision): string | null {
   if (addr.kind === 'no_travel_confirmed') {
@@ -169,40 +145,46 @@ function addressReason(addr: AddressDecision): string | null {
 const MAX_ERROR_DETAIL = 500;
 
 /**
- * The full compute pipeline for a claimed run. Persists a `computed` run on
- * success (GEREED/GEEN MATCH) or marks the run FOUT with a failing stage on any
- * fail-closed condition. Delivery to Monday is a separate step.
+ * The full compute pipeline for one training. Pure orchestration over injected
+ * ports: it reads Monday live, computes, and RETURNS the answer — persistence and
+ * delivery are the caller's business.
+ *
+ * There is no freshness gate any more. It existed because the trainer roster came
+ * from a periodic snapshot that could go stale; reading Monday live removes the
+ * failure mode rather than guarding it.
  */
-export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Promise<RunOutcome> {
-  const { admin, config } = deps;
-  let stage = 'load_training';
+export async function runRecommendation(
+  deps: ServiceDeps,
+  mondayItemId: string
+): Promise<RecommendationResult> {
+  const { config } = deps;
+  let stage: Stage = 'load_training';
+  const excluded: Array<{ externalItemId: string; reason: string }> = [];
+  let addr: AddressDecision | null = null;
+  let travelCacheHits = 0;
+  let mondayItemRevision: string | null = null;
 
-  const fail = async (failingStage: string, detail: string | null = null): Promise<RunOutcome> => {
-    await markRunFailed(admin, run.id, failingStage, detail);
-    return { ok: false, resultStatus: 'FOUT', failingStage };
-  };
+  const fail = (failingStage: Stage, message: string | null = null): RecommendationResult => ({
+    ok: false,
+    resultStatus: 'FOUT',
+    failure: { stage: failingStage, message },
+    // Whatever provenance existed when it failed — never fabricated.
+    partial: { excluded, addressDecision: addr, travelCacheHits, mondayItemRevision },
+  });
 
   try {
-    const live = await deps.reader.readTraining(run.monday_item_id);
+    const live = await deps.reader.readTraining(mondayItemId);
     if (!live) {
       return fail('load_training');
     }
+    mondayItemRevision = live.updatedAt;
 
-    stage = 'freshness';
-    const trainingId = await resolveTrainingId(admin, run.monday_item_id);
-    if (!trainingId) {
-      return fail('stale_snapshot');
-    }
-    const inputs = await readInputs(admin, config.recommendableGroups);
-    // Reject a missing or too-old snapshot — stale/manual trainer data must not
-    // produce a valid-looking recommendation.
-    if (
-      !inputs.syncRunId ||
-      !inputs.syncStartedAt ||
-      Date.now() - Date.parse(inputs.syncStartedAt) > config.snapshotMaxAgeMs
-    ) {
-      return fail('stale_snapshot');
-    }
+    // Group filtering lives HERE, not in the roster adapter: `groups:list` and the
+    // readiness API need the unfiltered roster to report on unselected groups.
+    const groups = new Set(config.recommendableGroups);
+    const candidates = deps.roster.filter(
+      (t) => t.mondayGroup !== null && groups.has(t.mondayGroup)
+    );
 
     // A training that HAS themes must carry valid scheduling input. Validate before
     // eligibility so invalid input is FOUT even when zero trainers are eligible —
@@ -222,7 +204,7 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
     stage = 'eligibility';
     const observations = await deps.reader.readThemeQualifications(live.themeExternalIds);
     const effective = computeEffectiveQuals(observations, deps.ack);
-    const eligible = filterEligible(live.themeExternalIds, inputs.trainers, effective);
+    const eligible = filterEligible(live.themeExternalIds, candidates, effective);
 
     // Resolve rates BEFORE any provider call. A trainer we cannot price is dropped
     // here with a reason instead of throwing at the pricing stage — otherwise a
@@ -231,12 +213,16 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
     // before address/travel also means such a trainer can't trigger a transient route
     // failure that would fail a run we were going to exclude them from anyway.
     stage = 'rates';
-    const excluded: Array<{ externalItemId: string; reason: string }> = [];
     const priceable = eligible.filter((t) => {
       const rate =
         t.rateKey === null
           ? null
-          : tryResolveHourlyRateCents(config.rateCards, t.rateKey, t.id, live.datum ?? '');
+          : tryResolveHourlyRateCents(
+              config.rateCards,
+              t.rateKey,
+              t.externalItemId,
+              live.datum ?? ''
+            );
       if (rate === null) {
         excluded.push({ externalItemId: t.externalItemId, reason: 'no_rate' });
         return false;
@@ -250,8 +236,7 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
     // configuration fault, not an answer.
     if (eligible.length > 0 && priceable.length === 0) {
       log.error('all eligible trainers excluded as no_rate — check RECOMMENDABLE_TRAINER_GROUPS', {
-        runId: run.id,
-        mondayItemId: run.monday_item_id,
+        mondayItemId,
         eligible: eligible.length,
         excludedNoRate: excluded.length,
       });
@@ -261,9 +246,7 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
     // price, so the address LLM and the Routes calls are pure risk — a provider hiccup
     // there would turn a decided GEEN MATCH into a spurious FOUT. Skip both.
     const travelByTrainer = new Map<string, TrainerTravel | null>();
-    let addr: AddressDecision | null = null;
     let routes: InputArtifact['enrichment']['routes'] = [];
-    let travelCacheHits = 0;
 
     if (priceable.length > 0) {
       stage = 'address';
@@ -315,15 +298,14 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
       priceTrainer(
         t,
         travelByTrainer.get(t.externalItemId) ?? null,
-        computeScores(t.externalItemId, live.themeExternalIds, inputs.evals),
+        computeScores(t.externalItemId, live.themeExternalIds, NO_EVALS),
         ctx
       )
     );
     const ranked: RankedRecommendation[] = rankTrainers(computed);
 
-    stage = 'persist';
     const artifact: InputArtifact = {
-      version: 2,
+      version: 3,
       code: { gitSha: config.gitSha, calcVersion: '1' },
       training: {
         externalItemId: live.externalItemId,
@@ -346,7 +328,6 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
         ackVersion: config.ackVersion,
       },
       trainers: eligible.map((t) => ({
-        id: t.id,
         externalItemId: t.externalItemId,
         mondayGroup: t.mondayGroup,
         rateKey: t.rateKey,
@@ -357,7 +338,8 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
         overallAvgScore: r.overallAvgScore,
       })),
       rates: {
-        inputSyncRunId: inputs.syncRunId,
+        // No snapshot to point at any more — the roster is read live from Monday.
+        inputSyncRunId: null,
         rateCards: config.rateCards,
         travelTimeConfig: config.travelTimeConfig,
         trainerTravelRateCentsPerKm: config.trainerTravelRateCentsPerKm,
@@ -375,32 +357,29 @@ export async function runRecommendation(deps: ServiceDeps, run: ClaimedRun): Pro
       },
     };
 
-    await updateRunProvenance(admin, run.id, {
-      trainingId,
-      inputSyncRunId: inputs.syncRunId,
-      mondayItemRevision: live.updatedAt,
-      ackVersion: config.ackVersion,
-      inputArtifact: artifact,
-      inputArtifactHash: hashArtifact(artifact),
+    return {
+      ok: true,
+      resultStatus: ranked.length > 0 ? 'GEREED' : 'GEEN MATCH',
+      recommendations: ranked,
+      artifact,
+      artifactHash: hashArtifact(artifact),
+      counts: {
+        candidate: candidates.length,
+        eligible: eligible.length,
+        recommended: ranked.length,
+      },
+      excluded,
       addressDecision: addr,
-      candidateCount: inputs.trainers.length,
-      eligibleCount: eligible.length,
-      excludedTrainers: excluded,
       providerErrors: null,
+      mondayItemRevision,
       travelCacheHits,
-    });
-
-    const result = await persistRecommendations(admin, run.id, trainingId, run.generation, ranked);
-    if (result.superseded) {
-      return { ok: false, resultStatus: null, superseded: true };
-    }
-    return { ok: true, resultStatus: ranked.length > 0 ? 'GEREED' : 'GEEN MATCH' };
+    };
   } catch (error) {
     const detail = (error instanceof Error ? error.message : String(error)).slice(
       0,
       MAX_ERROR_DETAIL
     );
-    log.error('recommendation run failed', { runId: run.id, stage, detail });
+    log.error('recommendation run failed', { mondayItemId, stage, detail });
     return fail(stage, detail);
   }
 }

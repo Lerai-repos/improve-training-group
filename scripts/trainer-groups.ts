@@ -3,13 +3,20 @@ import { config as loadEnv } from 'dotenv';
 
 loadEnv({ path: '.env.local' });
 
-import { getAppConfig } from '@lib/config';
-import { createAdminSupabaseClient } from '@lib/db/admin';
-import { MONDAY_API_VERSION, TRAINERS_BOARD } from '@lib/monday/board-config';
+import {
+  ITEM_FIELDS,
+  MONDAY_API_VERSION,
+  THEMAS_BOARD,
+  TRAINERS_BOARD,
+} from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import {
+  ACKNOWLEDGEMENTS,
+  buildEngineConfig,
   buildTrainerGroupReport,
-  snapshotMaxAgeMs,
+  createMondayReader,
+  readAllEffectiveQuals,
+  readRoster,
   unusableSelections,
   type TrainerGroupReadiness,
 } from '@lib/recommend';
@@ -42,19 +49,31 @@ async function main(): Promise<void> {
   if (!token) {
     throw new Error('Missing MONDAY_API_TOKEN (.env.local)');
   }
-  const admin = createAdminSupabaseClient();
-  const cfg = await getAppConfig(admin);
+  const config = buildEngineConfig();
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+  const reader = createMondayReader(client);
+
+  // Read live: roster (all groups) + every trainer x theme qualification.
+  // One schema call for both boards. The METADATA is forwarded, not a bare count:
+  // the adapters validate whatever they are given, so this cannot skip the check.
+  const meta = await client.getSchema([TRAINERS_BOARD, THEMAS_BOARD]);
+  const metaOf = (id: string) => meta.find((b) => String(b.id) === id);
+
+  const [roster, effective] = await Promise.all([
+    readRoster(client, ITEM_FIELDS, metaOf(TRAINERS_BOARD)),
+    readAllEffectiveQuals(client, ACKNOWLEDGEMENTS, metaOf(THEMAS_BOARD)),
+  ]);
 
   const report = await buildTrainerGroupReport({
-    admin,
     reader: client,
     trainersBoardId: TRAINERS_BOARD,
-    selected: cfg.recommendableTrainerGroups,
-    maxAgeMs: snapshotMaxAgeMs(),
+    roster,
+    effective,
+    rateCards: config.rateCards,
+    selected: config.recommendableGroups,
   });
 
-  console.log(`Snapshot: sync ${report.syncRunId} (${report.syncStartedAt})`);
+  console.log(`Live Monday read: ${roster.length} trainers, ${effective.length} qualifications`);
   console.log(`Rates resolved as of: ${report.refDate}\n`);
   console.log(
     `     ${pad('group id', 22)} ${pad('naam', 40)} ${pad('trainers', 9)} ${pad('groen', 6)} ${pad('prijsbaar', 10)} status`

@@ -2,7 +2,8 @@ import type { Cents } from './types';
 
 /**
  * An effective-dated hourly rate. `trainerId === null` is a default card for the
- * whole `rateKey`; a non-null `trainerId` is a trainer-scoped override.
+ * whole `rateKey`; a non-null `trainerId` is a trainer-scoped override, keyed by
+ * the trainer's MONDAY ITEM ID.
  * `validFrom` is inclusive, `validUntil` is exclusive (null = open-ended).
  * Dates are ISO `YYYY-MM-DD` so lexicographic comparison is chronological.
  */
@@ -46,8 +47,10 @@ export function resolveHourlyRateCents(
  * of throwing, so a caller can *decide* what an unpriceable trainer means (the
  * recommendation engine excludes them as `no_rate` rather than failing the run).
  *
- * NOTE: `trainerId` must be the INTERNAL uuid — `rate_cards.trainer_id` is a uuid,
- * so passing a Monday external id makes every override silently unmatchable.
+ * NOTE: `trainerId` is the MONDAY ITEM ID — the trainer's only identity now that
+ * Monday is the source of truth. Both sides of this comparison must use the same
+ * id space; a mismatch makes every override silently unmatchable, and the trainer
+ * quietly falls back to the rateKey default or is excluded as `no_rate`.
  */
 export function tryResolveHourlyRateCents(
   cards: readonly RateCard[],

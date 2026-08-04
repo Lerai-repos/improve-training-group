@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { Qualification } from '@lib/calc';
+import { assessedColours, type Qualification } from '@lib/calc';
 
 import { resolveGroupPolicy } from './board-config';
 import type { Diagnostic } from './decode';
@@ -340,7 +340,11 @@ export function validateSnapshot(input: ValidationInput): ValidationResult {
   const conflictOverrides: Record<string, 'green' | 'red'> = {};
   const undecidedConflicts: string[] = [];
   for (const [key, colours] of coloursByPair) {
-    if (colours.size > 1) {
+    // grijs is "not assessed" and must not count as a rival colour here either —
+    // this check and `deriveEffective` have to agree, or validation flags pairs
+    // fatal that the artifact resolves cleanly.
+    const assessed = assessedColours([...colours]);
+    if (assessed.length > 1) {
       const resolved = input.ack.qualConflicts[key];
       // The decision must be bound to the EXACT observed colour set.
       const observed = [...colours].sort().join(',');

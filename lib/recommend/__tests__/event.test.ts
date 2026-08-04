@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseWebhook, type WebhookRouting } from '../event';
+import { keyShape, parseWebhook, type WebhookRouting } from '../event';
 
 const routing: WebhookRouting = {
   inplannenGroupId: 'inplannen',
@@ -150,5 +150,143 @@ describe('parseWebhook', () => {
   it('ignores (200) a non-trigger event type even without identity fields', () => {
     const p = parseWebhook({ event: { type: 'some_other_event' } }, routing);
     expect(p.kind).toBe('ignore');
+  });
+});
+
+/**
+ * The field names in `event.ts` are provisional until the first real payload is
+ * captured. These cases pin the behaviour that makes that capture safe: a routing
+ * field we cannot READ is drift (malformed → 422 → Monday retries → logged with the
+ * real field names), never a 200 that silently swallows a trigger.
+ */
+describe('parseWebhook field-name drift', () => {
+  it('a move event with an unreadable group id is malformed, not ignored', () => {
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'move_pulse_into_group',
+          pulseId: 42,
+          // Monday actually calls it something else → neither name resolves.
+          targetGroupId: 'inplannen',
+          originalTriggerUuid: 'u1',
+        },
+      },
+      routing
+    );
+    expect(p.kind).toBe('malformed');
+    expect(p).toMatchObject({ keys: expect.arrayContaining(['targetGroupId']) });
+  });
+
+  it('a column event with an unreadable column id is malformed, not ignored', () => {
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'update_column_value',
+          pulseId: 7,
+          columnUuid: 'color_x',
+          value: { label: { text: 'RUN' } },
+          originalTriggerUuid: 'u1',
+        },
+      },
+      routing
+    );
+    expect(p.kind).toBe('malformed');
+  });
+
+  it('a status change on our column with an unreadable label is malformed', () => {
+    // A drifted value shape would otherwise read as "status not RUN" and drop the click.
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'update_column_value',
+          pulseId: 7,
+          columnId: 'color_x',
+          value: { labelText: 'RUN' },
+          originalTriggerUuid: 'u1',
+        },
+      },
+      routing
+    );
+    expect(p.kind).toBe('malformed');
+  });
+
+  // Monday clears a column with `null` or `{}`, and the label may be explicitly
+  // null. 422-ing these would make Monday retry a legitimate user action — someone
+  // clearing the status — until it disabled the subscription.
+  it.each([
+    ['null', null],
+    ['an empty object', {}],
+    ['an explicitly null label', { label: null }],
+  ])('a CLEARED status (%s) stays an ignore, never a 422', (_name, value) => {
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'update_column_value',
+          pulseId: 7,
+          columnId: 'color_x',
+          value,
+          originalTriggerUuid: 'u1',
+        },
+      },
+      routing
+    );
+    expect(p.kind).toBe('ignore');
+  });
+
+  it.each([
+    ['an empty array', []],
+    ['a populated array', [{ label: { text: 'RUN' } }]],
+  ])('a status value of %s is drift, not a clear', (_name, value) => {
+    // Monday clears with null or `{}`, never `[]` — but `Object.keys([])` is empty
+    // too, so an array must not fall into the cleared branch and be acknowledged.
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'update_column_value',
+          pulseId: 7,
+          columnId: 'color_x',
+          value,
+          originalTriggerUuid: 'u1',
+        },
+      },
+      routing
+    );
+    expect(p.kind).toBe('malformed');
+  });
+
+  it('keyShape reports field NAMES only — never values (they carry PII)', () => {
+    const shape = keyShape({
+      event: {
+        type: 'update_column_value',
+        pulseId: 7,
+        value: { label: { text: 'RUN' } },
+        userId: 123,
+      },
+    });
+    expect(shape).toEqual([
+      'pulseId',
+      'type',
+      'userId',
+      'value',
+      'value.label',
+      'value.label.text',
+    ]);
+    expect(JSON.stringify(shape)).not.toContain('RUN');
+    expect(JSON.stringify(shape)).not.toContain('123');
+  });
+
+  it('keyShape distinguishes value.label.text from a renamed value.label.name', () => {
+    // Stopping at `value.label` would report both shapes identically, hiding the
+    // exact drift the diagnostic exists to reveal.
+    const current = keyShape({ event: { value: { label: { text: 'RUN' } } } });
+    const drifted = keyShape({ event: { value: { label: { name: 'RUN' } } } });
+    expect(current).toContain('value.label.text');
+    expect(drifted).toContain('value.label.name');
+    expect(current).not.toEqual(drifted);
+  });
+
+  it('keyShape collapses arrays instead of emitting every index', () => {
+    const shape = keyShape({ event: { value: { linkedPulseIds: [1, 2, 3] } } });
+    expect(shape).toEqual(['value', 'value.linkedPulseIds', 'value.linkedPulseIds[]']);
   });
 });

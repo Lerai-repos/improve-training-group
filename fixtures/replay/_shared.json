@@ -1,0 +1,404 @@
+{
+  "recordedAt": "2026-08-04T13:10:15.874Z",
+  "config": {
+    "boardId": "5087396949",
+    "hqAddress": "Teststraat 49, 1048 WY Voorbeeldstad",
+    "recommendableGroups": [
+      "topics",
+      "nieuwe_groep__1"
+    ],
+    "rateCards": [
+      {
+        "rateKey": "2020-2024",
+        "trainerId": null,
+        "validFrom": "2000-01-01",
+        "validUntil": null,
+        "hourlyRateCents": 8800
+      },
+      {
+        "rateKey": "2024-heden",
+        "trainerId": null,
+        "validFrom": "2000-01-01",
+        "validUntil": null,
+        "hourlyRateCents": 8400
+      }
+    ],
+    "travelTimeConfig": {
+      "thresholdMinutes": 90,
+      "mode": "per_minute",
+      "feePerMinuteCents": 100
+    },
+    "trainerTravelRateCentsPerKm": 23,
+    "clientTravelRateCentsPerKm": 45,
+    "snapshotMaxAgeMs": 172800000,
+    "gitSha": null,
+    "ackVersion": null
+  },
+  "ack": {
+    "noBedrijfKlant": {},
+    "klantAliases": {},
+    "qualConflicts": {},
+    "acknowledgedGroups": [],
+    "allowSourceDrop": {},
+    "allowNoBaseline": {}
+  },
+  "inputs": {
+    "trainers": [
+      {
+        "id": "dc1f962b-5a32-4775-8dcf-54ab4b6aa2cd",
+        "naam": "Trainer 020",
+        "adres": "Teststraat 17, 1016 QI Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151229"
+      },
+      {
+        "id": "40f9ddb3-bf70-4219-b591-9f79bba3c146",
+        "naam": "Trainer 027",
+        "adres": "Teststraat 28, 1027 BH Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151241"
+      },
+      {
+        "id": "d9898998-fb38-49a1-95d4-7f6219a90b36",
+        "naam": "Trainer 021",
+        "adres": "Teststraat 43, 1042 QI Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151251"
+      },
+      {
+        "id": "f2791d18-c152-4e78-b640-aa1bc5a77ac1",
+        "naam": "Trainer 038",
+        "adres": "Teststraat 38, 1037 LZ Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151263"
+      },
+      {
+        "id": "1397007e-9a01-4d90-b0f3-93b52c36d557",
+        "naam": "Trainer 022",
+        "adres": "Teststraat 33, 1032 GQ Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151272"
+      },
+      {
+        "id": "e5bc782f-d3c6-45b8-8786-0106710e90f6",
+        "naam": "Trainer 039",
+        "adres": "Teststraat 16, 1015 PB Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151286"
+      },
+      {
+        "id": "0107a91f-8f06-4294-9aef-69abed5e22cd",
+        "naam": "Trainer 004",
+        "adres": "Teststraat 30, 1029 DV Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151128"
+      },
+      {
+        "id": "121ff6f0-f710-4662-83c5-564efe403cb6",
+        "naam": "Trainer 032",
+        "adres": "Teststraat 48, 1047 VR Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151135"
+      },
+      {
+        "id": "063351a0-ae62-4fdc-bb3f-80c34f30d0e0",
+        "naam": "Trainer 019",
+        "adres": "Teststraat 24, 1023 XF Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151219"
+      },
+      {
+        "id": "e757bf1a-291b-43f8-ba7d-633b117bdc41",
+        "naam": "Trainer 036",
+        "adres": "Teststraat 44, 1043 RP Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151193"
+      },
+      {
+        "id": "44717468-59e5-42ca-9220-0a34bea31eb4",
+        "naam": "Trainer 005",
+        "adres": "Teststraat 14, 1013 NN Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151210"
+      },
+      {
+        "id": "80cc8f2c-c237-48a5-8fdb-f4361be7b619",
+        "naam": "Trainer 003",
+        "adres": "Teststraat 46, 1045 TD Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151220"
+      },
+      {
+        "id": "0430e5e9-b0fb-4acf-bc0c-31378f6b6cae",
+        "naam": "Trainer 028",
+        "adres": "Teststraat 22, 1021 VR Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151233"
+      },
+      {
+        "id": "3148adf9-5103-4375-b1d0-0fc0246d1930",
+        "naam": "Trainer 023",
+        "adres": "Teststraat 12, 1011 LZ Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151237"
+      },
+      {
+        "id": "53480bbf-0f6b-4a34-8f21-b55d9ddf6c36",
+        "naam": "Trainer 017",
+        "adres": "Teststraat 2, 1001 BH Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151242"
+      },
+      {
+        "id": "8a0cf40f-3b01-4864-92b5-47dc2d39ccf8",
+        "naam": "Trainer 024",
+        "adres": "Teststraat 32, 1031 FJ Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151248"
+      },
+      {
+        "id": "6034a375-aa05-40de-a10e-6c39841b4a6c",
+        "naam": "Trainer 025",
+        "adres": "Teststraat 27, 1026 AA Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151129"
+      },
+      {
+        "id": "545b6488-098f-4a37-b8ea-23b042c41166",
+        "naam": "Trainer 001",
+        "adres": "Teststraat 26, 1025 ZT Voorbeeldstad",
+        "rate_key": "2020-2024",
+        "monday_group": "topics",
+        "external_item_id": "1661151255"
+      },
+      {
+        "id": "9ef71f72-7b65-4096-a03b-1f211c69a2fb",
+        "naam": "Trainer 002",
+        "adres": "Teststraat 11, 1010 KS Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1661151163"
+      },
+      {
+        "id": "dc2cc5f2-4c00-4c12-b3d6-798a05b65cc9",
+        "naam": "Trainer 015",
+        "adres": "Teststraat 15, 1014 OU Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1661151177"
+      },
+      {
+        "id": "ec65a423-ead0-4d3d-ada4-5ed782b6d9c6",
+        "naam": "Trainer 009",
+        "adres": "Teststraat 47, 1046 UK Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1661151187"
+      },
+      {
+        "id": "e5eae91b-ac6c-42de-a2a3-3af8dc7f9dae",
+        "naam": "Trainer 030",
+        "adres": "Teststraat 34, 1033 HX Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1661151217"
+      },
+      {
+        "id": "49931483-54ca-49b3-adba-04fb72e6fb20",
+        "naam": "Trainer 014",
+        "adres": "Teststraat 27, 1026 AA Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1661151155"
+      },
+      {
+        "id": "21099e87-5999-4108-b10b-667b7a0ba633",
+        "naam": "Trainer 031",
+        "adres": "Teststraat 25, 1024 YM Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1664242084"
+      },
+      {
+        "id": "ce8f5dd3-acdb-4cbe-8127-a16f2efbc40b",
+        "naam": "Trainer 012",
+        "adres": "Teststraat 7, 1006 GQ Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "1835035504"
+      },
+      {
+        "id": "7200dd1d-1279-441f-bfbc-64425d9d2e3b",
+        "naam": "Trainer 034",
+        "adres": "Teststraat 18, 1017 RP Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2088658159"
+      },
+      {
+        "id": "088bdfc2-6174-43cd-8975-4fab5090763b",
+        "naam": "Trainer 029",
+        "adres": "Teststraat 39, 1038 MG Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2089272843"
+      },
+      {
+        "id": "179a02fb-6500-458c-a697-c888144a1580",
+        "naam": "Trainer 016",
+        "adres": "Teststraat 3, 1002 CO Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2089285207"
+      },
+      {
+        "id": "91648588-9aca-46a7-9b4b-c0cb76f9e516",
+        "naam": "Trainer 018",
+        "adres": "Teststraat 23, 1022 WY Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2089293826"
+      },
+      {
+        "id": "85e82d8e-f4b0-4971-b019-577cfa947c34",
+        "naam": "Trainer 013",
+        "adres": "Teststraat 1, 1000 AA Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2089297187"
+      },
+      {
+        "id": "bc3ccd57-fcf2-4c98-a4b6-ca8e7c089b8e",
+        "naam": "Trainer 040",
+        "adres": "Teststraat 8, 1007 HX Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2101460744"
+      },
+      {
+        "id": "7a41f6c6-2178-4d85-a00a-8f47b7774fcc",
+        "naam": "Trainer 007",
+        "adres": "Teststraat 31, 1030 EC Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2146470772"
+      },
+      {
+        "id": "75970fe0-2cfd-43f8-b0ab-271727f43ed4",
+        "naam": "Trainer 035",
+        "adres": "Teststraat 19, 1018 SW Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2031898681"
+      },
+      {
+        "id": "91e8c782-329f-495f-996f-ae665aba21aa",
+        "naam": "Trainer 037",
+        "adres": "Teststraat 13, 1012 MG Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2148720471"
+      },
+      {
+        "id": "0ae50b60-6b54-4c5b-88ef-c34a3647248a",
+        "naam": "Trainer 041",
+        "adres": "Teststraat 4, 1003 DV Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "2148911291"
+      },
+      {
+        "id": "28cd16e4-6bd8-48d2-9b39-79c1141e6ec9",
+        "naam": "Trainer 010",
+        "adres": "Teststraat 20, 1019 TD Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "5002182140"
+      },
+      {
+        "id": "cd15c964-9e28-4b20-9ea1-8c6bd04c61ae",
+        "naam": "Trainer 026",
+        "adres": "Teststraat 36, 1035 JL Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "5017769700"
+      },
+      {
+        "id": "98291a0f-4847-4f99-acf4-79d8f49d8b64",
+        "naam": "Trainer 008",
+        "adres": "Teststraat 29, 1028 CO Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "3120846891"
+      },
+      {
+        "id": "31b5a4da-4a61-4fea-8383-b05697f7fe75",
+        "naam": "Trainer 011",
+        "adres": "Teststraat 45, 1044 SW Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "3120841835"
+      },
+      {
+        "id": "aa5e3967-4645-4521-982d-577ae5b9b98f",
+        "naam": "Trainer 033",
+        "adres": "Teststraat 21, 1020 UK Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "3120852944"
+      },
+      {
+        "id": "8d3faa5f-7fd7-46e2-9ab8-a3193aa09f76",
+        "naam": "Trainer 006",
+        "adres": "Teststraat 40, 1039 NN Voorbeeldstad",
+        "rate_key": "2024-heden",
+        "monday_group": "nieuwe_groep__1",
+        "external_item_id": "3137012235"
+      }
+    ],
+    "sync_run_id": "0c963246-17d1-48de-9a61-b09fd04930f7",
+    "sync_run_started_at": "2026-08-04T13:00:02.089727+00:00",
+    "trainer_theme_evals": []
+  },
+  "rateCards": [
+    {
+      "id": "b561b26b-99fe-4970-b355-9e0a6f4c6cf1",
+      "rate_key": "2020-2024",
+      "trainer_id": null,
+      "valid_from": "2000-01-01",
+      "valid_until": null,
+      "hourly_rate_cents": 8800,
+      "currency": "EUR",
+      "created_at": "2026-07-29T10:39:26.887757+00:00",
+      "updated_at": "2026-07-29T10:39:26.887757+00:00"
+    },
+    {
+      "id": "7c0ac9d2-0505-4c2f-9386-b22da87f4e26",
+      "rate_key": "2024-heden",
+      "trainer_id": null,
+      "valid_from": "2000-01-01",
+      "valid_until": null,
+      "hourly_rate_cents": 8400,
+      "currency": "EUR",
+      "created_at": "2026-07-29T10:39:26.887757+00:00",
+      "updated_at": "2026-07-29T10:39:26.887757+00:00"
+    }
+  ]
+}

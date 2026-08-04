@@ -27,4 +27,4 @@ export {
 } from './rate-resolution';
 export { trainingFeeCents, totalCostCents, type TrainerCostComponents } from './cost';
 export { rankRecommendations, type Rankable } from './rank';
-export { resolveQualification } from './qualification';
+export { assessedColours, resolveQualification } from './qualification';

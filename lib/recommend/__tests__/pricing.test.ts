@@ -26,7 +26,6 @@ const ctx: PricingContext = {
   clientTravelRateCentsPerKm: 45,
 };
 const trainer = (ext: string): CandidateTrainer => ({
-  id: `uuid-${ext}`,
   externalItemId: ext,
   naam: `T${ext}`,
   adres: 'A',
@@ -38,6 +37,50 @@ const roundTrip: TrainerTravel = {
   hqRoundTripDistanceKm: 24,
   roundTripDurationMinutes: 100,
 };
+
+describe('priceTrainer rate identity', () => {
+  /**
+   * With no database there is no internal uuid — the MONDAY ITEM ID is the trainer's
+   * stable identity, so `rate_cards.trainerId` matches on it. Passing anything else
+   * makes trainer-scoped overrides silently unmatchable, and the trainer falls back
+   * to the rateKey default (or is excluded as `no_rate`) with no error.
+   */
+  it('resolves a trainer-scoped override on the Monday item id', () => {
+    const MONDAY_ID = '1661151129';
+    const override: RateCard = {
+      rateKey: 'persoonlijk',
+      trainerId: MONDAY_ID,
+      validFrom: '2000-01-01',
+      validUntil: null,
+      hourlyRateCents: 9900,
+    };
+    const r = priceTrainer(
+      { ...trainer(MONDAY_ID), rateKey: 'persoonlijk' },
+      roundTrip,
+      { themeAvgScore: null, overallAvgScore: 0 },
+      { ...ctx, rateCards: [override] }
+    );
+    expect(r.hourlyRateCents).toBe(9900);
+  });
+
+  it('does not match an override belonging to a different trainer', () => {
+    const override: RateCard = {
+      rateKey: 'persoonlijk',
+      trainerId: '9999999999',
+      validFrom: '2000-01-01',
+      validUntil: null,
+      hourlyRateCents: 9900,
+    };
+    expect(() =>
+      priceTrainer(
+        { ...trainer('1661151129'), rateKey: 'persoonlijk' },
+        roundTrip,
+        { themeAvgScore: null, overallAvgScore: 0 },
+        { ...ctx, rateCards: [override] }
+      )
+    ).toThrow(/No rate_card/);
+  });
+});
 
 describe('priceTrainer', () => {
   it('total = fee + trainerTravel + timeComp; client charge excluded', () => {

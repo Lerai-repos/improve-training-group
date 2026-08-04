@@ -26,13 +26,15 @@ export interface EffectiveQual {
   conflicted: boolean;
 }
 
-/** A candidate trainer from the coherent snapshot read (recommendable cohort). */
+/** A candidate trainer, read live from the Monday trainers board. */
 export interface CandidateTrainer {
   /**
-   * Internal DB uuid. Required because `rate_cards.trainer_id` is a uuid — matching
-   * overrides on the Monday `externalItemId` silently never resolves.
+   * The Monday item id — the trainer's STABLE DOMAIN IDENTITY, and the only one
+   * there is: with no database there is no internal uuid. `RateCard.trainerId`
+   * matches on this, so a trainer-scoped rate override is expressed against the
+   * same id the board uses. Renaming a trainer is safe; deleting and recreating
+   * them is not (a new item id orphans their history — see 08-valkuilen.md).
    */
-  id: string;
   externalItemId: string;
   naam: string;
   adres: string | null;

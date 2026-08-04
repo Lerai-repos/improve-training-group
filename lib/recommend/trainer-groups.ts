@@ -1,8 +1,6 @@
-import { z } from 'zod';
+import { tryResolveHourlyRateCents, type RateCard } from '@lib/calc';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-
-import type { Database } from '@lib/types/database';
+import type { CandidateTrainer, EffectiveQual } from './types';
 
 /**
  * Trainer-group readiness: for each group on the Monday trainer board, whether
@@ -111,103 +109,51 @@ export function unusableSelections(
   );
 }
 
-const readinessSchema = z.object({
-  sync_run_id: z.string().nullable(),
-  sync_run_started_at: z.string().nullable(),
-  groups: z.array(
-    z.object({
-      monday_group: z.string(),
-      trainers: z.number(),
-      green_trainers: z.number(),
-      green_with_resolvable_rate: z.number(),
-      green_without_rate: z.number(),
-    })
-  ),
-});
-
-export interface TrainerGroupCountsSnapshot {
-  counts: TrainerGroupCounts[];
-  syncRunId: string | null;
-  syncStartedAt: string | null;
-}
-
-/** Read the per-group counts from the snapshot (plus the sync that produced them). */
-export async function readTrainerGroupCounts(
-  admin: SupabaseClient<Database>,
-  refDate: string
-): Promise<TrainerGroupCountsSnapshot> {
-  const { data, error } = await admin.rpc('trainer_group_readiness', { p_ref_date: refDate });
-  if (error) {
-    throw new Error(`trainer_group_readiness: ${error.message}`);
-  }
-  const parsed = readinessSchema.parse(data);
-  return {
-    syncRunId: parsed.sync_run_id,
-    syncStartedAt: parsed.sync_run_started_at,
-    counts: parsed.groups.map((g) => ({
-      mondayGroup: g.monday_group,
-      trainers: g.trainers,
-      greenTrainers: g.green_trainers,
-      greenWithResolvableRate: g.green_with_resolvable_rate,
-      greenWithoutRate: g.green_without_rate,
-    })),
-  };
-}
-
-/** Why the snapshot can't be reported on. Typed so callers classify without string-matching. */
-export type SnapshotIssue =
-  | { kind: 'no_sync'; message: string }
-  | { kind: 'stale'; message: string }
-  | { kind: 'invalid_timestamp'; message: string };
-
-/** Thrown by {@link buildTrainerGroupReport} for an unusable snapshot (vs any other failure). */
-export class SnapshotUnavailableError extends Error {
-  readonly issue: SnapshotIssue;
-
-  constructor(issue: SnapshotIssue) {
-    super(issue.message);
-    this.name = 'SnapshotUnavailableError';
-    this.issue = issue;
-  }
-}
-
-const MS_PER_HOUR = 3_600_000;
-
 /**
- * Guard the snapshot: the counts come from M2a while the titles come live from
- * Monday, so reporting on an absent or stale snapshot would pair a fresh board with
- * stale numbers. Returns the issue, or null when the snapshot is usable.
+ * Compute the per-group counts IN PROCESS from the live roster and the live
+ * qualifications. This used to be the `trainer_group_readiness` RPC over the
+ * Postgres snapshot; reading Monday directly removes the class of bug where a
+ * fresh board was paired with stale numbers, so there is no snapshot to guard.
+ *
+ * Counts are INTERSECTION-based, not independent totals: a group where one trainer
+ * has a rate and a DIFFERENT one is green is not ready. What matters is the overlap
+ * — green trainers who can actually be priced.
  */
-export function snapshotProblem(
-  snapshot: Pick<TrainerGroupCountsSnapshot, 'syncRunId' | 'syncStartedAt'>,
-  maxAgeMs: number,
-  nowMs: number = Date.now()
-): SnapshotIssue | null {
-  if (!snapshot.syncRunId || !snapshot.syncStartedAt) {
-    return {
-      kind: 'no_sync',
-      message: 'no successful Monday sync yet — run `pnpm sync:monday --apply` first',
-    };
+export function computeTrainerGroupCounts(input: {
+  roster: readonly CandidateTrainer[];
+  effective: readonly EffectiveQual[];
+  rateCards: readonly RateCard[];
+  refDate: string;
+}): TrainerGroupCounts[] {
+  const greenTrainerIds = new Set(
+    input.effective.filter((e) => e.effective === 'green').map((e) => e.trainerExternalId)
+  );
+  const byGroup = new Map<string, TrainerGroupCounts>();
+  for (const t of input.roster) {
+    const group = t.mondayGroup;
+    if (group === null) {
+      continue;
+    }
+    const row = byGroup.get(group) ?? { mondayGroup: group, ...EMPTY_COUNTS };
+    const next = { ...row, trainers: row.trainers + 1 };
+    if (greenTrainerIds.has(t.externalItemId)) {
+      // "Has a rate_key" is NOT "has a rate": cards are date-scoped and can be
+      // trainer-scoped, so resolvability is checked properly.
+      const priceable =
+        t.rateKey !== null &&
+        tryResolveHourlyRateCents(input.rateCards, t.rateKey, t.externalItemId, input.refDate) !==
+          null;
+      byGroup.set(group, {
+        ...next,
+        greenTrainers: next.greenTrainers + 1,
+        greenWithResolvableRate: next.greenWithResolvableRate + (priceable ? 1 : 0),
+        greenWithoutRate: next.greenWithoutRate + (priceable ? 0 : 1),
+      });
+    } else {
+      byGroup.set(group, next);
+    }
   }
-  const startedMs = Date.parse(snapshot.syncStartedAt);
-  if (Number.isNaN(startedMs)) {
-    // Malformed, not old — telling the operator to re-sync would not fix it.
-    return {
-      kind: 'invalid_timestamp',
-      message:
-        `sync ${snapshot.syncRunId} has an unparseable started_at ` +
-        `(${JSON.stringify(snapshot.syncStartedAt)}) — this is a data defect, not staleness`,
-    };
-  }
-  const ageMs = nowMs - startedMs;
-  if (ageMs > maxAgeMs) {
-    const hours = Math.round(ageMs / MS_PER_HOUR);
-    return {
-      kind: 'stale',
-      message: `Monday snapshot is stale (${hours}h old) — re-run \`pnpm sync:monday --apply\``,
-    };
-  }
-  return null;
+  return [...byGroup.values()];
 }
 
 /** Reads the live board groups (titles); satisfied by the Monday GraphQL client. */
@@ -218,32 +164,35 @@ export interface BoardGroupReader {
 export interface TrainerGroupReport {
   rows: TrainerGroupReadiness[];
   selected: string[];
-  syncRunId: string | null;
-  syncStartedAt: string | null;
   refDate: string;
 }
 
 /**
- * Assemble the full report: live Monday titles + snapshot counts + the current
- * selection. Shared by the CLI and the API route so they cannot drift apart.
- * Throws when the snapshot is unusable (see {@link snapshotProblem}).
+ * Assemble the full report: live Monday titles + counts computed from the live
+ * roster and qualifications + the current selection. Shared by the CLI and the API
+ * route so they cannot drift apart.
+ *
+ * Everything here is read live, so there is no snapshot to be stale and no
+ * `SnapshotUnavailableError` any more — the failure mode it guarded is gone rather
+ * than handled.
  */
 export async function buildTrainerGroupReport(input: {
-  admin: SupabaseClient<Database>;
   reader: BoardGroupReader;
   trainersBoardId: string;
+  roster: readonly CandidateTrainer[];
+  effective: readonly EffectiveQual[];
+  rateCards: readonly RateCard[];
   selected: readonly string[];
-  maxAgeMs: number;
   refDate?: string;
   nowMs?: number;
 }): Promise<TrainerGroupReport> {
   const refDate = input.refDate ?? new Date(input.nowMs ?? Date.now()).toISOString().slice(0, 10);
-  const snapshot = await readTrainerGroupCounts(input.admin, refDate);
-
-  const problem = snapshotProblem(snapshot, input.maxAgeMs, input.nowMs);
-  if (problem) {
-    throw new SnapshotUnavailableError(problem);
-  }
+  const counts = computeTrainerGroupCounts({
+    roster: input.roster,
+    effective: input.effective,
+    rateCards: input.rateCards,
+    refDate,
+  });
 
   const boards = await input.reader.getSchema([input.trainersBoardId]);
   const board = boards.find((b) => String(b.id) === input.trainersBoardId);
@@ -254,12 +203,10 @@ export async function buildTrainerGroupReport(input: {
   return {
     rows: deriveTrainerGroupReadiness({
       mondayGroups: board.groups,
-      counts: snapshot.counts,
+      counts,
       selected: input.selected,
     }),
     selected: [...input.selected],
-    syncRunId: snapshot.syncRunId,
-    syncStartedAt: snapshot.syncStartedAt,
     refDate,
   };
 }

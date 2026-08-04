@@ -4,7 +4,7 @@ import { canonicalJson, hashArtifact, type InputArtifact } from '../artifact';
 import { toTrainerTravel } from '../travel-enrich';
 
 const artifact: InputArtifact = {
-  version: 2,
+  version: 3,
   code: { gitSha: 'abc123', calcVersion: '1' },
   training: {
     externalItemId: 'tr-1',
@@ -21,7 +21,6 @@ const artifact: InputArtifact = {
   },
   trainers: [
     {
-      id: '11111111-1111-4111-8111-111111111111',
       externalItemId: 't1',
       mondayGroup: 'topics',
       rateKey: '2020-2024',
@@ -79,7 +78,7 @@ describe('canonicalJson / hashArtifact', () => {
       qualifications: artifact.qualifications,
       training: artifact.training,
       code: artifact.code,
-      version: 2,
+      version: 3,
     };
     expect(hashArtifact(shuffled)).toBe(hashArtifact(artifact));
   });

@@ -34,7 +34,6 @@ function providerFor(map: Record<string, RouteElement>, onCall?: () => void) {
 }
 
 const trainer = (ext: string, adres: string | null): CandidateTrainer => ({
-  id: `uuid-${ext}`,
   externalItemId: ext,
   naam: ext,
   adres,

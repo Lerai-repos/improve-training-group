@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildAppConfig, type ConfigRowLike } from '../build';
 import { CONFIG_DEFAULTS } from '../defaults';
+import { configRowsFromEnv } from '@lib/recommend/engine-config';
 
 const dev = { isProduction: false };
 const prod = { isProduction: true };
@@ -92,5 +93,31 @@ describe('RECOMMENDABLE_TRAINER_GROUPS', () => {
   it('passes unknown group ids through — the readiness listing surfaces them, not the parser', () => {
     const cfg = buildAppConfig(withGroups('topics,typo_group'), dev);
     expect(cfg.recommendableTrainerGroups).toEqual(['topics', 'typo_group']);
+  });
+});
+
+/**
+ * The env source must preserve the ABSENT vs PRESENT-BUT-EMPTY distinction that
+ * `buildAppConfig` relies on. Filtering empty strings out makes an explicitly
+ * cleared selection look absent, so the defaults come back silently — which is the
+ * exact silent-config-error this design exists to prevent.
+ */
+describe('configRowsFromEnv', () => {
+  const emptySelection: Record<string, string | undefined> = {
+    RECOMMENDABLE_TRAINER_GROUPS: '',
+  };
+
+  it('keeps an explicitly empty value so the schema can reject it', () => {
+    const rows = configRowsFromEnv(emptySelection);
+    expect(rows).toEqual([{ key: 'RECOMMENDABLE_TRAINER_GROUPS', value: '' }]);
+    expect(() => buildAppConfig(rows, { isProduction: false })).toThrow();
+  });
+
+  it('omits a variable that is genuinely absent (so the default applies)', () => {
+    const rows = configRowsFromEnv({});
+    expect(rows.find((r) => r.key === 'RECOMMENDABLE_TRAINER_GROUPS')).toBeUndefined();
+    expect(
+      buildAppConfig(rows, { isProduction: false }).recommendableTrainerGroups.length
+    ).toBeGreaterThan(0);
   });
 });

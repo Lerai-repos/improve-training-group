@@ -58,9 +58,9 @@ export function priceTrainer(
   const hourlyRateCents = resolveHourlyRateCents(
     ctx.rateCards,
     trainer.rateKey,
-    // The INTERNAL uuid — rate_cards.trainer_id is a uuid, so matching on the
-    // Monday external id would make every trainer-scoped override unmatchable.
-    trainer.id,
+    // The Monday item id — the trainer's only identity now that there is no
+    // database. `RateCard.trainerId` is keyed on the same id.
+    trainer.externalItemId,
     ctx.trainingDate
   );
   const fee = trainingFeeCents(billable, hourlyRateCents);

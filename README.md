@@ -1,233 +1,96 @@
-# Base Starter Project
+# Improve Training Group — trainer recommendation engine
 
-A clean, production-ready Next.js starter template with authentication and database integration.
+Backend for ITG's trainer planning. Given a training on their Monday board, it works
+out which trainers are qualified, what each would cost, and ranks them.
 
-## Features
+**Monday is the source of truth. There is no database.** Everything is read live from
+the Monday API at request time; the backend is stateless. That is a deliberate
+architecture decision (3 August 2026) — see `docs/build/BRIEFING.md` and
+`docs/build/10-architectuurreview.md`. If you find yourself wanting a table, stop and
+ask first.
 
-- **Next.js 15** with App Router
-  - Server Components and Server Actions
-  - TypeScript support
-  - Turbopack for fast development
+The operational reference is **[`docs/m2b/README.md`](docs/m2b/README.md)** — flow,
+environment variables, troubleshooting, and what is deliberately not built yet.
 
-- **Authentication**
-  - Supabase Auth integration
-  - Protected routes via middleware
-  - Login and registration pages
+---
 
-- **Database**
-  - Supabase integration ready
-  - Database migrations included
-  - Row Level Security (RLS) support
+## Current state
 
-- **UI Components**
-  - shadcn/ui components
-  - Tailwind CSS styling
-  - Dark mode support with next-themes
-  - Responsive design
+**Compute only.** The engine reads Monday, computes, and returns the answer. It is
+not yet triggered by anything and writes nothing back:
 
-- **Testing**
-  - Playwright for E2E testing
-  - Route testing support
-  - Husky git hooks (pre-commit, pre-push)
+- no durable queue (the webhook and cron routes are deferred with it)
+- no Aanbevelingen board
+- no status write-back — n8n still owns that column
 
-- **Developer Experience**
-  - ESLint + Prettier for linting and formatting
-  - TypeScript strict mode
-  - Path aliases configured
-  - OpenTelemetry instrumentation
-  - Claude Code AI assistance (auto-configured via `pnpm install`)
+See `docs/m2b/README.md` §8 for the deferred list.
 
-## Getting Started
+---
 
-### Prerequisites
+## Stack
 
-- Node.js 22 (specified in `.nvmrc`)
-- pnpm
+- **Next.js 15** (App Router, Turbopack) — API routes only; there is no UI yet
+- **TypeScript**, **Vitest**, **Prettier**, **ESLint**
+- **Monday GraphQL API** — pinned version, mandatory `BoardRelationValue` /
+  `MirrorValue` fragments
+- **Google Routes API** (travel), **OpenRouter** (address cleanup)
+- **Doppler** for secrets
 
-### Node Version
+---
+
+## Getting started
 
 ```bash
-nvm use
-```
-
-<details>
-<summary><strong>Auto-switch (Optional)</strong></summary>
-
-To automatically switch Node versions when entering the project:
-
-**Zsh (macOS / Linux)** - add to `~/.zshrc`:
-
-```bash
-autoload -U add-zsh-hook
-
-load-nvmrc() {
-  local nvmrc_path="$(nvm_find_nvmrc)"
-  if [ -n "$nvmrc_path" ]; then
-    local nvmrc_node_version=$(nvm version "$(cat "${nvmrc_path}")")
-    if [ "$nvmrc_node_version" = "N/A" ]; then
-      nvm install
-    elif [ "$nvmrc_node_version" != "$(nvm version)" ]; then
-      nvm use
-    fi
-  elif [ -n "$(PWD=$OLDPWD nvm_find_nvmrc)" ] && [ "$(nvm version)" != "$(nvm version default)" ]; then
-    nvm use default
-  fi
-}
-
-add-zsh-hook chpwd load-nvmrc
-load-nvmrc
-```
-
-**Bash (Linux/WSL)** - add to `~/.bashrc`:
-
-```bash
-cdnvm() {
-    command cd "$@" || return $?
-    nvm_path="$(nvm_find_up .nvmrc | command tr -d '\n')"
-
-    if [[ ! $nvm_path = *[^[:space:]]* ]]; then
-        declare default_version
-        default_version="$(nvm version default)"
-        if [ "$default_version" = 'N/A' ]; then
-            nvm alias default node
-            default_version=$(nvm version default)
-        fi
-        if [ "$(nvm current)" != "${default_version}" ]; then
-            nvm use default
-        fi
-    elif [[ -s "${nvm_path}/.nvmrc" && -r "${nvm_path}/.nvmrc" ]]; then
-        declare nvm_version
-        nvm_version=$(<"${nvm_path}"/.nvmrc)
-        declare locally_resolved_nvm_version
-        locally_resolved_nvm_version=$(nvm ls --no-colors "${nvm_version}" | command tail -1 | command tr -d '\->*' | command tr -d '[:space:]')
-        if [ "${locally_resolved_nvm_version}" = 'N/A' ]; then
-            nvm install "${nvm_version}";
-        elif [ "$(nvm current)" != "${locally_resolved_nvm_version}" ]; then
-            nvm use "${nvm_version}";
-        fi
-    fi
-}
-
-alias cd='cdnvm'
-cdnvm "$PWD" || exit
-```
-
-Reload: `source ~/.zshrc` or `source ~/.bashrc`
-
-</details>
-
-### Environment Variables
-
-Create a `.env.local` file in the root directory:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### Installation
-
-```bash
-# Install dependencies (also sets up Claude Code config automatically)
 pnpm install
-
-# Run development server
-pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see your application.
+Secrets come from Doppler; for local work put them in `.env.local`. The full list
+with notes is in [`docs/m2b/README.md`](docs/m2b/README.md) §5 — at minimum you need
+`MONDAY_API_TOKEN`, plus `GOOGLE_MAPS_API_KEY` and `OPENROUTER_API_KEY` for real
+travel and address resolution (both fall back to stubs without them).
 
-### Database Setup
+No database, no Docker, no migrations.
 
-1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Run the migrations in `lib/db/migrations/` to set up your database schema
-3. Update your `.env.local` with your Supabase credentials
+### Commands
 
-## Project Structure
+| Command | What |
+|---|---|
+| `pnpm recommend:once <mondayItemId>` | Run one training end-to-end against live Monday. Read-only. |
+| `pnpm groups:list` | Trainer-group readiness; non-zero exit on an unusable selection. |
+| `pnpm recommend:parity` | Compare recommended trainer sets against the legacy Airtable snapshot. |
+| `pnpm replay:verify` | Deterministic replay of `fixtures/replay/` — the regression gate. |
+| `pnpm test:unit` | Unit tests. |
+| `pnpm typecheck` / `pnpm lint` / `pnpm build` | The rest of the gate. |
 
-```
-├── app/
-│   ├── (auth)/          # Authentication pages and logic
-│   ├── layout.tsx       # Root layout
-│   ├── page.tsx         # Homepage
-│   └── globals.css      # Global styles
-├── components/
-│   ├── ui/              # shadcn/ui components
-│   └── ...              # Custom components
-├── hooks/               # Custom React hooks
-├── lib/
-│   ├── auth/            # Auth actions, mutations, queries
-│   ├── db/              # Supabase client and migrations
-│   ├── constants.ts     # App constants
-│   ├── errors.ts        # Error handling
-│   ├── types.ts         # TypeScript types
-│   └── utils.ts         # Utility functions
-├── tests/               # Playwright tests (e2e/, routes/)
-└── middleware.ts        # Auth middleware
-```
+Full gate:
 
-## Available Scripts
-
-- `pnpm dev` - Start development server with Turbopack
-- `pnpm build` - Build for production
-- `pnpm start` - Start production server
-- `pnpm lint` - Run linting
-- `pnpm lint:fix` - Fix lint errors
-- `pnpm format` - Format code with Prettier
-- `pnpm format:check` - Check formatting without changes
-- `pnpm typecheck` - TypeScript type checking
-- `pnpm clean` - Remove node_modules, lock file, and .next
-- `pnpm ui:add <component>` - Add shadcn/ui components
-- `pnpm test` - Run Playwright tests
-- `pnpm test:e2e` - Run E2E tests only
-- `pnpm test:routes` - Run route tests only
-
-## Git Hooks
-
-This project uses [husky](https://typicode.github.io/husky/) to prevent broken code from being committed or pushed.
-
-| Hook | Runs | Purpose |
-|------|------|---------|
-| **pre-commit** | `pnpm typecheck && pnpm lint` | Catches type errors and lint issues before commit |
-| **pre-push** | `pnpm build` | Ensures the app builds successfully before pushing |
-
-**To skip hooks temporarily** (use sparingly):
 ```bash
-git commit --no-verify -m "WIP: work in progress"
-git push --no-verify
+pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm build
 ```
 
-## Claude Code
+---
 
-This project uses shared [Claude Code](https://claude.com/claude-code) configuration from [Lerai-repos/Claude-settings](https://github.com/Lerai-repos/Claude-settings).
+## Project structure
 
-The full config (AI rules, skills, plugins, permissions, spinner verbs) is installed automatically when you run `pnpm install`. After that, the config auto-syncs on every session start.
-
-## Customization
-
-### Adding Protected Routes
-
-Edit `middleware.ts` to add your protected routes:
-
-```typescript
-function isProtectedRoute(pathname: string): boolean {
-  return pathname === '/' || pathname.startsWith('/dashboard');
-}
+```
+app/api/config/trainer-groups/   Internal ops endpoint (bearer-guarded)
+lib/
+  calc/          Pure formulas — billable hours, travel cost, rates, ranking
+  monday/        GraphQL client, board config, decoders, schema checks
+  recommend/     The engine: roster, qualifications, eligibility, pricing,
+                 travel, artifact, service orchestration
+  config/        Key/value config → validated AppConfig
+  logger/        Structured logging
+scripts/         Ops + verification harnesses
+fixtures/replay/ Sanitized replay fixtures (committed; synthetic addresses)
+snapshots/       Raw client data — GITIGNORED, contains PII, never commit
+docs/build/      The current spec (from Kevin, 3 Aug) — gitignored
+docs/m2b/        Operational runbook
 ```
 
-### Styling
+## Data handling
 
-- Global styles: `app/globals.css`
-- Tailwind config: `tailwind.config.ts`
-- Theme configuration: Uses next-themes for dark mode
-
-## Learn More
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Supabase Documentation](https://supabase.com/docs)
-- [shadcn/ui Documentation](https://ui.shadcn.com)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-
-## License
-
-MIT
+`snapshots/` holds real client data — trainer names, addresses, client locations —
+and is gitignored. Committed fixtures are sanitized copies with synthetic, stable
+addresses (`scripts/sanitize-replay.ts`). Address fingerprints in the audit artifact
+are keyed HMACs; no raw address is ever stored.

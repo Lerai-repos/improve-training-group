@@ -1,11 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
-import type { Database } from '@lib/types/database';
-
 import { addressKey } from './address-key';
 import type { ArtifactRoute } from './artifact';
 import type { RouteElement, TravelProvider } from './travel';
-import { lookupTravel, normalizeAddressKey, writeTravel, type CachedLeg } from './travel-cache';
+import { normalizeAddressKey, type CachedLeg } from './travel-cache';
 import { toTrainerTravel } from './travel-enrich';
 import type { CandidateTrainer, TrainerTravel } from './types';
 
@@ -249,13 +245,4 @@ function routeFromElement(
     return routeRecord(originNorm, destinationNorm, routingKey, 'ROUTE_NOT_FOUND', null, null);
   }
   return routeRecord(originNorm, destinationNorm, routingKey, 'TRANSIENT', null, null);
-}
-
-/** Supabase-backed cache adapter (wraps the travel_cache lookup/write helpers). */
-export function createSupabaseTravelCache(admin: SupabaseClient<Database>): TravelCache {
-  return {
-    lookup: (originNorm, destinationNorm, routingKey) =>
-      lookupTravel(admin, originNorm, destinationNorm, routingKey),
-    write: (row) => writeTravel(admin, row),
-  };
 }

@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { authorizeCron } from '../cron';
+import { authorizeBearer } from '../authorize';
 import { verifyMondaySignature, verifyWebhookToken } from '../signature';
 
 function b64url(s: string): string {
@@ -62,12 +62,12 @@ describe('verifyWebhookToken', () => {
   });
 });
 
-describe('authorizeCron', () => {
+describe('authorizeBearer', () => {
   it('accepts only the exact Bearer secret', () => {
-    expect(authorizeCron('Bearer s3cret', 's3cret')).toBe(true);
-    expect(authorizeCron('Bearer wrong', 's3cret')).toBe(false);
-    expect(authorizeCron(null, 's3cret')).toBe(false);
-    expect(authorizeCron('Bearer s3cret', undefined)).toBe(false);
-    expect(authorizeCron('Bearer ', '')).toBe(false);
+    expect(authorizeBearer('Bearer s3cret', 's3cret')).toBe(true);
+    expect(authorizeBearer('Bearer wrong', 's3cret')).toBe(false);
+    expect(authorizeBearer(null, 's3cret')).toBe(false);
+    expect(authorizeBearer('Bearer s3cret', undefined)).toBe(false);
+    expect(authorizeBearer('Bearer ', '')).toBe(false);
   });
 });

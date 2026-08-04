@@ -1,17 +1,18 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
-import type { Database } from '@lib/types/database';
-
 import { addressKey } from './address-key';
+
+import type { TravelCache } from './travel-resolve';
 
 /**
  * Travel result cache. Positive results (ROUTE_EXISTS) are long-lived; terminal
  * negatives (ROUTE_NOT_FOUND) get a SHORT TTL so a fixed address is retried before
- * long. Transient failures are NEVER written here (the caller enforces that). Rows
- * store ONE-WAY km/min; the round-trip doubling happens later in enrichment.
+ * long. Transient failures are NEVER written here (the caller enforces that).
+ * Entries store ONE-WAY km/min; the round-trip doubling happens in enrichment.
+ *
+ * The backing store is abstracted so the KV implementation can drop in next pass.
+ * What must NOT change with it: the key is a KEYED HMAC fingerprint of the
+ * normalized address (`address-key.ts`), never the raw string — a Monday board or
+ * a shared cache holding client addresses in the clear would be a step backwards.
  */
-
-type Admin = SupabaseClient<Database>;
 
 /** ROUTE_NOT_FOUND rows are re-checked after this long. */
 export const NEGATIVE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
@@ -22,75 +23,72 @@ export interface CachedLeg {
   durationMinutes: number | null;
 }
 
+interface StoredLeg extends CachedLeg {
+  fetchedAtMs: number;
+}
+
+/** Minimal key/value contract — satisfied in-process today, by KV next pass. */
+export interface TravelCacheStore {
+  get(key: string): Promise<StoredLeg | null>;
+  set(key: string, value: StoredLeg): Promise<void>;
+}
+
 /** Normalize an address into a stable cache key component. */
 export function normalizeAddressKey(address: string): string {
   return address.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-/**
- * Look up a cached one-way leg. A positive row is returned regardless of age; a
- * negative (ROUTE_NOT_FOUND) row past {@link NEGATIVE_TTL_MS} is treated as a MISS
- * so it gets re-fetched. `now` is injectable for deterministic tests.
- */
-export async function lookupTravel(
-  admin: Admin,
+/** Composite entry key: fingerprints only, so no raw address is ever stored. */
+export function travelCacheKey(
   originNorm: string,
   destinationNorm: string,
-  routingKey: string,
-  now: number = Date.now()
-): Promise<CachedLeg | null> {
-  // Store only the KEYED hash of the normalized address, never the raw string (PII).
-  const { data, error } = await admin
-    .from('travel_cache')
-    .select('condition, distance_km, duration_minutes, fetched_at')
-    .eq('origin_key', addressKey(originNorm))
-    .eq('destination_key', addressKey(destinationNorm))
-    .eq('routing_key', routingKey)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`travel_cache lookup: ${error.message}`);
-  }
-  if (!data) {
-    return null;
-  }
-  if (data.condition === 'ROUTE_NOT_FOUND') {
-    const age = now - new Date(data.fetched_at).getTime();
-    if (age > NEGATIVE_TTL_MS) {
-      return null;
-    }
-  }
+  routingKey: string
+): string {
+  return `${addressKey(originNorm)}:${addressKey(destinationNorm)}:${routingKey}`;
+}
+
+export function createMemoryTravelCacheStore(): TravelCacheStore {
+  const map = new Map<string, StoredLeg>();
   return {
-    condition: data.condition,
-    distanceKm: data.distance_km,
-    durationMinutes: data.duration_minutes,
+    get: (key) => Promise.resolve(map.get(key) ?? null),
+    set: (key, value) => {
+      map.set(key, value);
+      return Promise.resolve();
+    },
   };
 }
 
-/** Upsert a cache row (positive or terminal-negative only). Refreshes `fetched_at`. */
-export async function writeTravel(
-  admin: Admin,
-  row: {
-    originNorm: string;
-    destinationNorm: string;
-    routingKey: string;
-    condition: string;
-    distanceKm: number | null;
-    durationMinutes: number | null;
-  }
-): Promise<void> {
-  const { error } = await admin.from('travel_cache').upsert(
-    {
-      origin_key: addressKey(row.originNorm),
-      destination_key: addressKey(row.destinationNorm),
-      routing_key: row.routingKey,
-      condition: row.condition,
-      distance_km: row.distanceKm,
-      duration_minutes: row.durationMinutes,
-      fetched_at: new Date().toISOString(),
+/**
+ * A {@link TravelCache} over any store. `now` is injectable so the negative-TTL
+ * boundary is testable without waiting a day.
+ */
+export function createTravelCache(
+  store: TravelCacheStore,
+  now: () => number = Date.now
+): TravelCache {
+  return {
+    async lookup(originNorm, destinationNorm, routingKey) {
+      const entry = await store.get(travelCacheKey(originNorm, destinationNorm, routingKey));
+      if (!entry) {
+        return null;
+      }
+      // A stale terminal negative is reported as a MISS so the address is retried.
+      if (entry.condition === 'ROUTE_NOT_FOUND' && now() - entry.fetchedAtMs > NEGATIVE_TTL_MS) {
+        return null;
+      }
+      return {
+        condition: entry.condition,
+        distanceKm: entry.distanceKm,
+        durationMinutes: entry.durationMinutes,
+      };
     },
-    { onConflict: 'origin_key,destination_key,routing_key' }
-  );
-  if (error) {
-    throw new Error(`travel_cache write: ${error.message}`);
-  }
+    async write(row) {
+      await store.set(travelCacheKey(row.originNorm, row.destinationNorm, row.routingKey), {
+        condition: row.condition,
+        distanceKm: row.distanceKm,
+        durationMinutes: row.durationMinutes,
+        fetchedAtMs: now(),
+      });
+    },
+  };
 }

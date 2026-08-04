@@ -1,4 +1,9 @@
-import type { Json } from '@lib/types/database.gen';
+/**
+ * The JSON value union. Previously imported from the generated Supabase types;
+ * inlined now that those are gone. The object variant carries an index signature
+ * so narrowing lets us index without a cast.
+ */
+export type Json = string | number | boolean | null | Json[] | { [key: string]: Json | undefined };
 
 /**
  * Cast-free helpers for reading jsonb RPC returns and building jsonb payloads.

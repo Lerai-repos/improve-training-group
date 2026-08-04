@@ -1,0 +1,1834 @@
+{
+  "itemId": "5035923166",
+  "recorded": {
+    "training": {
+      "externalItemId": "5035923166",
+      "themeExternalIds": [
+        "5072550255",
+        "2602600947"
+      ],
+      "locatie": "Teststraat 42, 1041 PB Voorbeeldstad",
+      "datum": "2026-01-08",
+      "duurTraining": 4,
+      "updatedAt": "2026-05-25T17:03:40Z"
+    },
+    "qualifications": [
+      {
+        "trainerExternalId": "1661151251",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151220",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2089272843",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2148911291",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2088658159",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151129",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151163",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151233",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151286",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1664242084",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2101460744",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151135",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120852944",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120841835",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151128",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120846891",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "5002182140",
+        "themaExternalId": "2602600947",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151241",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151229",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151272",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151193",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089297187",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2031898681",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "5017769700",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151187",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089285207",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089293826",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2146470772",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1835035504",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151217",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2148720471",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151237",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151177",
+        "themaExternalId": "2602600947",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151272",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151163",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2088658159",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151195",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "2148720471",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151128",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151135",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151220",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120852944",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151129",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "3120841835",
+        "themaExternalId": "5072550255",
+        "colour": "groen"
+      },
+      {
+        "trainerExternalId": "1661151207",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089293826",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151187",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089297187",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089272843",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151200",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151248",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151251",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151242",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151237",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2110975043",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151241",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2146470772",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2148911291",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "5002182140",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151229",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151286",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151233",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2031898681",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151193",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "5017769700",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1835035504",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151217",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1664242084",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2101460744",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "2089285207",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "3120846891",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151177",
+        "themaExternalId": "5072550255",
+        "colour": "rood"
+      },
+      {
+        "trainerExternalId": "1661151255",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151260",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151193",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151219",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1664242084",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151233",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151183",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151155",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      },
+      {
+        "trainerExternalId": "1661151129",
+        "themaExternalId": "5072550255",
+        "colour": "grijs"
+      }
+    ],
+    "addressCalls": [
+      {
+        "raw": "Teststraat 42, 1041 PB Voorbeeldstad",
+        "decision": {
+          "kind": "travel_required",
+          "formatted": "Teststraat 10, 1009 JL Voorbeeldstad"
+        }
+      }
+    ],
+    "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+    "travelCalls": [
+      {
+        "origins": [
+          "Teststraat 49, 1048 WY Voorbeeldstad"
+        ],
+        "destination": "Teststraat 10, 1009 JL Voorbeeldstad",
+        "elements": [
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 131.819,
+              "durationMinutes": 88.58333333333333
+            }
+          }
+        ]
+      },
+      {
+        "origins": [
+          "Teststraat 30, 1029 DV Voorbeeldstad",
+          "Teststraat 48, 1047 VR Voorbeeldstad",
+          "Teststraat 46, 1045 TD Voorbeeldstad",
+          "Teststraat 27, 1026 AA Voorbeeldstad",
+          "Teststraat 11, 1010 KS Voorbeeldstad",
+          "Teststraat 18, 1017 RP Voorbeeldstad",
+          "Teststraat 45, 1044 SW Voorbeeldstad",
+          "Teststraat 21, 1020 UK Voorbeeldstad"
+        ],
+        "destination": "Teststraat 10, 1009 JL Voorbeeldstad",
+        "elements": [
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 134.158,
+              "durationMinutes": 86.5
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 106.381,
+              "durationMinutes": 80.46666666666667
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 138.091,
+              "durationMinutes": 97.75
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 100.759,
+              "durationMinutes": 74.31666666666666
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 149.128,
+              "durationMinutes": 101.68333333333334
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 144.397,
+              "durationMinutes": 92.95
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 139.64,
+              "durationMinutes": 91.56666666666666
+            }
+          },
+          {
+            "status": "ok",
+            "leg": {
+              "distanceKm": 135.664,
+              "durationMinutes": 90.11666666666666
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "outcome": {
+    "ok": true,
+    "resultStatus": "GEREED"
+  },
+  "expected": {
+    "run": {
+      "result_status": "GEREED",
+      "failing_stage": null,
+      "candidate_count": 41,
+      "eligible_count": 8,
+      "recommendation_count": 8,
+      "excluded_trainers": [],
+      "address_decision": {
+        "kind": "travel_required",
+        "formatted": "Teststraat 10, 1009 JL Voorbeeldstad"
+      },
+      "provider_errors": null,
+      "monday_item_revision": "2026-05-25T17:03:40Z",
+      "travel_cache_hits": 0,
+      "input_artifact": {
+        "code": {
+          "gitSha": null,
+          "calcVersion": "1"
+        },
+        "rates": {
+          "rateCards": [
+            {
+              "rateKey": "2020-2024",
+              "trainerId": null,
+              "validFrom": "2000-01-01",
+              "validUntil": null,
+              "hourlyRateCents": 8800
+            },
+            {
+              "rateKey": "2024-heden",
+              "trainerId": null,
+              "validFrom": "2000-01-01",
+              "validUntil": null,
+              "hourlyRateCents": 8400
+            }
+          ],
+          "inputSyncRunId": "0c963246-17d1-48de-9a61-b09fd04930f7",
+          "travelTimeConfig": {
+            "mode": "per_minute",
+            "thresholdMinutes": 90,
+            "feePerMinuteCents": 100
+          },
+          "clientTravelRateCentsPerKm": 45,
+          "trainerTravelRateCentsPerKm": 23
+        },
+        "scores": [
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151129"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151135"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "3120852944"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "3120841835"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151128"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "2088658159"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151163"
+          },
+          {
+            "themeAvgScore": null,
+            "overallAvgScore": 0,
+            "trainerExternalId": "1661151220"
+          }
+        ],
+        "version": 2,
+        "trainers": [
+          {
+            "id": "0107a91f-8f06-4294-9aef-69abed5e22cd",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151128"
+          },
+          {
+            "id": "121ff6f0-f710-4662-83c5-564efe403cb6",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151135"
+          },
+          {
+            "id": "80cc8f2c-c237-48a5-8fdb-f4361be7b619",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151220"
+          },
+          {
+            "id": "6034a375-aa05-40de-a10e-6c39841b4a6c",
+            "rateKey": "2020-2024",
+            "mondayGroup": "topics",
+            "externalItemId": "1661151129"
+          },
+          {
+            "id": "9ef71f72-7b65-4096-a03b-1f211c69a2fb",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "1661151163"
+          },
+          {
+            "id": "7200dd1d-1279-441f-bfbc-64425d9d2e3b",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "2088658159"
+          },
+          {
+            "id": "31b5a4da-4a61-4fea-8383-b05697f7fe75",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "3120841835"
+          },
+          {
+            "id": "aa5e3967-4645-4521-982d-577ae5b9b98f",
+            "rateKey": "2024-heden",
+            "mondayGroup": "nieuwe_groep__1",
+            "externalItemId": "3120852944"
+          }
+        ],
+        "training": {
+          "datum": "2026-01-08",
+          "duurTraining": 4,
+          "externalItemId": "5035923166",
+          "themeExternalIds": [
+            "5072550255",
+            "2602600947"
+          ]
+        },
+        "enrichment": {
+          "model": "anthropic/claude-haiku-4.5",
+          "routes": [
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 131.819,
+              "originFingerprint": "59ffe776a0065c88",
+              "oneWayDurationMinutes": 88.58333333333333,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 134.158,
+              "originFingerprint": "a3eea661872b9bd1",
+              "oneWayDurationMinutes": 86.5,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 106.381,
+              "originFingerprint": "dfc5a82818ae0b64",
+              "oneWayDurationMinutes": 80.46666666666667,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 138.091,
+              "originFingerprint": "87d59a3f0a00e003",
+              "oneWayDurationMinutes": 97.75,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 100.759,
+              "originFingerprint": "9783c7a9549144f8",
+              "oneWayDurationMinutes": 74.31666666666666,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 149.128,
+              "originFingerprint": "a470283b77177265",
+              "oneWayDurationMinutes": 101.68333333333334,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 144.397,
+              "originFingerprint": "4dcc55ddecf6476e",
+              "oneWayDurationMinutes": 92.95,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 139.64,
+              "originFingerprint": "5a8ae9aab2e320ef",
+              "oneWayDurationMinutes": 91.56666666666666,
+              "destinationFingerprint": "09a07e3ef021092c"
+            },
+            {
+              "condition": "ROUTE_EXISTS",
+              "routingKey": "google-routes:DRIVE:TRAFFIC_UNAWARE:v1",
+              "oneWayDistanceKm": 135.664,
+              "originFingerprint": "0dff6e54d8e89b4d",
+              "oneWayDurationMinutes": 90.11666666666666,
+              "destinationFingerprint": "09a07e3ef021092c"
+            }
+          ],
+          "addressReason": null,
+          "promptVersion": "v1",
+          "routingProfile": "TRAFFIC_UNAWARE",
+          "addressDecisionKind": "travel_required"
+        },
+        "qualifications": {
+          "effective": [
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151251"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151220"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089272843"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2148911291"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2088658159"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151129"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151163"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151286"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2101460744"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151135"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "3120852944"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "3120841835"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151128"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "3120846891"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "5002182140"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151241"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151229"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151272"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089297187"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2031898681"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "5017769700"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151187"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089285207"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089293826"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2146470772"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1835035504"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151217"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2148720471"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151237"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151177"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151272"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151163"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2088658159"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151195"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2148720471"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151128"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151135"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151220"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "3120852944"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151129"
+            },
+            {
+              "effective": "green",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "3120841835"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151207"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089293826"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151187"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089297187"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089272843"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151200"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151248"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151251"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151242"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151237"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2110975043"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151241"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2146470772"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2148911291"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "5002182140"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151229"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151286"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2031898681"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "5017769700"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1835035504"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151217"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2101460744"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089285207"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "3120846891"
+            },
+            {
+              "effective": "red",
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151177"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151255"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151260"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151219"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151183"
+            },
+            {
+              "effective": null,
+              "conflicted": false,
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151155"
+            }
+          ],
+          "ackVersion": null,
+          "observations": [
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151251"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151220"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089272843"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2148911291"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2088658159"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151129"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151163"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151286"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2101460744"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151135"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "3120852944"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "3120841835"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151128"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "3120846891"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "5002182140"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151241"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151229"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151272"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089297187"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2031898681"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "5017769700"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151187"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089285207"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2089293826"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2146470772"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1835035504"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151217"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "2148720471"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151237"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "2602600947",
+              "trainerExternalId": "1661151177"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151272"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151163"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2088658159"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151195"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2148720471"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151128"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151135"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151220"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "3120852944"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151129"
+            },
+            {
+              "colour": "groen",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "3120841835"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151207"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089293826"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151187"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089297187"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089272843"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151200"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151248"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151251"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151242"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151237"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2110975043"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151241"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2146470772"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2148911291"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "5002182140"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151229"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151286"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2031898681"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "5017769700"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1835035504"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151217"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2101460744"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "2089285207"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "3120846891"
+            },
+            {
+              "colour": "rood",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151177"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151255"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151260"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151193"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151219"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1664242084"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151233"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151183"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151155"
+            },
+            {
+              "colour": "grijs",
+              "themaExternalId": "5072550255",
+              "trainerExternalId": "1661151129"
+            }
+          ]
+        }
+      },
+      "input_artifact_hash": "ddabc673f3acf1f70ee9cfdcb3ade69bd59f8618a3d26c9b83134b7b2e82a93c"
+    },
+    "recommendations": [
+      {
+        "id": "594ae873-535d-45be-82cd-9c4791176ef5",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "6034a375-aa05-40de-a10e-6c39841b4a6c",
+        "rank": 1,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 4635,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 5863,
+        "total_cost_cents": 45698,
+        "round_trip_distance_km": 201.518,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 148.63333333333333,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 025",
+          "external_item_id": "1661151129"
+        }
+      },
+      {
+        "id": "9f754790-4cb4-490b-99a7-15da187e8384",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "121ff6f0-f710-4662-83c5-564efe403cb6",
+        "rank": 2,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 4894,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 7093,
+        "total_cost_cents": 47187,
+        "round_trip_distance_km": 212.762,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 160.93333333333334,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 032",
+          "external_item_id": "1661151135"
+        }
+      },
+      {
+        "id": "814ed43d-64da-4467-bc1c-fcdfc09caaeb",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "aa5e3967-4645-4521-982d-577ae5b9b98f",
+        "rank": 3,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6241,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 9023,
+        "total_cost_cents": 48864,
+        "round_trip_distance_km": 271.328,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 180.23333333333332,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 033",
+          "external_item_id": "3120852944"
+        }
+      },
+      {
+        "id": "52375135-f5f2-4261-afcc-05cdfb2ad104",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "31b5a4da-4a61-4fea-8383-b05697f7fe75",
+        "rank": 4,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6423,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 9313,
+        "total_cost_cents": 49336,
+        "round_trip_distance_km": 279.28,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 183.13333333333333,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 011",
+          "external_item_id": "3120841835"
+        }
+      },
+      {
+        "id": "70a28fd3-4ab6-46eb-9854-f920979ebf46",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "0107a91f-8f06-4294-9aef-69abed5e22cd",
+        "rank": 5,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 6171,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 8300,
+        "total_cost_cents": 49671,
+        "round_trip_distance_km": 268.316,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 173,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 004",
+          "external_item_id": "1661151128"
+        }
+      },
+      {
+        "id": "558ae875-39aa-42d7-96a8-444a99cfadda",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "7200dd1d-1279-441f-bfbc-64425d9d2e3b",
+        "rank": 6,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6642,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 9590,
+        "total_cost_cents": 49832,
+        "round_trip_distance_km": 288.794,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 185.9,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 034",
+          "external_item_id": "2088658159"
+        }
+      },
+      {
+        "id": "b0f6c436-d424-4b65-aaef-b8f31a40abee",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "9ef71f72-7b65-4096-a03b-1f211c69a2fb",
+        "rank": 7,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8400,
+        "training_fee_cents": 33600,
+        "trainer_travel_cost_cents": 6860,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 11337,
+        "total_cost_cents": 51797,
+        "round_trip_distance_km": 298.256,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 203.36666666666667,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 002",
+          "external_item_id": "1661151163"
+        }
+      },
+      {
+        "id": "02381fc3-8a58-4c9d-8cea-66370dc203db",
+        "run_id": "ee4636b4-c6c0-4aee-9365-72552f25face",
+        "training_id": "eebbe31d-3c32-463c-a9e6-63be0fbed2b7",
+        "trainer_id": "80cc8f2c-c237-48a5-8fdb-f4361be7b619",
+        "rank": 8,
+        "billable_hours": 4,
+        "hourly_rate_cents": 8800,
+        "training_fee_cents": 35200,
+        "trainer_travel_cost_cents": 6352,
+        "client_travel_charge_cents": 11864,
+        "travel_time_compensation_cents": 10550,
+        "total_cost_cents": 52102,
+        "round_trip_distance_km": 276.182,
+        "hq_round_trip_distance_km": 263.638,
+        "round_trip_duration_minutes": 195.5,
+        "theme_avg_score": null,
+        "overall_avg_score": 0,
+        "calculate_travel": true,
+        "created_at": "2026-08-04T13:10:22.92619+00:00",
+        "trainers": {
+          "naam": "Trainer 003",
+          "external_item_id": "1661151220"
+        }
+      }
+    ]
+  }
+}

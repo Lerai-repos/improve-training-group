@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 
-import { createAdminSupabaseClient } from '@lib/db/admin';
 import { parseAcknowledgements } from '@lib/monday';
 import {
   AGENDA_2026_BOARD,
+  ITEM_FIELDS,
   INPLANNEN_GROUP_ID,
   MONDAY_API_VERSION,
   RECOMMENDATION_STATUS_COLUMN,
@@ -22,8 +22,10 @@ import type { WebhookRouting } from './event';
 import { createMondayReader } from './monday-reader';
 import { createMondayStatusWriter } from './monday-status';
 import { createGoogleRoutesTransport, createRoutesProvider } from './travel';
-import { createSupabaseTravelCache } from './travel-resolve';
-import type { WorkerDeps } from './worker';
+import { createMemoryTravelCacheStore, createTravelCache } from './travel-cache';
+import type { StatusWriter } from './delivery';
+import { readRoster } from './roster';
+import type { ServiceDeps } from './service';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -40,16 +42,28 @@ const ACK_VERSION_LENGTH = 16;
 // untraceable and silently fell back to empty decisions in one function but not
 // the other, making results depend on which worker claimed the run.
 // parseAcknowledgements throws on a malformed file → a bad deploy fails loudly.
-const ACK = parseAcknowledgements(ackJson);
+/**
+ * The reviewed conflict acknowledgements. EXPORTED because the readiness report has
+ * to use the same ones: with EMPTY_ACK an acknowledged conflict stays unresolved
+ * there, so the endpoint would report a trainer as not-green while the engine
+ * happily recommends them.
+ */
+export const ACKNOWLEDGEMENTS = parseAcknowledgements(ackJson);
+const ACK = ACKNOWLEDGEMENTS;
 const ACK_VERSION = createHash('sha256')
   .update(canonicalJson(ackJson))
   .digest('hex')
   .slice(0, ACK_VERSION_LENGTH);
 
-/** Assemble the full worker dependency graph from env + the DB config. */
-export async function buildWorkerDeps(): Promise<WorkerDeps> {
+/** Everything a run needs: the compute ports plus the scoped Monday status writer. */
+export interface EngineDeps extends ServiceDeps {
+  statusWriter: StatusWriter;
+  owner: string;
+}
+
+/** Assemble the full dependency graph from env. The roster is read ONCE here. */
+export async function buildWorkerDeps(): Promise<EngineDeps> {
   assertAddressHashKey(); // fail fast on a missing/short secret, not mid-run at the travel stage
-  const admin = createAdminSupabaseClient();
   const token = requireEnv('MONDAY_API_TOKEN');
   // The live Monday reads run inside the worker's run deadline too — 5 × 30s attempts
   // plus an uncapped Retry-After would otherwise outlast the route on a Monday outage.
@@ -59,22 +73,25 @@ export async function buildWorkerDeps(): Promise<WorkerDeps> {
     deadlineMs: currentDeadlineMs,
   });
   return {
-    admin,
     reader: createMondayReader(client),
+    roster: await readRoster(client, ITEM_FIELDS),
     addressFormatter: createAddressFormatter(
       createOpenRouterCompletion(requireEnv('OPENROUTER_API_KEY'))
     ),
     travelProvider: createRoutesProvider(
       createGoogleRoutesTransport(requireEnv('GOOGLE_MAPS_API_KEY'))
     ),
-    travelCache: createSupabaseTravelCache(admin),
+    // In-process only: the cache is empty on every cold start, so a warm instance
+    // saves Routes calls and a cold one simply pays for them. The KV-backed store
+    // that makes it shared lands next pass.
+    travelCache: createTravelCache(createMemoryTravelCacheStore()),
     statusWriter: createMondayStatusWriter({
       token,
       apiVersion: MONDAY_API_VERSION,
       boardId: AGENDA_2026_BOARD,
     }),
     ack: ACK,
-    config: await buildEngineConfig(admin, { ackVersion: ACK_VERSION }),
+    config: buildEngineConfig({ ackVersion: ACK_VERSION }),
     owner: newWorkerOwner(),
   };
 }
