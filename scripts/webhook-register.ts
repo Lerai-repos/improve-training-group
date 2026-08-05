@@ -4,7 +4,7 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: '.env.local' });
 
 import {
-  AGENDA_2026_BOARD,
+  agendaBoardId,
   INPLANNEN_GROUP_ID,
   MONDAY_API_VERSION,
   RECOMMENDATION_STATUS_COLUMN,
@@ -75,6 +75,44 @@ const TARGETS = [
   },
 ] as const;
 
+const MONDAY_URL = 'https://api.monday.com/v2';
+
+/**
+ * Raw transport for the two webhook mutations.
+ *
+ * `createMondayGraphQLClient` is a read-only port: it rejects any document containing
+ * `mutation` before it leaves the process, so it cannot carry these. Rather than
+ * weaken that guard, this script brings its own POST — exactly what `monday-status.ts`
+ * does for the status write. Keeping it here rather than in `lib/` also keeps the
+ * invariant that the DEPLOYED app's only Monday write is the status label; registering
+ * a webhook is an operator action, run by hand.
+ */
+async function mutate<T>(document: string, variables: Record<string, unknown>): Promise<T> {
+  const res = await fetch(MONDAY_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: requireEnv('MONDAY_API_TOKEN'),
+      'Content-Type': 'application/json',
+      'API-Version': MONDAY_API_VERSION,
+    },
+    body: JSON.stringify({ query: document, variables }),
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    throw new Error(`Monday API ${res.status}: ${raw}`);
+  }
+  // GraphQL errors arrive as HTTP 200 with an `errors[]` body. A failed challenge
+  // handshake — our own route answering 401 — surfaces here, not as a bad status.
+  const body: { data?: T; errors?: Array<{ message: string }> } = JSON.parse(raw);
+  if (body.errors && body.errors.length > 0) {
+    throw new Error(body.errors.map((e) => e.message).join('; '));
+  }
+  if (!body.data) {
+    throw new Error('Monday GraphQL: empty data');
+  }
+  return body.data;
+}
+
 type Client = ReturnType<typeof createMondayGraphQLClient>;
 
 function client(): Client {
@@ -87,7 +125,7 @@ function client(): Client {
 async function list(c: Client): Promise<WebhookRow[]> {
   const res = await c.query<{ webhooks: WebhookRow[] | null }>(
     `query ($board: ID!) { webhooks(board_id: $board) { id event board_id config } }`,
-    { board: AGENDA_2026_BOARD }
+    { board: agendaBoardId() }
   );
   return res.webhooks ?? [];
 }
@@ -112,12 +150,12 @@ async function register(c: Client): Promise<void> {
       );
     }
     try {
-      const res = await c.query<{ create_webhook: { id: string; event: string } | null }>(
+      const res = await mutate<{ create_webhook: { id: string; event: string } | null }>(
         `mutation ($board: ID!, $url: String!, $event: WebhookEventType!, $config: JSON) {
            create_webhook(board_id: $board, url: $url, event: $event, config: $config) { id event }
          }`,
         {
-          board: AGENDA_2026_BOARD,
+          board: agendaBoardId(),
           url,
           event: target.event,
           config: JSON.stringify(target.config),
@@ -139,9 +177,9 @@ async function register(c: Client): Promise<void> {
   }
 }
 
-async function remove(c: Client, ids: string[]): Promise<void> {
+async function remove(ids: string[]): Promise<void> {
   for (const id of ids) {
-    const res = await c.query<{ delete_webhook: { id: string } | null }>(
+    const res = await mutate<{ delete_webhook: { id: string } | null }>(
       `mutation ($id: ID!) { delete_webhook(id: $id) { id } }`,
       { id }
     );
@@ -159,11 +197,11 @@ async function main(): Promise<void> {
     if (rest.length === 0) {
       throw new Error('delete needs at least one webhook id');
     }
-    await remove(c, rest);
+    await remove(rest);
   }
 
   const rows = await list(c);
-  console.log(`\nWebhooks on Agenda 2026 (${AGENDA_2026_BOARD}):`);
+  console.log(`\nWebhooks on Agenda 2026 (${agendaBoardId()}):`);
   if (rows.length === 0) {
     console.log('  (none)');
   }

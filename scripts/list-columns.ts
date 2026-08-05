@@ -4,7 +4,7 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: '.env.local' });
 
 import {
-  AGENDA_2026_BOARD,
+  agendaBoardId,
   MONDAY_API_VERSION,
   INPLANNEN_GROUP_ID,
   RECOMMENDATION_STATUS_COLUMN,
@@ -50,7 +50,7 @@ function labelsOf(settingsStr: string | null): string[] {
 }
 
 async function main(): Promise<void> {
-  const boardId = process.argv[2] ?? AGENDA_2026_BOARD;
+  const boardId = process.argv[2] ?? agendaBoardId();
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) {
     throw new Error('Missing MONDAY_API_TOKEN');

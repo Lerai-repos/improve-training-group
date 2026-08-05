@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { parseAcknowledgements } from '@lib/monday';
 import {
-  AGENDA_2026_BOARD,
+  agendaBoardId,
   ITEM_FIELDS,
   INPLANNEN_GROUP_ID,
   MONDAY_API_VERSION,
@@ -142,7 +142,7 @@ export function buildStatusWriter(): StatusWriter {
   return createMondayStatusWriter({
     token: requireEnv('MONDAY_API_TOKEN'),
     apiVersion: MONDAY_API_VERSION,
-    boardId: AGENDA_2026_BOARD,
+    boardId: agendaBoardId(),
   });
 }
 
@@ -173,7 +173,7 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
     statusWriter: createMondayStatusWriter({
       token,
       apiVersion: MONDAY_API_VERSION,
-      boardId: AGENDA_2026_BOARD,
+      boardId: agendaBoardId(),
     }),
     ack: ACK,
     config: buildEngineConfig({ ackVersion: ACK_VERSION }),

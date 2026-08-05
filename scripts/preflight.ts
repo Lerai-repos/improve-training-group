@@ -3,7 +3,11 @@ import { config as loadEnv } from 'dotenv';
 
 loadEnv({ path: '.env.local' });
 
-import { AGENDA_2026_BOARD, MONDAY_API_VERSION } from '@lib/monday/board-config';
+import {
+  AGENDA_2026_PRODUCTION_BOARD,
+  agendaBoardId,
+  MONDAY_API_VERSION,
+} from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { createQStashClient } from '@lib/recommend/qstash';
@@ -18,7 +22,9 @@ import { createQStashClient } from '@lib/recommend/qstash';
  *   pnpm preflight
  */
 
-type Status = 'ok' | 'fail' | 'skip';
+// `warn` does NOT fail the run: a test-board override is a legitimate state to be in,
+// it just must never go unnoticed.
+type Status = 'ok' | 'fail' | 'skip' | 'warn';
 const results: Array<{ name: string; status: Status; detail: string }> = [];
 
 function record(name: string, status: Status, detail: string): void {
@@ -61,10 +67,11 @@ async function checkStatusColumn(): Promise<void> {
   }
   try {
     const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
-    const [board] = await client.getSchema([AGENDA_2026_BOARD]);
+    const boardId = agendaBoardId();
+    const [board] = await client.getSchema([boardId]);
     const column = board?.columns.find((c) => c.id === columnId);
     if (!column) {
-      record('Our status column', 'fail', `${columnId} is not on Agenda 2026`);
+      record('Our status column', 'fail', `${columnId} is not on board ${boardId}`);
       return;
     }
     const labels = column.settings_str ?? '';
@@ -73,6 +80,17 @@ async function checkStatusColumn(): Promise<void> {
       'Our status column',
       missing.length === 0 ? 'ok' : 'fail',
       missing.length === 0 ? `${column.title} (${columnId})` : `missing label(s): ${missing.join(', ')}`
+    );
+    // The override is a silent no-op on production if it is forgotten — the engine
+    // simply stops touching ITG's board — so preflight names the board every time
+    // rather than only when something is wrong.
+    const overridden = boardId !== AGENDA_2026_PRODUCTION_BOARD;
+    record(
+      'Agenda board',
+      overridden ? 'warn' : 'ok',
+      overridden
+        ? `TEST OVERRIDE → ${board?.name ?? '?'} (${boardId}) via MONDAY_AGENDA_BOARD_ID — unset before going live`
+        : `${board?.name ?? '?'} (${boardId})`
     );
   } catch (error) {
     record('Our status column', 'fail', message(error));
@@ -173,17 +191,19 @@ async function main(): Promise<void> {
   await checkQStash();
   checkPlainVars();
 
-  const icon: Record<Status, string> = { ok: '✓', fail: '✗', skip: '·' };
+  const icon: Record<Status, string> = { ok: '✓', fail: '✗', skip: '·', warn: '!' };
   console.log('');
   for (const r of results) {
     console.log(`  ${icon[r.status]} ${r.name.padEnd(28)} ${r.detail}`);
   }
 
   const failed = results.filter((r) => r.status === 'fail');
+  const warned = results.filter((r) => r.status === 'warn');
+  const suffix = warned.length === 0 ? '' : ` (${warned.length} warning(s))`;
   console.log(
     failed.length === 0
-      ? '\nAll configured checks passed.\n'
-      : `\n${failed.length} check(s) failed.\n`
+      ? `\nAll configured checks passed.${suffix}\n`
+      : `\n${failed.length} check(s) failed.${suffix}\n`
   );
   process.exit(failed.length === 0 ? 0 : 1);
 }

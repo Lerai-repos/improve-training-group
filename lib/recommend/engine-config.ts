@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { buildAppConfig, type ConfigRowLike } from '@lib/config';
-import { AGENDA_2026_BOARD, GROUP_POLICY } from '@lib/monday/board-config';
+import { agendaBoardId, GROUP_POLICY } from '@lib/monday/board-config';
 import { isProductionEnvironment } from '@lib/constants';
 
 import type { EngineConfig } from './service';
@@ -101,7 +101,7 @@ export function buildEngineConfig(opts?: {
     isProduction: isProductionEnvironment,
   });
   return {
-    boardId: AGENDA_2026_BOARD,
+    boardId: agendaBoardId(),
     hqAddress: cfg.hqAddress,
     recommendableGroups: cfg.recommendableTrainerGroups,
     rateCards: defaultRateCards(),

@@ -10,7 +10,7 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  AGENDA_2026_BOARD,
+  agendaBoardId,
   ITEM_FIELDS,
   MONDAY_API_VERSION,
   THEMAS_BOARD,
@@ -31,7 +31,7 @@ const OUT_DIR = join(process.cwd(), 'snapshots', 'monday');
 
 // Boards in scope for M2a (see docs .../platform-structures/monday.md).
 const BOARDS: Record<string, string> = {
-  'agenda-2026': AGENDA_2026_BOARD,
+  'agenda-2026': agendaBoardId(),
   trainers: TRAINERS_BOARD,
   themas: THEMAS_BOARD,
 };

@@ -17,7 +17,30 @@ import type { QualificationColourMap, TrainerColumnMap, TrainingColumnMap } from
  */
 export const MONDAY_API_VERSION = '2026-07';
 
-export const AGENDA_2026_BOARD = '5087396949';
+/** ITG's real planning board. Never change this — override per environment instead. */
+export const AGENDA_2026_PRODUCTION_BOARD = '5087396949';
+
+/**
+ * The Agenda board trainings are read from and our status column is written to.
+ *
+ * Overridable via `MONDAY_AGENDA_BOARD_ID` so the whole pipeline can be aimed at a
+ * DUPLICATE of Agenda 2026 — a board copy keeps every column id and group id, so
+ * only this one value changes. That is what makes an end-to-end test possible
+ * without writing to ITG's live planning board.
+ *
+ * `||`, not `??`: a blank override must fall back to production rather than produce
+ * an empty board id, which Monday answers with an empty board — i.e. "no trainings"
+ * rather than an error.
+ *
+ * ⚠️ Going live means UNSETTING `MONDAY_AGENDA_BOARD_ID` everywhere (local, Doppler,
+ * Vercel) — there is nothing to revert in code. While it is set, the engine does not
+ * touch ITG's real board at all, so a forgotten override is a silent no-op on
+ * production, not a visible failure. Check it before declaring the engine live.
+ */
+export function agendaBoardId(): string {
+  return process.env.MONDAY_AGENDA_BOARD_ID || AGENDA_2026_PRODUCTION_BOARD;
+}
+
 export const TRAINERS_BOARD = '1661151090';
 export const THEMAS_BOARD = '5067928440';
 

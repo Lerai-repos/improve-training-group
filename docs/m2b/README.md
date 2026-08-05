@@ -196,6 +196,7 @@ pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm buil
 | `MONDAY_API_TOKEN` | all reads + the status write | |
 | `MONDAY_WEBHOOK_TOKEN` | webhook route | The `?token=` shared secret. Unset ⇒ the route rejects everything. |
 | `MONDAY_RECOMMENDATION_STATUS_COLUMN` | status write | **Our** column. Refuses `color_mkzwfy42`. |
+| `MONDAY_AGENDA_BOARD_ID` | every Agenda read + the status write | **Test override.** Points the whole pipeline at a DUPLICATE of Agenda 2026 (a Monday board copy keeps every column id and group id, so this is the only value that changes). Unset ⇒ production `5087396949`. ⚠️ **Unset it before going live** — while set, the engine never touches ITG's real board, which is a silent no-op rather than a visible failure. `pnpm preflight` prints the board name and warns whenever the override is active. |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | queue state, outcomes, travel cache | Set by the Vercel Upstash integration. |
 | `QSTASH_TOKEN` | publishing | |
 | `QSTASH_URL` | publishing | Only for a REGIONAL account (e.g. `https://qstash-eu-central-1.upstash.io`). Unset ⇒ the global default. Wrong or missing on a regional account ⇒ every publish fails. |
