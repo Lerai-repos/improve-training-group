@@ -22,10 +22,17 @@ import type { WebhookRouting } from './event';
 import { createMondayReader } from './monday-reader';
 import { createMondayStatusWriter } from './monday-status';
 import { createGoogleRoutesTransport, createRoutesProvider } from './travel';
-import { createMemoryTravelCacheStore, createTravelCache } from './travel-cache';
+import { createKvTravelCacheStore, createTravelCache } from './travel-cache';
 import type { StatusWriter } from './delivery';
+import { createAlertGate, type FailureCallbackDeps } from './failure-callback';
+import { createRedisClient, createUpstashKvStore } from './kv';
+import { createOutcomeStore, type OutcomeStore } from './outcome';
+import { createQStashClient, createQStashPublisher, publicBaseUrl } from './qstash';
+import { createRunQueue, type JobPublisher } from './queue';
+import { createUpstashQueueStore, type QueueStore } from './queue-store';
 import { readRoster } from './roster';
 import type { ServiceDeps } from './service';
+import type { RunQueue } from './webhook';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -61,6 +68,84 @@ export interface EngineDeps extends ServiceDeps {
   owner: string;
 }
 
+/**
+ * The queue-side dependency graph, built WITHOUT the roster or any provider.
+ *
+ * The webhook and the sweep must stay cheap: they allocate a generation and hand the
+ * work to QStash. Building the full engine there would cost a paginated trainers-board
+ * read per webhook call, against a 25.000/day Monday budget, for work the job route
+ * does anyway.
+ */
+function buildPublisher(): JobPublisher {
+  const base = publicBaseUrl();
+  return createQStashPublisher({
+    client: createQStashClient(),
+    jobUrl: `${base}/api/jobs/recommend`,
+    failureUrl: `${base}/api/jobs/recommend/failed`,
+  });
+}
+
+/**
+ * Shared Redis-backed state. `createUpstashQueueStore` — the LUA implementation — is
+ * mandatory here: `createQueueStore` does its transitions as read-modify-write in
+ * TypeScript, which is correct only on a single-threaded in-memory store. Against a
+ * shared Redis it would let two concurrent deliveries of one trigger both find no
+ * record, both allocate a generation, and then have QStash publish only one of them —
+ * so the surviving job sees a higher `gen` than its own and skips itself as
+ * superseded. The training would silently never get an answer.
+ */
+function buildRedisState(): { store: QueueStore; outcomes: OutcomeStore } {
+  const redis = createRedisClient();
+  return {
+    store: createUpstashQueueStore(redis),
+    outcomes: createOutcomeStore(createUpstashKvStore(redis)),
+  };
+}
+
+export function buildQueueDeps(): {
+  store: QueueStore;
+  publisher: JobPublisher;
+  queue: RunQueue;
+} {
+  const { store } = buildRedisState();
+  const publisher = buildPublisher();
+  return { store, publisher, queue: createRunQueue(store, publisher) };
+}
+
+/** Queue state + the immutable outcome store, shared by the job and callback routes. */
+export function buildJobStateDeps(): {
+  store: QueueStore;
+  outcomes: OutcomeStore;
+  publisher: JobPublisher;
+} {
+  return { ...buildRedisState(), publisher: buildPublisher() };
+}
+
+/**
+ * Deps for the failure callback. It needs the Monday writer but NOT the roster or any
+ * provider: it never computes, it only delivers an outcome that already exists (or
+ * records FOUT because none ever will).
+ */
+export function buildFailureCallbackDeps(): FailureCallbackDeps {
+  const redis = createRedisClient();
+  return {
+    store: createUpstashQueueStore(redis),
+    outcomes: createOutcomeStore(createUpstashKvStore(redis)),
+    publisher: buildPublisher(),
+    alerts: createAlertGate(createUpstashKvStore(redis)),
+    writer: buildStatusWriter(),
+  };
+}
+
+/** The scoped Monday status writer. No network at construction — safe to build eagerly. */
+export function buildStatusWriter(): StatusWriter {
+  return createMondayStatusWriter({
+    token: requireEnv('MONDAY_API_TOKEN'),
+    apiVersion: MONDAY_API_VERSION,
+    boardId: AGENDA_2026_BOARD,
+  });
+}
+
 /** Assemble the full dependency graph from env. The roster is read ONCE here. */
 export async function buildWorkerDeps(): Promise<EngineDeps> {
   assertAddressHashKey(); // fail fast on a missing/short secret, not mid-run at the travel stage
@@ -81,10 +166,10 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
     travelProvider: createRoutesProvider(
       createGoogleRoutesTransport(requireEnv('GOOGLE_MAPS_API_KEY'))
     ),
-    // In-process only: the cache is empty on every cold start, so a warm instance
-    // saves Routes calls and a cold one simply pays for them. The KV-backed store
-    // that makes it shared lands next pass.
-    travelCache: createTravelCache(createMemoryTravelCacheStore()),
+    // Shared across invocations now, so a cold start no longer re-pays for routes
+    // another instance already looked up. Only keyed fingerprints and distances are
+    // stored — never a raw address.
+    travelCache: createTravelCache(createKvTravelCacheStore(createUpstashKvStore(createRedisClient()))),
     statusWriter: createMondayStatusWriter({
       token,
       apiVersion: MONDAY_API_VERSION,
@@ -99,7 +184,10 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
 /** Webhook routing config (Inplannen group + status column + RUN label). */
 export function webhookRouting(): WebhookRouting {
   return {
-    inplannenGroupId: process.env.MONDAY_INPLANNEN_GROUP_ID ?? INPLANNEN_GROUP_ID,
+    // `||`, not `??`: a blank override must fall back, not win. `??` would let
+    // `MONDAY_INPLANNEN_GROUP_ID=` produce an empty id that matches no group, so every
+    // group-move trigger would be silently ignored with a perfectly healthy 200.
+    inplannenGroupId: process.env.MONDAY_INPLANNEN_GROUP_ID || INPLANNEN_GROUP_ID,
     statusColumnId: RECOMMENDATION_STATUS_COLUMN,
     runLabel: RECOMMENDATION_STATUS_LABELS.run,
   };

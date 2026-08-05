@@ -1,33 +1,28 @@
 # M2b — trainer-recommendation engine (runbook)
 
-> **State as of 2026-08-04: compute only, no database, nothing writes to Monday.**
-> Supabase was removed in the "strip pass" (see `docs/build/10-architectuurreview.md`
-> and `docs/build/BRIEFING.md`). The engine reads Monday live, computes, and returns
-> the answer. The durable queue, the Aanbevelingen board and the status write-back
-> are the NEXT pass — see §8.
+> **State: triggered, computed and delivered — beside n8n, not instead of it.**
+> A Monday trigger is recorded durably in Redis, published to QStash, computed, and
+> written to **our own** status column. n8n keeps `color_mkzwfy42` until our results
+> are provably clean. There is still no database and no Aanbevelingen board (§10).
 
 ---
 
 ## 1. What it does
 
 ```
-mondayItemId
-   ├─ read the training LIVE from Monday (themes, date, duration, locatie, updated_at)
-   ├─ read the full trainer roster LIVE (all groups) — once per execution
-   ├─ read the training's theme qualifications LIVE (4 colour relations)
-   ├─ eligibility: effective-GREEN for EVERY theme of the training
-   ├─ rates: drop unpriceable trainers as `no_rate` BEFORE any provider call
-   ├─ address (OpenRouter) → travel (Google Routes, cache-first) → cost → 5-layer rank
-   └─ return RecommendationResult (GEREED | GEEN MATCH | FOUT)
+Monday (Aanbevelingen button, or a move into Inplannen)
+   └─ webhook → durable trigger record + per-training generation → QStash
+        └─ job → read training + roster + qualifications LIVE
+                 eligibility (effective-GREEN for EVERY theme)
+                 rates (unpriceable trainers dropped BEFORE any provider call)
+                 address (OpenRouter) → travel (Google Routes, cache-first) → 5-layer rank
+                 record ONE immutable outcome for this generation
+                 write GEREED | GEEN MATCH | FOUT to OUR status column
 ```
 
 **Fail-closed throughout.** A vague location, an unreachable destination or a
 transient provider failure is FOUT — never a plausible €0. The only zero-travel path
 is a *confirmed* online training.
-
-`runRecommendation(deps, mondayItemId)` returns a discriminated union: success
-carries the ranked list plus full provenance; failure carries `failure.stage` plus
-whatever provenance existed when it stopped. Nothing is persisted.
 
 ---
 
@@ -37,25 +32,28 @@ whatever provenance existed when it stopped. Nothing is persisted.
 |---|---|
 | Training + qualifications (live) | `lib/recommend/monday-reader.ts` |
 | Trainer roster (live, all groups) | `lib/recommend/roster.ts` |
-| All qualifications, whole board | `lib/recommend/qualifications.ts` |
-| Eligibility (effective-green) | `lib/recommend/eligibility.ts` + `lib/monday` qualification derivation |
+| Eligibility (effective-green) | `lib/recommend/eligibility.ts` + `lib/monday/qualification.ts` |
 | Rates, cost, ranking | `lib/calc/*`, `lib/recommend/pricing.ts` |
-| Address cleanup | `lib/recommend/address.ts` + `completion.ts` |
-| Travel + cache | `lib/recommend/travel*.ts` |
-| Audit artifact (v3) | `lib/recommend/artifact.ts` |
-| Orchestration | `lib/recommend/service.ts` |
-| Config (from env) | `lib/recommend/engine-config.ts` + `lib/config/` |
-| Webhook parse + handler | `lib/recommend/event.ts`, `webhook.ts` |
+| Address, travel, cache | `lib/recommend/address.ts`, `travel*.ts` |
+| Compute orchestration | `lib/recommend/service.ts` |
+| **Key/value primitives** | `lib/recommend/kv.ts` |
+| **Durable trigger state** | `lib/recommend/queue-store.ts` |
+| **Enqueue + recovery sweep** | `lib/recommend/queue.ts` |
+| **Immutable outcomes** | `lib/recommend/outcome.ts` |
+| **One job, retryability** | `lib/recommend/job.ts` |
+| **Delivery + convergence** | `lib/recommend/deliver.ts` |
+| **Dead-letter handling** | `lib/recommend/failure-callback.ts` |
+| QStash transport | `lib/recommend/qstash.ts` |
 
-**There is no database, no migrations, no sync.** If you find yourself wanting a
-table, stop — `BRIEFING.md` says to call Kevin before introducing one.
+**There is still no database, no migrations, no sync.** Redis holds job state and
+caches only. If you find yourself wanting a table, stop — `BRIEFING.md` says to call
+Kevin before introducing one.
 
-### Two boundaries that fail closed on purpose
+### Two read boundaries that fail closed on purpose
 
 - **Board schema drift.** `readRoster` and `readAllEffectiveQuals` validate the
-  configured columns (`assertColumns`) before decoding. The decoders fail OPEN — a
-  retyped `adres` column becomes `null` for everyone, a missing colour relation
-  becomes an empty array — so without this check a Monday change would produce a
+  configured columns before decoding. The decoders fail OPEN — a retyped `adres`
+  becomes `null` for everyone — so without this check a Monday change would produce a
   perfectly plausible GEEN MATCH.
 - **Completeness + coherence.** Both reads pass the board's own `items_count` and
   require `updated_at`, so a short or mid-edit read aborts instead of silently
@@ -63,135 +61,209 @@ table, stop — `BRIEFING.md` says to call Kevin before introducing one.
 
 ---
 
-## 3. Key decisions & divergences from legacy
+## 3. The queue, and what it actually guarantees
 
-- **Green only.** A trainer must be effective-**green** for every theme. Since
-  30 July 2026 ITG's working method is groen/rood; oranje is residual data.
-  Legacy DID recommend on oranje — those parity differences are expected, not bugs.
-- **`grijs` is "not assessed"**, never a rival colour. A trainer listed both grijs
-  and groen is GREEN. Treating grijs as a conflict silently excluded three trainers
-  from ~95 themes each until 2026-08-04.
-- **`*NOTK`** (item `2638479433`) is excluded at the roster boundary — it is a
-  placeholder, not a person, and it *is* linked from real trainings.
-- **Trainer identity is the Monday item id.** There is no internal uuid;
-  `RateCard.trainerId` keys on the same id. Artifact is **v3**; a v2 artifact must be
-  refused by any replay tool, not silently re-priced.
-- **Rates** are the two cohort defaults (€88 / €84) derived from `GROUP_POLICY`.
-  Per-trainer `Uurtarief` becomes a trainer-scoped card once ITG fills that field —
-  the mechanism already works.
-- **Scores are inert** until M3 imports evaluations, so ranking is cost↑ then travel↑.
+Four properties, each preventing a specific failure.
+
+**The Redis record IS the job.** A trigger is written with its generation and indexed
+for recovery *before* anything is published, and only marked `published` — and only
+then given a 35-minute dedup TTL — once QStash has it. Recording "seen" first would
+turn Monday's own retry into a no-op and lose the trigger permanently. A pending
+record carries **no expiry**, so durability never depends on something running on a
+schedule.
+
+**Ordering is convergence, not exclusion.** Flow Control (`key = training-<itemId>`,
+`parallelism: 1`) serializes delivery per training, so unrelated trainings never queue
+behind each other. It does **not** make concurrent compute impossible: it bounds what
+QStash observes, not what a timed-out function keeps doing. A stale write is therefore
+*detected* — the generation is rechecked either side of the write — and repaired.
+
+> Fencing tokens cannot help here. Monday has no conditional write, so no token can
+> make it reject a stale one. The Postgres design didn't close this either: its
+> advisory lock released at commit, **before** the Monday HTTP call. What made that
+> design safe was detect-and-repair, and that is what we ported.
+
+**One immutable outcome per (training, generation).** Compute is not idempotent — it
+reads live data and calls paid providers — so every retry, repair and DLQ replay
+delivers the *recorded* label instead of recomputing. Outcomes have **no expiry**: DLQ
+retention is plan-dependent and can outlive any TTL we would pick.
+
+**Retryability is explicit** (`failure.retryable`, set where the error is raised):
+
+| Outcome | Monday | HTTP | Effect |
+|---|---|---|---|
+| GEREED / GEEN MATCH | write label | 200 | done |
+| Terminal (bad date, duration, unusable location, unreachable destination) | write **FOUT** | **489** + `Upstash-NonRetryable-Error` | no retries, straight to DLQ |
+| Transient (provider/infra) | **nothing** | 500 | QStash retries with backoff |
+| Compute fine, Monday write failed | — | 500 | retry re-delivers the **stored** label |
+
+Three timeouts, and the order matters:
+`runWithDeadline` **270s** < `maxDuration` **300s** < QStash timeout **330s**. A QStash
+timeout *below* `maxDuration` would release the Flow Control slot while our function
+was still running — manufacturing the overlap the design works to avoid.
+
+**The sweep never gives up.** `/api/cron/publish-pending` republishes stuck triggers,
+alerts past a threshold, and keeps retrying on a long interval. An attempt cap would
+make a long QStash outage unrecoverable: the highest generation stays pending and
+blocks every older generation from writing, so the training ends with no answer at all.
 
 ---
 
-## 3b. Configuring which trainer groups count
+## 4. Running beside n8n
+
+- n8n keeps **`color_mkzwfy42`** and still owns the legacy flow.
+- We write **`MONDAY_RECOMMENDATION_STATUS_COLUMN`**, a second status column created
+  by hand on Agenda 2026 with labels `GEREED` / `GEEN MATCH` / `FOUT`.
+- `monday-status.ts` **refuses** to write `color_mkzwfy42`, and `ourStatusColumnId()`
+  refuses to accept it as configuration. Both are hard errors — this is what makes the
+  side-by-side comparison structurally safe rather than merely intended.
+- Trigger routing still watches n8n's column (the `RUN` label and the Aanbevelingen
+  button live there), so both systems react to the same planner action.
+
+---
+
+## 5. Key decisions & divergences from legacy
+
+- **Green only.** Since 30 July 2026 ITG's working method is groen/rood; oranje is
+  residual. Legacy DID recommend on oranje — those parity differences are expected.
+- **`grijs` is "not assessed"**, never a rival colour. Treating it as one silently
+  excluded three trainers from ~95 themes each until 2026-08-04.
+- **`*NOTK`** (item `2638479433`) is excluded at the roster boundary.
+- **Trainer identity is the Monday item id.** Artifact is **v3**; a v2 artifact must be
+  refused by any replay tool, not silently re-priced.
+- **Rates** are the two cohort defaults (€88 / €84) from `GROUP_POLICY`.
+- **Scores are inert** until M3 imports evaluations, so ranking is cost↑ then travel↑.
+- **Webhook auth is the URL `?token=`**, not a JWT. Monday only signs webhooks created
+  through an integration app, which ITG has not set up; the JWT verifier has been
+  removed so there is exactly one gate. Useful side effect: the token is present on the
+  setup challenge too, so the route authenticates *before* echoing it.
+
+---
+
+## 6. Configuring which trainer groups count
 
 `RECOMMENDABLE_TRAINER_GROUPS` (env, comma-separated Monday group ids).
 
 - **Absent** → falls back to the `GROUP_POLICY` default (`topics`, `nieuwe_groep__1`).
-- **Present but empty** → **rejected**. Clearing it is a loud error, not a silent
-  fallback: selecting zero groups would make every training GEEN MATCH, which looks
-  like a legitimate answer.
+- **Present but empty** → **rejected**. Clearing it would make every training GEEN
+  MATCH, which looks like a legitimate answer.
 
-**Always run `pnpm groups:list` after changing it.** It reports every group on the
-board with a readiness verdict and exits non-zero when a *selected* group is
-`missing_from_monday` (typo/renamed/deleted) or `not_configured` (nobody green, or
-nobody priceable). `partial` warns but passes — those trainers are skipped as
-`no_rate`.
-
-Same report over HTTP: `GET /api/config/trainer-groups` with
-`Authorization: Bearer $CONFIG_API_SECRET`.
+**Always run `pnpm groups:list` after changing it.** Same report over HTTP:
+`GET /api/config/trainer-groups` with `Authorization: Bearer $CONFIG_API_SECRET`.
 
 ---
 
-## 4. Run it locally
-
-Needs only `.env.local`. **No Docker, no database.**
+## 7. Commands
 
 | Command | What |
 |---|---|
-| `pnpm recommend:once <mondayItemId>` | One training end-to-end against live Monday. Read-only — prints the ranked list, writes nothing. |
-| `pnpm groups:list` | Trainer-group readiness from live data; non-zero exit on an unusable selection. |
-| `pnpm recommend:parity [--limit=N]` | Compares recommended trainer SETS against the legacy Airtable snapshot, in-process, roster loaded once. Writes `docs/m2a/recommend-parity.md`. |
-| `pnpm replay:verify` | Replays `fixtures/replay/` through the engine and diffs the whole result against the recorded baseline. Deterministic, no network. |
-| `pnpm test:unit` | 36 files. There are no integration tests — the DB they needed is gone. |
+| `pnpm recommend:once <mondayItemId>` | One training end-to-end against live Monday. Read-only. |
+| `pnpm groups:list` | Trainer-group readiness; non-zero exit on an unusable selection. |
+| `pnpm recommend:parity [--limit=N]` | Compare recommended trainer SETS against the legacy Airtable snapshot. |
+| `pnpm replay:verify` | Deterministic replay of `fixtures/replay/`. **Must stay 4/4.** |
+| `pnpm test:unit` | Unit tests, in-memory adapters only. |
 
-**`replay:verify` vs `recommend:parity`** — they answer different questions and both
-matter. Replay is deterministic (every input pinned, including provider responses)
-and proves the plumbing did not change. Parity is live and drifting: it exercises the
-real roster adapter and shows how we currently differ from legacy Airtable.
+Full gate:
+
+```bash
+pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm build
+```
+
+**Not covered by unit tests**, deliberately — verify these live after deploy:
+
+1. **Webhook registration + a real event.** Confirm the challenge carries `?token=`,
+   and that `triggerUuid` / `triggerKind` look right for a button press and a group move.
+2. **The Lua transitions against real Redis.** The in-memory store implements the same
+   three transitions in TypeScript, so only a live run exercises the Lua. Fire
+   concurrent enqueues for one training: generations must be distinct and increasing,
+   and a concurrent `markPublished` + `bumpAttempt` must never yield published-then-pending.
+3. **Lost-trigger recovery.** Break `QSTASH_TOKEN`, trigger, confirm a 500 and a pending
+   record with `TTL = -1`. Leave it past Monday's 30-minute retry window *and* past the
+   sweep's alert threshold, restore the token, and confirm the sweep still publishes it
+   with the original generation.
+4. **Side-by-side.** Press the button on one real training; both columns move
+   independently. Check Monday's activity log to confirm our token never touched
+   `color_mkzwfy42`.
+5. **Delivery-only failure.** Let compute store `GEREED`, then break the Monday token so
+   delivery exhausts its retries ⇒ the failure callback re-delivers **GEREED**, never FOUT.
 
 ---
 
-## 5. Environment variables
+## 8. Environment variables
 
 | Var | Used by | Notes |
 |-----|---------|-------|
-| `MONDAY_API_TOKEN` | all reads | Board access token. |
-| `MONDAY_WEBHOOK_SIGNING_SECRET` | webhook route (next pass) | Verifies Monday's signed JWT. Unverified against a real payload. |
+| `MONDAY_API_TOKEN` | all reads + the status write | |
+| `MONDAY_WEBHOOK_TOKEN` | webhook route | The `?token=` shared secret. Unset ⇒ the route rejects everything. |
+| `MONDAY_RECOMMENDATION_STATUS_COLUMN` | status write | **Our** column. Refuses `color_mkzwfy42`. |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | queue state, outcomes, travel cache | Set by the Vercel Upstash integration. |
+| `QSTASH_TOKEN` | publishing | |
+| `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` | job + failure routes | Both required; verification is against the raw body and URL. |
+| `PUBLIC_BASE_URL` | QStash callbacks | Falls back to `VERCEL_URL`. Set explicitly for local tunnelling. |
+| `CRON_SECRET` | `/api/cron/publish-pending` | Unset ⇒ the endpoint rejects everything. |
+| `CONFIG_API_SECRET` | `/api/config/trainer-groups` | Unset ⇒ rejects everything. |
 | `GOOGLE_MAPS_API_KEY` | travel | Needs the **Routes API** enabled *and* allowed in the key's restrictions. |
 | `OPENROUTER_API_KEY` | address cleanup | |
-| `ADDRESS_HASH_KEY` | travel cache + artifact | HMAC for keyed address fingerprints — no raw address is stored. **Required in production**; dev falls back to an insecure constant. |
-| `CONFIG_API_SECRET` | `/api/config/trainer-groups` | Unset ⇒ the endpoint rejects everything. |
-| `RECOMMENDABLE_TRAINER_GROUPS` | eligibility | See §3b. |
-| `HQ_ADRES`, `TRAVEL_RATE_TRAINER_CENTS_PER_KM`, `TRAVEL_RATE_CLIENT_CENTS_PER_KM`, `TRAVEL_TIME_THRESHOLD_MINUTES`, `TRAVEL_TIME_MODE`, `TRAVEL_TIME_FEE_PER_MINUTE_CENTS`, `THRESHOLD_HOURS` | config | The three **financial** ones are **required in production** — `buildAppConfig` throws rather than defaulting money values. |
+| `ADDRESS_HASH_KEY` | travel cache + artifact | HMAC for keyed fingerprints. **Required in production.** |
+| `RECOMMENDABLE_TRAINER_GROUPS` | eligibility | See §6. **Interim home — belongs on the Instellingen board** (§10). |
+| `HQ_ADRES`, `TRAVEL_RATE_*`, `TRAVEL_TIME_*`, `THRESHOLD_HOURS` | config | The three **financial** ones are **required in production** — `buildAppConfig` throws rather than defaulting money values. **Interim home** (§10). |
 | `LOG_ENABLED` | everything | **Set `true` in production.** `lib/logger` defaults to disabled there, which would silence every alarm below. |
 | `LOG_LEVEL` | everything | `info` by default in production; `debug` also shows per-event webhook ignore reasons. |
-| `VERCEL_GIT_COMMIT_SHA` | provenance | Auto-set by Vercel. |
 
 Secrets live in **Doppler**. `.env*` files are agent-blocked — check git tracking,
 don't read them.
 
 ---
 
-## 6. Operate & troubleshoot
+## 9. Operate & troubleshoot
 
 | Symptom | Cause / fix |
 |---|---|
-| `FOUT invalid_duration` / `invalid_date` | Training `duur` missing or ≤0, or a blank date, on a training that HAS themes. Fix the item in Monday. |
+| Nothing happens on a button press | Check the webhook is registered and its URL still carries `?token=`. A 401 is invisible on the board. |
+| `FOUT invalid_duration` / `invalid_date` | `duur` missing or ≤0, or a blank date, on a training that HAS themes. Fix the item. |
 | `FOUT address` | The location is vague or unresolvable. Never silently €0 — fix `Locatie`. |
-| `FOUT travel` | Transient Routes failure or an unreachable destination. Retry; if persistent, check the Routes API key. |
+| `FOUT travel` | Unreachable destination (terminal) or a Routes outage (retried). The DLQ tells you which. |
 | GEEN MATCH that looks wrong | Check `excluded` for `no_rate` / `no_address` / `route_not_found`, then `pnpm groups:list`. |
-| **`schema drift on board …`** | A configured Monday column was renamed, retyped or repointed. This is a hard stop by design — fix the board or update `board-config.ts`. |
+| **Status stuck on an old label** | The newest generation may still be retrying. Check the QStash DLQ; the failure callback writes the terminal state once retries are exhausted. |
+| **`recommendation trigger still unpublished`** | The sweep passed its alert threshold — QStash has been unreachable for a while. It keeps retrying; nothing is parked and no manual requeue is needed. |
+| `schema drift on board …` | A configured column was renamed, retyped or repointed. Hard stop by design. |
 | `board changed during pagination` | Someone edited the board mid-read. Re-run. |
 | `colour conflicts exceed the ceiling` | A trainer×theme in two REAL colours (grijs no longer counts). Acknowledge in `docs/m2a/acknowledgements.json`. |
 | Everything silent in production | `LOG_ENABLED` is not `true`. |
 
 ---
 
-## 7. Verification gate
+## 10. Not built yet
 
-```
-pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm build
-```
-
-`replay:verify` must report **4/4 match**. It compares the complete normalized
-result and artifact — status, counts, exclusions, address decision, provenance,
-ranked rows, qualification observations, effective values, rate inputs, enrichment
-and route fingerprints — stripping only the four intentional differences (artifact
-version, trainer identity, `inputSyncRunId`, hash).
-
----
-
-## 8. Deferred to the next pass (NOT built)
-
-Be explicit with anyone reading this: **the engine cannot yet be triggered or
-deliver an answer by itself.**
-
-- **KV `RunQueue`** — webhook dedup, per-training generation, delivery lease and
-  fencing. All need an atomic compare-and-swap; `RunQueue` is a port with no
-  implementation, and `webhook.ts` is wired to it but has no route.
-- **The webhook and cron routes** were deleted with the queue; they return next pass.
-- **The Aanbevelingen board** — where the ranked list will live between planning and
-  the planner's confirmation.
-- **Our own status column** on Agenda 2026, so this runs BESIDE n8n rather than
-  replacing it. n8n keeps `color_mkzwfy42` until we are provably clean.
-- **Shared travel cache** — currently in-process only, so it is empty on a cold start.
-- Stats layer, WhatsApp text, trainerbevestiging, daily controle cron.
+- **The Aanbevelingen board.** The status column says only *whether* an answer exists,
+  not who was recommended. When it lands, reproduce the old `current_recommendations`
+  rule: it went empty whenever the max-generation run was not delivered, so a newer
+  in-flight run hid an older result rather than showing stale rows.
+- **A per-generation compute lease.** Two deliveries can both compute before either wins
+  the `SET NX`, so duplicate provider charges are possible when execution exceeds the
+  QStash timeout. Accepted as a rare cost; the lease is the fix if it shows up in billing.
+- **The Instellingen board — the next pass.** Travel rates, the travel-time fee, the
+  thresholds and `RECOMMENDABLE_TRAINER_GROUPS` currently live in **env**, which is the
+  wrong home: `docs/build/03-aanbevelingsengine.md` says "Alle bedragen en drempels
+  komen uit het Instellingen-board, nooit uit de code", and the groups setting *is* the
+  fase-2a deliverable "selecteerbare trainergroepen". Today ITG cannot change any of
+  them without a developer and a redeploy. The move is cheap because `buildAppConfig`
+  already takes generic key/value rows — only their source changes — but the reader
+  must keep the same fail-closed rule: a missing financial row in production is an
+  error, never a default. Config is rates and group ids, no PII, so a short Redis cache
+  is fine here (unlike the roster).
+- **Reconciliation sweep** for Inplannen trainings whose status is stale or blank. The
+  `publish-pending` cron is its natural home.
+- **Retrigger on plain column edits.** Editing `duur` or `Locatie` fires no webhook, so
+  an answer can silently go stale. `mondayItemRevision` is already captured and could
+  drive an `updated_at` check.
+- **Roster/qualification caching.** Deliberately NOT added: it would put trainer names
+  and raw addresses into Upstash, which the travel cache explicitly avoids. Revisit only
+  with a minimized or encrypted representation and a documented retention decision.
+- Removing n8n — only once ours is provably clean.
 
 ### Still blocked on ITG
 
-- `FOUT` label on the status column (needs bordeigenaar) — only relevant once we
-  write status.
-- SharePoint app registration (`Sites.Selected`) — the project's biggest risk, and
-  not needed for recommendations at all.
+- SharePoint app registration (`Sites.Selected`) — the project's biggest risk, and not
+  needed for recommendations at all.
 - Per-trainer `Uurtarief` on the trainers board.

@@ -1,14 +1,19 @@
-import { RECOMMENDATION_STATUS_COLUMN } from '@lib/monday/board-config';
+import { ourStatusColumnId, RECOMMENDATION_STATUS_COLUMN } from '@lib/monday/board-config';
 
 import type { StatusLabel, StatusWriter } from './delivery';
 import { fetchWithRetry } from './http';
 
 /**
  * The scoped Monday status writer — the ONLY thing that writes to Monday. A hard
- * allowlist (the status column id + the terminal labels) makes "we only write the
- * recommendation status" structurally true; anything else throws. RUN is never
- * written (that would self-trigger the webhook). Uses a raw transport so the
- * read client's mutation guard stays intact.
+ * allowlist (one status column id + the three terminal labels) makes "we only write
+ * the recommendation status" structurally true; anything else throws. RUN is never
+ * written (that would self-trigger the webhook). Uses a raw transport so the read
+ * client's mutation guard stays intact.
+ *
+ * The refusal is INVERTED from the original: this engine now writes its OWN column
+ * and must never touch `RECOMMENDATION_STATUS_COLUMN`, which n8n still owns. Until
+ * our results are provably clean the two run side by side, and a write into n8n's
+ * column would quietly end that comparison.
  */
 
 const MONDAY_URL = 'https://api.monday.com/v2';
@@ -27,11 +32,13 @@ export interface MondayStatusWriterOptions {
 }
 
 export function createMondayStatusWriter(opts: MondayStatusWriterOptions): StatusWriter {
-  const columnId = opts.columnId ?? RECOMMENDATION_STATUS_COLUMN;
+  const columnId = opts.columnId ?? ourStatusColumnId();
   return {
-    async writeStatus(itemId: string, label: StatusLabel): Promise<void> {
-      if (columnId !== RECOMMENDATION_STATUS_COLUMN) {
-        throw new Error(`status writer: refusing to write column ${columnId}`);
+    async writeStatus(itemId, label, writeOpts): Promise<void> {
+      if (columnId === RECOMMENDATION_STATUS_COLUMN) {
+        throw new Error(
+          `status writer: refusing to write ${columnId} — that column belongs to n8n`
+        );
       }
       if (!ALLOWED_LABELS.has(label)) {
         throw new Error(`status writer: refusing to write label ${label}`);
@@ -46,6 +53,13 @@ export function createMondayStatusWriter(opts: MondayStatusWriterOptions): Statu
             Authorization: opts.token,
             'Content-Type': 'application/json',
             'API-Version': opts.apiVersion,
+            // Deterministic per (training, generation): Monday suppresses a repeat of
+            // the SAME mutation for 30 minutes, so an at-least-once redelivery does
+            // not double-apply. It does NOT order writes — that is the generation
+            // recheck's job — so nothing here depends on it for correctness.
+            ...(writeOpts?.idempotencyKey === undefined
+              ? {}
+              : { 'Idempotency-Key': writeOpts.idempotencyKey }),
           },
           body: JSON.stringify({
             query: mutation,

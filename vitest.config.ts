@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
-// Unit tests: pure functions only, no database, no Docker.
-// Integration tests (Docker-dependent Supabase) live in *.integration.test.ts
-// and run via vitest.integration.config.ts.
+// Unit tests: pure functions and in-memory adapters. No database, no Docker, no
+// network. The Docker-backed integration project is gone with Supabase; what it used
+// to cover is now either a unit test against an in-memory store or a live check in
+// the runbook (docs/m2b/README.md §7).
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {

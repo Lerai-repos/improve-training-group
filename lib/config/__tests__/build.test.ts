@@ -97,6 +97,38 @@ describe('RECOMMENDABLE_TRAINER_GROUPS', () => {
 });
 
 /**
+ * The present-but-empty rule has to hold for NUMERIC keys too, and it is easy to miss
+ * why. `Number('')` is 0, and 0 is a perfectly valid `nonnegative()` minute count — so
+ * a blank `TRAVEL_TIME_THRESHOLD_MINUTES` would pass validation and quietly mean "every
+ * journey is over the threshold", applying a travel-time fee to every trip. That is the
+ * silent-money failure this module exists to prevent, so an empty numeric value must be
+ * as loud as an empty group list.
+ */
+describe('empty numeric values', () => {
+  const dev = { isProduction: false };
+  const rowsWith = (key: string, value: string): ConfigRowLike[] => [{ key, value }];
+
+  it('rejects a blank TRAVEL_TIME_THRESHOLD_MINUTES instead of reading it as 0', () => {
+    expect(() => buildAppConfig(rowsWith('TRAVEL_TIME_THRESHOLD_MINUTES', ''), dev)).toThrow();
+    expect(() => buildAppConfig(rowsWith('TRAVEL_TIME_THRESHOLD_MINUTES', '   '), dev)).toThrow();
+  });
+
+  it('rejects a blank financial value rather than reading it as €0.00', () => {
+    expect(() => buildAppConfig(rowsWith('TRAVEL_RATE_TRAINER_CENTS_PER_KM', ''), dev)).toThrow();
+    expect(() => buildAppConfig(rowsWith('TRAVEL_TIME_FEE_PER_MINUTE_CENTS', ''), dev)).toThrow();
+  });
+
+  it('rejects a non-numeric value', () => {
+    expect(() => buildAppConfig(rowsWith('THRESHOLD_HOURS', 'four'), dev)).toThrow();
+  });
+
+  it('still accepts a legitimate zero', () => {
+    const cfg = buildAppConfig(rowsWith('TRAVEL_TIME_THRESHOLD_MINUTES', '0'), dev);
+    expect(cfg.travelTimeThresholdMinutes).toBe(0);
+  });
+});
+
+/**
  * The env source must preserve the ABSENT vs PRESENT-BUT-EMPTY distinction that
  * `buildAppConfig` relies on. Filtering empty strings out makes an explicitly
  * cleared selection look absent, so the defaults come back silently — which is the

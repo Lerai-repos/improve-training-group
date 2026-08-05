@@ -1,9 +1,11 @@
 /**
  * Recommendation engine (M2b). Pure core: eligibility, scoring, pricing, ranking,
  * travel enrichment, and the reproducible input artifact. Adapters (live Monday
- * reads, roster, address, Routes travel, cache) layer on top. There is no
- * persistence layer — `runRecommendation` returns its answer; the queue and the
- * Monday board writes arrive with the KV pass.
+ * reads, roster, address, Routes travel, cache) layer on top.
+ *
+ * Around that core sits the queue: a durable trigger record and per-training
+ * generation in Redis, QStash as the job transport, one immutable outcome per
+ * generation, and delivery that converges the board on the newest answer.
  */
 export * from './types';
 export * from './eligibility';
@@ -30,4 +32,12 @@ export * from './engine-config';
 export * from './completion';
 export * from './monday-reader';
 export * from './monday-status';
+export * from './kv';
+export * from './queue-store';
+export * from './queue';
+export * from './outcome';
+export * from './deliver';
+export * from './job';
+export * from './failure-callback';
+export * from './qstash';
 export * from './deps';

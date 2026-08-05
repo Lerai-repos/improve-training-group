@@ -16,14 +16,16 @@ environment variables, troubleshooting, and what is deliberately not built yet.
 
 ## Current state
 
-**Compute only.** The engine reads Monday, computes, and returns the answer. It is
-not yet triggered by anything and writes nothing back:
+**End to end, running beside n8n.** A planner presses the Aanbevelingen button (or
+moves a training into Inplannen); the trigger is recorded durably in Redis, published
+to QStash, computed, and written back as `GEREED` / `GEEN MATCH` / `FOUT`.
 
-- no durable queue (the webhook and cron routes are deferred with it)
-- no Aanbevelingen board
-- no status write-back — n8n still owns that column
+Crucially it writes **our own** status column, not n8n's. The two run side by side —
+and the status writer *refuses* to touch `color_mkzwfy42` — until our results are
+provably clean. Only then does the legacy flow come out.
 
-See `docs/m2b/README.md` §8 for the deferred list.
+Not built yet: the Aanbevelingen board (so the ranked list itself has nowhere to
+land), the reconciliation sweep, and evaluations/scores. See `docs/m2b/README.md` §10.
 
 ---
 
@@ -33,6 +35,8 @@ See `docs/m2b/README.md` §8 for the deferred list.
 - **TypeScript**, **Vitest**, **Prettier**, **ESLint**
 - **Monday GraphQL API** — pinned version, mandatory `BoardRelationValue` /
   `MirrorValue` fragments
+- **Upstash Redis** — job state and caches only, never a system of record
+- **Upstash QStash** — the durable job queue (retries, backoff, dead-letter)
 - **Google Routes API** (travel), **OpenRouter** (address cleanup)
 - **Doppler** for secrets
 
@@ -73,12 +77,17 @@ pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm buil
 ## Project structure
 
 ```
+app/api/webhooks/monday/…        Monday trigger (?token= authenticated)
+app/api/jobs/recommend/          The queued job, and its failure callback
+app/api/cron/publish-pending/    Recovers triggers QStash never accepted
 app/api/config/trainer-groups/   Internal ops endpoint (bearer-guarded)
 lib/
   calc/          Pure formulas — billable hours, travel cost, rates, ranking
   monday/        GraphQL client, board config, decoders, schema checks
   recommend/     The engine: roster, qualifications, eligibility, pricing,
                  travel, artifact, service orchestration
+                 …plus the queue: kv, queue-store, queue, outcome, deliver,
+                 job, failure-callback, qstash
   config/        Key/value config → validated AppConfig
   logger/        Structured logging
 scripts/         Ops + verification harnesses

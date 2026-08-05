@@ -182,6 +182,45 @@ export const TRAINER_LINK_COLUMN = 'board_relation_mkz4y7tb';
 /** The "Inplannen" group (verified live) — moving a training here triggers a run. */
 export const INPLANNEN_GROUP_ID = 'group_mkwtj07a';
 
+/**
+ * OUR status column — a SECOND status column on Agenda 2026, created by ITG, that
+ * this engine writes while n8n keeps `RECOMMENDATION_STATUS_COLUMN`. The two run
+ * side by side until ours is provably clean; only then is the legacy one retired.
+ *
+ * The id lives in env because the column is created by hand on the live board. The
+ * equality guard is the point: a typo or a copied value that aimed our writer at
+ * n8n's column would silently take over the legacy flow, which is exactly the
+ * outcome the side-by-side rollout exists to avoid.
+ */
+export function ourStatusColumnId(): string {
+  const id = process.env.MONDAY_RECOMMENDATION_STATUS_COLUMN;
+  if (!id) {
+    throw new Error(
+      'Missing MONDAY_RECOMMENDATION_STATUS_COLUMN — the status column this engine writes'
+    );
+  }
+  if (id === RECOMMENDATION_STATUS_COLUMN) {
+    throw new Error(
+      `MONDAY_RECOMMENDATION_STATUS_COLUMN must not be ${RECOMMENDATION_STATUS_COLUMN} — that column belongs to n8n`
+    );
+  }
+  return id;
+}
+
+/**
+ * NOTE: our status column deliberately has NO schema preflight.
+ *
+ * It is a WRITE target, never read, so the fail-open decoding that makes drift
+ * dangerous on the trainers and Thema's boards does not apply: if the column were
+ * retyped or deleted, `change_column_value` errors, the job retries, and it reaches
+ * the DLQ with an alert. That is already loud. Preflighting it would mean an extra
+ * `boards { columns }` query on every job — no route otherwise fetches Agenda board
+ * metadata — for a failure mode that cannot pass silently.
+ *
+ * The reads that DO fail open (`roster.ts`, `qualifications.ts`) are gated by
+ * `assertColumns`, and that is where drift genuinely has to be caught.
+ */
+
 export interface RecommendationStatusLabels {
   run: string;
   done: string;

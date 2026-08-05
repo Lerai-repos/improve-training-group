@@ -229,6 +229,23 @@ describe('runRecommendation — fail-closed stages', () => {
     }
     expect(r.failure.stage).toBe('address');
     expect(r.failure.message).toMatch(/province/);
+    // TERMINAL: the model read the field fine and the field is unusable. Retrying
+    // burns the queue's budget without any chance of a different answer.
+    expect(r.failure.retryable).toBe(false);
+  });
+
+  it('an address MODEL failure is retryable, unlike an unusable location', async () => {
+    const { deps: d } = deps();
+    d.addressFormatter = {
+      format: () => Promise.resolve({ kind: 'error', detail: 'parse: unexpected token' }),
+    };
+    const r = await runRecommendation(d, 'tr1');
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      return;
+    }
+    expect(r.failure.stage).toBe('address');
+    expect(r.failure.retryable).toBe(true);
   });
 
   it('FOUT travel on a transient provider failure, with partial provenance kept', async () => {
@@ -243,10 +260,36 @@ describe('runRecommendation — fail-closed stages', () => {
       return;
     }
     expect(r.failure.stage).toBe('travel');
+    expect(r.failure.retryable).toBe(true);
     // Provenance gathered before the failure survives — it is not fabricated, but
     // it is not thrown away either.
     expect(r.partial.mondayItemRevision).toBe('rev-1');
     expect(r.partial.addressDecision).toEqual({ kind: 'travel_required', formatted: 'Dest 1' });
+  });
+
+  it('an unreachable destination is TERMINAL, not a retryable provider hiccup', async () => {
+    const { deps: d } = deps();
+    d.travelProvider = {
+      routingKey: () => 'stub:v1',
+      distances: () => Promise.resolve([{ status: 'not_found' }]),
+    };
+    const r = await runRecommendation(d, 'tr1');
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      return;
+    }
+    expect(r.failure.stage).toBe('travel');
+    expect(r.failure.retryable).toBe(false);
+  });
+
+  it('validation failures are terminal', async () => {
+    const { deps: d } = deps({ reader: reader(training({ datum: '   ' }), []) });
+    const r = await runRecommendation(d, 'tr1');
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      return;
+    }
+    expect(r.failure.retryable).toBe(false);
   });
 });
 

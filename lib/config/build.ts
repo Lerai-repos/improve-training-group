@@ -15,7 +15,17 @@ interface FieldSpec {
 }
 
 const asString = (s: string): string => s;
-const asNumber = (s: string): number => Number(s);
+/**
+ * Blank is NOT zero. `Number('')` is 0, and 0 is a valid `nonnegative()` value, so a
+ * present-but-empty numeric row would sail through validation with a meaning nobody
+ * intended: a blank travel rate becomes €0.00/km (free travel — and it satisfies the
+ * production financial-presence check, because the row IS present), and a blank
+ * travel-time threshold becomes "every journey is over the threshold".
+ *
+ * NaN fails `z.number()`, so an empty or non-numeric value is rejected loudly instead —
+ * the same rule `asStringArray` already applies to a cleared list.
+ */
+const asNumber = (s: string): number => (s.trim() === '' ? Number.NaN : Number(s));
 /**
  * Comma-separated list → trimmed, non-empty entries. A PRESENT-but-empty value
  * yields `[]`, which the schema then rejects — clearing the field is a loud error,

@@ -12,17 +12,27 @@ import type { WebhookParse } from './event';
 const MALFORMED_STATUS = 422;
 
 /**
- * Durable enqueue of a triggered run. NOT IMPLEMENTED in this pass — the Postgres
- * queue (dedup on trigger_uuid, per-training generation, lease + fencing) was
- * deleted with the database, and the KV replacement lands next pass. The port
- * exists now so the handler and its tests keep their shape.
+ * The outcome of an enqueue. A duplicate is a normal, successful path — Monday
+ * redelivers the same trigger for up to 30 minutes — so it is NOT an error and must
+ * not produce a retryable status.
+ */
+export type EnqueueResult =
+  | { accepted: true; generation: number }
+  | { accepted: false; reason: 'duplicate' };
+
+/**
+ * Durable enqueue of a triggered run. The implementation (`queue.ts`) records the
+ * job in Redis — allocating its per-training generation and indexing it for
+ * recovery — BEFORE publishing to QStash, and only then marks it published. That
+ * order is what stops a failed publish from being mistaken for a duplicate on
+ * Monday's retry, which would lose the trigger permanently.
  */
 export interface RunQueue {
   enqueue(input: {
     triggerUuid: string;
     triggerKind: 'group_move' | 'manual_button';
     mondayItemId: string;
-  }): Promise<void>;
+  }): Promise<EnqueueResult>;
 }
 
 /** The HTTP shape a route returns for a parsed webhook. */
@@ -59,14 +69,20 @@ export async function handleParsedWebhook(
     return { status: 200, body: { ignored: parse.reason } };
   }
   try {
-    await queue.enqueue({
+    const result = await queue.enqueue({
       triggerUuid: parse.triggerUuid,
       triggerKind: parse.triggerKind,
       mondayItemId: parse.mondayItemId,
     });
+    if (!result.accepted) {
+      log.debug('monday webhook: duplicate trigger', { reason: result.reason });
+      return { status: 200, body: { duplicate: true } };
+    }
+    return { status: 200, body: { enqueued: true, generation: result.generation } };
   } catch (error) {
+    // Non-2xx on purpose: the trigger record is still pending and indexed, so
+    // Monday's retry resumes publication instead of allocating a new generation.
     const message = error instanceof Error ? error.message : String(error);
     return { status: 500, body: { error: message } };
   }
-  return { status: 200, body: { enqueued: true } };
 }

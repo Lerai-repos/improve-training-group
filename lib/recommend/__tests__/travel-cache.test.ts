@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { createMemoryKvStore } from '../kv';
 import {
+  createKvTravelCacheStore,
   createMemoryTravelCacheStore,
   createTravelCache,
   NEGATIVE_TTL_MS,
@@ -24,6 +26,78 @@ describe('normalizeAddressKey', () => {
  * not less. The clock is injected so the negative-TTL boundary is testable without
  * waiting a day.
  */
+/**
+ * A cache is an optimisation, so an entry it cannot read must cost a provider call —
+ * never a run failure. Letting `JSON.parse` throw here would escape through
+ * `resolveTravel` into the run's error path, failing the same training on every retry
+ * until it dead-lettered as FOUT.
+ */
+describe('createKvTravelCacheStore', () => {
+  const KEY = 'origin:dest:routing';
+
+  it('reports corrupt JSON as a miss rather than throwing', async () => {
+    const kv = createMemoryKvStore();
+    await kv.set(`travel:${KEY}`, '{not json');
+    await expect(createKvTravelCacheStore(kv).get(KEY)).resolves.toBeNull();
+  });
+
+  it('reports a well-formed but wrong-shaped entry as a miss', async () => {
+    const kv = createMemoryKvStore();
+    await kv.set(`travel:${KEY}`, JSON.stringify({ condition: 'ROUTE_EXISTS' }));
+    await expect(createKvTravelCacheStore(kv).get(KEY)).resolves.toBeNull();
+  });
+
+  /**
+   * Semantic validation, not just shape. `cachedToElement` maps an unrecognised
+   * condition to `transient`, which is right for a live provider reply and a trap for a
+   * CACHED row: transient ⇒ retryable ⇒ the retry reads the same bad row and fails
+   * again. Positive entries carry no TTL, so it would never self-heal — and since the
+   * HQ leg is shared, one bad row would break every training at that destination.
+   * Rejecting it here makes it a miss, so the provider call overwrites it.
+   */
+  const rejected: Array<[string, unknown]> = [
+    ['an unrecognised condition', { condition: 'old-format', distanceKm: 1, durationMinutes: 1, fetchedAtMs: 1 }],
+    ['ROUTE_EXISTS with null metrics', { condition: 'ROUTE_EXISTS', distanceKm: null, durationMinutes: null, fetchedAtMs: 1 }],
+    ['ROUTE_EXISTS with a negative distance', { condition: 'ROUTE_EXISTS', distanceKm: -5, durationMinutes: 1, fetchedAtMs: 1 }],
+    ['ROUTE_NOT_FOUND carrying metrics', { condition: 'ROUTE_NOT_FOUND', distanceKm: 10, durationMinutes: 5, fetchedAtMs: 1 }],
+  ];
+
+  it.each(rejected)('treats %s as a miss', async (_label, entry) => {
+    const kv = createMemoryKvStore();
+    await kv.set(`travel:${KEY}`, JSON.stringify(entry));
+    await expect(createKvTravelCacheStore(kv).get(KEY)).resolves.toBeNull();
+  });
+
+  it('accepts a valid ROUTE_NOT_FOUND', async () => {
+    const kv = createMemoryKvStore();
+    const entry = {
+      condition: 'ROUTE_NOT_FOUND',
+      distanceKm: null,
+      durationMinutes: null,
+      fetchedAtMs: 7,
+    };
+    await kv.set(`travel:${KEY}`, JSON.stringify(entry));
+    await expect(createKvTravelCacheStore(kv).get(KEY)).resolves.toEqual(entry);
+  });
+
+  it('round-trips a valid entry', async () => {
+    const kv = createMemoryKvStore();
+    const store = createKvTravelCacheStore(kv);
+    await store.set(KEY, {
+      condition: 'ROUTE_EXISTS',
+      distanceKm: 10,
+      durationMinutes: 20,
+      fetchedAtMs: 5,
+    });
+    await expect(store.get(KEY)).resolves.toEqual({
+      condition: 'ROUTE_EXISTS',
+      distanceKm: 10,
+      durationMinutes: 20,
+      fetchedAtMs: 5,
+    });
+  });
+});
+
 describe('createTravelCache', () => {
   const ROUTING = 'google-routes:DRIVE:TRAFFIC_UNAWARE:v1';
   const positive = {

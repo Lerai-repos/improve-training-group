@@ -119,7 +119,14 @@ export type RecommendationResult =
   | {
       ok: false;
       resultStatus: 'FOUT';
-      failure: { stage: Stage; message: string | null };
+      /**
+       * `retryable` decides what the job route does with this, and the stage alone
+       * cannot tell you: `travel` is a Routes outage one moment and an unreachable
+       * destination the next. A retryable failure must NOT record a terminal outcome
+       * — it returns non-2xx and lets the queue try again. A terminal one records
+       * FOUT and tells the queue to stop.
+       */
+      failure: { stage: Stage; message: string | null; retryable: boolean };
       partial: Partial<Provenance>;
     };
 
@@ -164,10 +171,14 @@ export async function runRecommendation(
   let travelCacheHits = 0;
   let mondayItemRevision: string | null = null;
 
-  const fail = (failingStage: Stage, message: string | null = null): RecommendationResult => ({
+  const fail = (
+    failingStage: Stage,
+    message: string | null = null,
+    retryable = false
+  ): RecommendationResult => ({
     ok: false,
     resultStatus: 'FOUT',
-    failure: { stage: failingStage, message },
+    failure: { stage: failingStage, message, retryable },
     // Whatever provenance existed when it failed — never fabricated.
     partial: { excluded, addressDecision: addr, travelCacheHits, mondayItemRevision },
   });
@@ -175,6 +186,8 @@ export async function runRecommendation(
   try {
     const live = await deps.reader.readTraining(mondayItemId);
     if (!live) {
+      // Not retryable: a Monday outage THROWS (and is caught below); a null here
+      // means the item genuinely is not on the board.
       return fail('load_training');
     }
     mondayItemRevision = live.updatedAt;
@@ -252,7 +265,10 @@ export async function runRecommendation(
       stage = 'address';
       const decision = await deps.addressFormatter.format(live.locatie);
       if (decision.kind === 'error' || decision.kind === 'unresolved_location') {
-        return fail('address', decision.detail);
+        // `error` is a model/parse failure — worth another attempt. `unresolved_location`
+        // means the model understood the field and the field is unusable: retrying
+        // cannot change that, only editing Locatie can.
+        return fail('address', decision.detail, decision.kind === 'error');
       }
       addr = decision;
 
@@ -268,7 +284,7 @@ export async function runRecommendation(
           trainers: priceable,
         });
         if (resolved.kind === 'fout') {
-          return fail('travel', resolved.detail);
+          return fail('travel', resolved.detail, resolved.retryable);
         }
         // APPEND — assigning here would discard the no_rate exclusions collected above.
         excluded.push(...resolved.excluded);
@@ -380,6 +396,9 @@ export async function runRecommendation(
       MAX_ERROR_DETAIL
     );
     log.error('recommendation run failed', { mondayItemId, stage, detail });
-    return fail(stage, detail);
+    // A THROWN error is infrastructure — a Monday 5xx, a socket reset, a timeout.
+    // Business rejections all return through `fail` above, so anything reaching here
+    // is worth retrying rather than burning into a terminal FOUT.
+    return fail(stage, detail, true);
   }
 }

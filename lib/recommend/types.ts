@@ -1,5 +1,5 @@
 import type { Cents, Qualification, Rankable } from '@lib/calc';
-import type { EffectiveQualification } from '@lib/sync/artifact';
+import type { EffectiveQualification } from '@lib/monday/qualification';
 
 /**
  * Recommendation-engine domain types. Everything here is derived-from-raw and

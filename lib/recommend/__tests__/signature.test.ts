@@ -1,55 +1,8 @@
-import { createHmac } from 'node:crypto';
-
 import { describe, expect, it } from 'vitest';
 
 import { authorizeBearer } from '../authorize';
-import { verifyMondaySignature, verifyWebhookToken } from '../signature';
+import { verifyWebhookToken } from '../signature';
 
-function b64url(s: string): string {
-  return Buffer.from(s).toString('base64url');
-}
-
-function signJwt(secret: string): string {
-  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = b64url(JSON.stringify({ boardId: 1, exp: 9999999999 }));
-  const sig = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-  return `${header}.${payload}.${sig}`;
-}
-
-describe('verifyMondaySignature', () => {
-  const SECRET = 'super-secret';
-
-  it('accepts a token signed with the secret (with and without Bearer)', () => {
-    const token = signJwt(SECRET);
-    expect(verifyMondaySignature(token, SECRET)).toBe(true);
-    expect(verifyMondaySignature(`Bearer ${token}`, SECRET)).toBe(true);
-  });
-
-  it('rejects a token signed with a different secret', () => {
-    expect(verifyMondaySignature(signJwt('wrong'), SECRET)).toBe(false);
-  });
-
-  it('rejects a malformed or missing token', () => {
-    expect(verifyMondaySignature('not.a.jwt.extra', SECRET)).toBe(false);
-    expect(verifyMondaySignature('onlyonepart', SECRET)).toBe(false);
-    expect(verifyMondaySignature(null, SECRET)).toBe(false);
-    expect(verifyMondaySignature(signJwt(SECRET), '')).toBe(false);
-  });
-
-  it('rejects alg:none (confused-deputy) even with a matching secret', () => {
-    const header = b64url(JSON.stringify({ alg: 'none', typ: 'JWT' }));
-    const payload = b64url(JSON.stringify({ exp: 9999999999 }));
-    // An empty signature with alg:none must not be accepted.
-    expect(verifyMondaySignature(`${header}.${payload}.`, SECRET)).toBe(false);
-  });
-
-  it('rejects an expired token even when correctly signed', () => {
-    const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const payload = b64url(JSON.stringify({ exp: 1 })); // 1970
-    const sig = createHmac('sha256', SECRET).update(`${header}.${payload}`).digest('base64url');
-    expect(verifyMondaySignature(`${header}.${payload}.${sig}`, SECRET)).toBe(false);
-  });
-});
 
 describe('verifyWebhookToken', () => {
   const base = 'https://x.dev/api/webhooks/monday/recommendations';

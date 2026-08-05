@@ -43,7 +43,12 @@ export type TravelResolution =
       /** How many legs (HQ + trainers) were served from the cache (provenance/audit). */
       cacheHits: number;
     }
-  | { kind: 'fout'; detail: string };
+  /**
+   * `retryable` is decided HERE, where the cause is known. A provider hiccup is worth
+   * another attempt; an address the routing engine cannot reach is not, and retrying
+   * it would only burn the retry budget before the planner ever sees FOUT.
+   */
+  | { kind: 'fout'; detail: string; retryable: boolean };
 
 /** Keyed (HMAC, non-dictionary-recoverable) fingerprint of an address for the audit artifact. */
 export function addressFingerprint(norm: string): string {
@@ -155,10 +160,11 @@ export async function resolveTravel(
     routes.push(routeFromElement(hqNorm, destinationNorm, routingKey, el));
   }
   if (hqElement.status === 'transient') {
-    return { kind: 'fout', detail: `HQ route transient: ${hqElement.detail}` };
+    return { kind: 'fout', detail: `HQ route transient: ${hqElement.detail}`, retryable: true };
   }
   if (hqElement.status === 'not_found') {
-    return { kind: 'fout', detail: 'destination unreachable (HQ route not found)' };
+    // The address resolved but no route exists — a data problem, not a hiccup.
+    return { kind: 'fout', detail: 'destination unreachable (HQ route not found)', retryable: false };
   }
   const hqLeg = hqElement.leg;
 
@@ -213,7 +219,11 @@ export async function resolveTravel(
     const el = elementByTrainer.get(w.trainer.externalItemId);
     if (!el || el.status === 'transient') {
       // A transient trainer failure poisons the run — never €0, never partial.
-      return { kind: 'fout', detail: `trainer route transient (${w.trainer.externalItemId})` };
+      return {
+        kind: 'fout',
+        detail: `trainer route transient (${w.trainer.externalItemId})`,
+        retryable: true,
+      };
     }
     if (el.status === 'not_found') {
       excluded.push({ externalItemId: w.trainer.externalItemId, reason: 'route_not_found' });

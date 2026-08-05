@@ -9,13 +9,25 @@ import type { EngineConfig } from './service';
 import type { RateCard } from '@lib/calc';
 
 /**
- * Engine configuration. The values used to live in a Postgres `config` table; they
- * now come from the environment and will move to the Monday Instellingen board.
+ * Engine configuration.
  *
- * `buildAppConfig` is deliberately reused UNCHANGED. It is where the rule lives
- * that a FINANCIAL key missing in production is a hard error rather than a silent
- * default — reimplementing "env with fallbacks" here would quietly restore default
- * travel prices in production the moment a variable went missing.
+ * ⚠️ ENV IS AN INTERIM HOME, AND IT IS THE WRONG ONE. `docs/build/03-aanbevelingsengine.md`
+ * is explicit: "Alle bedragen en drempels komen uit het Instellingen-board, nooit uit
+ * de code." These values belong to ITG, not to us:
+ *
+ *   - the travel rates and the travel-time fee are commercial rates that change;
+ *   - `RECOMMENDABLE_TRAINER_GROUPS` IS the fase-2a deliverable "selecteerbare
+ *     trainergroepen" — keeping it in env hardcodes it in all but name.
+ *
+ * Today every one of those needs a developer and a redeploy. The fix is a Monday
+ * **Instellingen** board read live into `ConfigRowLike[]`.
+ *
+ * `buildAppConfig` is deliberately reused UNCHANGED, and that is what makes the move
+ * cheap: it already accepts generic key/value rows, so only their SOURCE changes. It
+ * is also where the rule lives that a FINANCIAL key missing in production is a hard
+ * error rather than a silent default — reimplementing "env with fallbacks" here would
+ * quietly restore default travel prices the moment a variable went missing, and the
+ * Instellingen reader must preserve that same behaviour for a missing board row.
  */
 
 /** Env var per config key; the key names match the former `config` table rows. */

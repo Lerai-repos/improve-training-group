@@ -1,6 +1,6 @@
 import type { Qualification } from '@lib/calc';
 import type { Acknowledgements } from '@lib/monday';
-import { deriveEffective } from '@lib/sync/artifact';
+import { deriveEffective } from '@lib/monday/qualification';
 
 import type { CandidateTrainer, EffectiveQual, QualObservation } from './types';
 

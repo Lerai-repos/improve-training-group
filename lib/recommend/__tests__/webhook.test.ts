@@ -4,9 +4,10 @@ import { parseWebhook, type WebhookRouting } from '../event';
 import { handleParsedWebhook, type RunQueue } from '../webhook';
 
 /**
- * Converted from the deleted `webhook.integration.test.ts`. Dedup is deliberately
- * NOT tested here: it is a property of the queue implementation (a unique key in
- * Postgres before, a KV primitive next pass), not of this handler.
+ * Converted from the deleted `webhook.integration.test.ts`. How a duplicate is
+ * DETECTED belongs to the queue implementation (`queue.test.ts`); what this handler
+ * owes it is tested here — a duplicate is a successful, non-retryable 200, because
+ * Monday redelivering the same trigger is a normal path, not a failure.
  */
 
 const routing: WebhookRouting = {
@@ -15,7 +16,7 @@ const routing: WebhookRouting = {
   runLabel: 'RUN',
 };
 
-function fakeQueue(behaviour: 'ok' | 'throw' = 'ok'): RunQueue & {
+function fakeQueue(behaviour: 'ok' | 'throw' | 'duplicate' = 'ok'): RunQueue & {
   calls: Array<{ triggerUuid: string; triggerKind: string; mondayItemId: string }>;
 } {
   const calls: Array<{ triggerUuid: string; triggerKind: string; mondayItemId: string }> = [];
@@ -26,7 +27,11 @@ function fakeQueue(behaviour: 'ok' | 'throw' = 'ok'): RunQueue & {
         return Promise.reject(new Error('queue unavailable'));
       }
       calls.push(input);
-      return Promise.resolve();
+      return Promise.resolve(
+        behaviour === 'duplicate'
+          ? { accepted: false, reason: 'duplicate' }
+          : { accepted: true, generation: 1 }
+      );
     },
   };
 }
@@ -95,6 +100,24 @@ describe('handleParsedWebhook', () => {
     const r = await handleParsedWebhook(q, parse);
     expect(r.status).toBe(200);
     expect(q.calls).toHaveLength(0);
+  });
+
+  it('200s a duplicate trigger — Monday redelivering is normal, not a failure', async () => {
+    const q = fakeQueue('duplicate');
+    const parse = parseWebhook(
+      {
+        event: {
+          type: 'move_pulse_into_group',
+          pulseId: 5029726254,
+          groupId: 'group_mkwtj07a',
+          originalTriggerUuid: 'u1',
+        },
+      },
+      routing
+    );
+    const r = await handleParsedWebhook(q, parse);
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ duplicate: true });
   });
 
   it('422s a malformed trigger payload and reports the real field names', async () => {
