@@ -188,6 +188,11 @@ export function webhookRouting(): WebhookRouting {
     // `MONDAY_INPLANNEN_GROUP_ID=` produce an empty id that matches no group, so every
     // group-move trigger would be silently ignored with a perfectly healthy 200.
     inplannenGroupId: process.env.MONDAY_INPLANNEN_GROUP_ID || INPLANNEN_GROUP_ID,
+    // Unused in practice today: we register only the group-move webhook, so no column
+    // event ever reaches us. Manual re-run belongs in the recommendations view, where
+    // a button can call our API directly — no label, no automation, no second webhook.
+    // Kept pointing at the legacy column so the parser's loop guard stays meaningful
+    // if we ever do subscribe to a column again.
     statusColumnId: RECOMMENDATION_STATUS_COLUMN,
     runLabel: RECOMMENDATION_STATUS_LABELS.run,
   };

@@ -26,8 +26,12 @@
     "audit:mapping": "tsx scripts/audit-mapping.ts",
     "groups:list": "tsx scripts/trainer-groups.ts",
     "columns:list": "tsx scripts/list-columns.ts",
+    "webhook:list": "tsx scripts/webhook-register.ts list",
+    "webhook:register": "tsx scripts/webhook-register.ts register",
+    "webhook:delete": "tsx scripts/webhook-register.ts delete",
     "preflight": "tsx scripts/preflight.ts",
     "recommend:once": "tsx scripts/recommend-once.ts",
+    "recommend:enqueue": "tsx scripts/recommend-enqueue.ts",
     "recommend:parity": "tsx scripts/recommend-parity.ts",
     "replay:verify": "tsx scripts/replay-verify.ts",
     "parity": "tsx scripts/parity-check.ts"
