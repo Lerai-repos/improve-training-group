@@ -122,12 +122,37 @@ export function createMemoryKvStore(now: () => number = Date.now): KvStore {
   };
 }
 
-/** The Upstash REST client. HTTP, not TCP — a persistent connection is wrong for serverless. */
+/** First non-blank value. Blank is treated as absent — a set-but-empty var is not a value. */
+function firstSet(...names: string[]): string | null {
+  for (const name of names) {
+    const value = (process.env[name] ?? '').trim();
+    if (value !== '') {
+      return value;
+    }
+  }
+  return null;
+}
+
+/**
+ * The Upstash REST client. HTTP, not TCP — a persistent connection is wrong for
+ * serverless.
+ *
+ * Accepts the `KV_REST_API_*` aliases because that is what Vercel's Upstash
+ * marketplace integration actually injects, carried over from when this was Vercel KV.
+ * Taking both avoids hand-duplicated variables that drift apart.
+ *
+ * `KV_REST_API_READ_ONLY_TOKEN` is deliberately NOT accepted: it authenticates but
+ * rejects writes, so falling back to it would produce a client that reads fine and
+ * fails every enqueue — the sort of half-working state that is worse than not
+ * connecting at all.
+ */
 export function createRedisClient(): Redis {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = firstSet('UPSTASH_REDIS_REST_URL', 'KV_REST_API_URL');
+  const token = firstSet('UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_TOKEN');
   if (!url || !token) {
-    throw new Error('Missing UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN');
+    throw new Error(
+      'Missing Redis credentials — set UPSTASH_REDIS_REST_URL/_TOKEN (or Vercel’s KV_REST_API_URL/_TOKEN)'
+    );
   }
   // Deserialization OFF: we own the encoding. With it on, a stored value that happens
   // to look like JSON comes back as an object and every `string` contract here lies.

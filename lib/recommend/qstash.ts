@@ -136,7 +136,13 @@ export function createQStashClient(): Client {
   if (!token) {
     throw new Error('Missing QSTASH_TOKEN');
   }
-  return new Client({ token });
+  // A regional account gets a regional endpoint (e.g. qstash-eu-central-1), not the
+  // global default. The client would pick QSTASH_URL up from the environment on its
+  // own, but its type docs describe that as a testing affordance — passing it
+  // explicitly keeps this working regardless of what the library does internally, and
+  // makes the dependency visible to anyone reading the config.
+  const baseUrl = (process.env.QSTASH_URL ?? '').trim();
+  return baseUrl === '' ? new Client({ token }) : new Client({ token, baseUrl });
 }
 
 /**

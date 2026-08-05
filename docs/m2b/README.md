@@ -198,6 +198,7 @@ pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm buil
 | `MONDAY_RECOMMENDATION_STATUS_COLUMN` | status write | **Our** column. Refuses `color_mkzwfy42`. |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | queue state, outcomes, travel cache | Set by the Vercel Upstash integration. |
 | `QSTASH_TOKEN` | publishing | |
+| `QSTASH_URL` | publishing | Only for a REGIONAL account (e.g. `https://qstash-eu-central-1.upstash.io`). Unset ⇒ the global default. Wrong or missing on a regional account ⇒ every publish fails. |
 | `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` | job + failure routes | Both required; verification is against the raw body and URL. |
 | `PUBLIC_BASE_URL` | QStash callbacks | Falls back to `VERCEL_URL`. Set explicitly for local tunnelling. |
 | `CRON_SECRET` | `/api/cron/publish-pending` | Unset ⇒ the endpoint rejects everything. |
@@ -254,9 +255,18 @@ don't read them.
   is fine here (unlike the roster).
 - **Reconciliation sweep** for Inplannen trainings whose status is stale or blank. The
   `publish-pending` cron is its natural home.
+- **A "Herbereken" trigger of our own.** Today the manual path is n8n's Aanbevelingen
+  button, which sets `RUN` on `color_mkzwfy42` — so we are piggybacking on the legacy
+  column and would lose our trigger the day it is retired. The clean version is a `RUN`
+  label on OUR status column plus a Herbereken button that sets it, exactly the pattern
+  `color_mkzwfy42` already uses. The loop guard already covers it: only `RUN` triggers,
+  and the writer can never emit `RUN`. During side-by-side `webhookRouting` should watch
+  BOTH columns — n8n's so one press exercises both systems on the same training, ours so
+  a recompute does not also kick off the legacy flow.
 - **Retrigger on plain column edits.** Editing `duur` or `Locatie` fires no webhook, so
-  an answer can silently go stale. `mondayItemRevision` is already captured and could
-  drive an `updated_at` check.
+  an answer can silently go stale — and nothing on the board shows how old an answer is.
+  A "Laatste berekening" date column written beside the status would at least make that
+  visible. `mondayItemRevision` is already captured and could drive an `updated_at` check.
 - **Roster/qualification caching.** Deliberately NOT added: it would put trainer names
   and raw addresses into Upstash, which the travel cache explicitly avoids. Revisit only
   with a minimized or encrypted representation and a documented retention decision.

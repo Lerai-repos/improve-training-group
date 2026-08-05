@@ -1,0 +1,194 @@
+/* eslint-disable no-console */
+import { config as loadEnv } from 'dotenv';
+
+loadEnv({ path: '.env.local' });
+
+import { AGENDA_2026_BOARD, MONDAY_API_VERSION } from '@lib/monday/board-config';
+import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
+import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
+import { createQStashClient } from '@lib/recommend/qstash';
+
+/**
+ * Is this environment actually wired up? Answers it by TALKING to each service, not
+ * by checking that a variable is non-empty — a token can be present and wrong, which
+ * is the failure that otherwise surfaces as a dead webhook or a silently 500ing cron.
+ *
+ * Never prints a secret's value, only whether it is set and whether it works.
+ *
+ *   pnpm preflight
+ */
+
+type Status = 'ok' | 'fail' | 'skip';
+const results: Array<{ name: string; status: Status; detail: string }> = [];
+
+function record(name: string, status: Status, detail: string): void {
+  results.push({ name, status, detail });
+}
+
+function present(...names: string[]): boolean {
+  return names.every((n) => (process.env[n] ?? '').trim() !== '');
+}
+
+/** Either the Upstash names or Vercel's KV_* aliases — `createRedisClient` takes both. */
+function redisConfigured(): boolean {
+  return (
+    present('UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN') ||
+    present('KV_REST_API_URL', 'KV_REST_API_TOKEN')
+  );
+}
+
+async function checkMonday(): Promise<void> {
+  const token = process.env.MONDAY_API_TOKEN;
+  if (!token) {
+    record('Monday token', 'skip', 'MONDAY_API_TOKEN not set');
+    return;
+  }
+  try {
+    const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+    const pre = await client.preflight();
+    record('Monday token', 'ok', `account ${pre.account.name ?? pre.account.id}`);
+  } catch (error) {
+    record('Monday token', 'fail', message(error));
+  }
+}
+
+async function checkStatusColumn(): Promise<void> {
+  const token = process.env.MONDAY_API_TOKEN;
+  const columnId = process.env.MONDAY_RECOMMENDATION_STATUS_COLUMN;
+  if (!token || !columnId) {
+    record('Our status column', 'skip', 'token or MONDAY_RECOMMENDATION_STATUS_COLUMN not set');
+    return;
+  }
+  try {
+    const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+    const [board] = await client.getSchema([AGENDA_2026_BOARD]);
+    const column = board?.columns.find((c) => c.id === columnId);
+    if (!column) {
+      record('Our status column', 'fail', `${columnId} is not on Agenda 2026`);
+      return;
+    }
+    const labels = column.settings_str ?? '';
+    const missing = ['GEREED', 'GEEN MATCH', 'FOUT'].filter((l) => !labels.includes(l));
+    record(
+      'Our status column',
+      missing.length === 0 ? 'ok' : 'fail',
+      missing.length === 0 ? `${column.title} (${columnId})` : `missing label(s): ${missing.join(', ')}`
+    );
+  } catch (error) {
+    record('Our status column', 'fail', message(error));
+  }
+}
+
+async function checkRedis(): Promise<void> {
+  if (!redisConfigured()) {
+    record('Upstash Redis', 'skip', 'no UPSTASH_REDIS_REST_* or KV_REST_API_* credentials');
+    return;
+  }
+  try {
+    const kv = createUpstashKvStore(createRedisClient());
+    const key = 'preflight:probe';
+    await kv.set(key, 'ok', { ttlMs: 10_000 });
+    const echoed = await kv.get(key);
+    record(
+      'Upstash Redis',
+      echoed === 'ok' ? 'ok' : 'fail',
+      echoed === 'ok' ? 'read/write round-trip' : `unexpected value: ${String(echoed)}`
+    );
+  } catch (error) {
+    record('Upstash Redis', 'fail', message(error));
+  }
+}
+
+async function checkRedisZset(): Promise<void> {
+  if (!redisConfigured()) {
+    record('Redis ZRANGE bound', 'skip', 'Redis not configured');
+    return;
+  }
+  try {
+    // Specifically exercises the '-inf' bound. Passing Number.NEGATIVE_INFINITY here
+    // serializes to null over the REST API and errors, which is what silently broke
+    // the publish-pending sweep — so probe it rather than trust it.
+    const kv = createUpstashKvStore(createRedisClient());
+    await kv.zadd('preflight:zset', 1, 'probe');
+    const members = await kv.zRangeByScore('preflight:zset', 10, 5);
+    await kv.zrem('preflight:zset', 'probe');
+    record(
+      'Redis ZRANGE bound',
+      members.includes('probe') ? 'ok' : 'fail',
+      members.includes('probe') ? "byscore with '-inf' works" : `got ${JSON.stringify(members)}`
+    );
+  } catch (error) {
+    record('Redis ZRANGE bound', 'fail', message(error));
+  }
+}
+
+async function checkQStash(): Promise<void> {
+  if (!present('QSTASH_TOKEN')) {
+    record('QStash token', 'skip', 'QSTASH_TOKEN not set');
+    return;
+  }
+  try {
+    // Deliberately the SAME constructor production uses, so this exercises the real
+    // endpoint (regional accounts get a regional URL) rather than a default that
+    // happens to work here and nowhere else.
+    const client = createQStashClient();
+    const schedules = await client.schedules.list();
+    const endpoint = (process.env.QSTASH_URL ?? '').trim() || 'default endpoint';
+    record('QStash token', 'ok', `${schedules.length} schedule(s) via ${endpoint}`);
+  } catch (error) {
+    record('QStash token', 'fail', message(error));
+  }
+}
+
+function checkPlainVars(): void {
+  const required: Array<[string, string]> = [
+    ['MONDAY_WEBHOOK_TOKEN', 'webhook ?token= secret'],
+    ['QSTASH_CURRENT_SIGNING_KEY', 'verifies QStash deliveries'],
+    ['QSTASH_NEXT_SIGNING_KEY', 'verifies QStash deliveries during key rotation'],
+    ['CRON_SECRET', 'guards the publish-pending sweep'],
+    ['ADDRESS_HASH_KEY', 'keyed address fingerprints'],
+    ['GOOGLE_MAPS_API_KEY', 'travel'],
+    ['OPENROUTER_API_KEY', 'address cleanup'],
+  ];
+  for (const [name, why] of required) {
+    record(name, present(name) ? 'ok' : 'fail', why);
+  }
+  // Falls back to VERCEL_URL in production, so locally-absent is only a warning.
+  record(
+    'PUBLIC_BASE_URL',
+    present('PUBLIC_BASE_URL') ? 'ok' : 'skip',
+    present('PUBLIC_BASE_URL') ? 'set' : 'unset — falls back to VERCEL_URL when deployed'
+  );
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function main(): Promise<void> {
+  await checkMonday();
+  await checkStatusColumn();
+  await checkRedis();
+  await checkRedisZset();
+  await checkQStash();
+  checkPlainVars();
+
+  const icon: Record<Status, string> = { ok: '✓', fail: '✗', skip: '·' };
+  console.log('');
+  for (const r of results) {
+    console.log(`  ${icon[r.status]} ${r.name.padEnd(28)} ${r.detail}`);
+  }
+
+  const failed = results.filter((r) => r.status === 'fail');
+  console.log(
+    failed.length === 0
+      ? '\nAll configured checks passed.\n'
+      : `\n${failed.length} check(s) failed.\n`
+  );
+  process.exit(failed.length === 0 ? 0 : 1);
+}
+
+main().catch((error: unknown) => {
+  console.error(message(error));
+  process.exit(1);
+});

@@ -25,6 +25,8 @@
     "snapshot:monday": "tsx scripts/snapshot-monday.ts",
     "audit:mapping": "tsx scripts/audit-mapping.ts",
     "groups:list": "tsx scripts/trainer-groups.ts",
+    "columns:list": "tsx scripts/list-columns.ts",
+    "preflight": "tsx scripts/preflight.ts",
     "recommend:once": "tsx scripts/recommend-once.ts",
     "recommend:parity": "tsx scripts/recommend-parity.ts",
     "replay:verify": "tsx scripts/replay-verify.ts",

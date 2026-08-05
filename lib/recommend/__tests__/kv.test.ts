@@ -1,6 +1,56 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { createMemoryKvStore } from '../kv';
+import { createMemoryKvStore, createRedisClient } from '../kv';
+
+/**
+ * Vercel's Upstash marketplace integration injects `KV_REST_API_*`, carried over from
+ * when this was Vercel KV — not the `UPSTASH_REDIS_REST_*` names. Accepting both
+ * avoids hand-duplicated variables that drift apart.
+ */
+describe('createRedisClient credentials', () => {
+  const VARS = [
+    'UPSTASH_REDIS_REST_URL',
+    'UPSTASH_REDIS_REST_TOKEN',
+    'KV_REST_API_URL',
+    'KV_REST_API_TOKEN',
+    'KV_REST_API_READ_ONLY_TOKEN',
+  ];
+
+  afterEach(() => {
+    for (const v of VARS) {
+      delete process.env[v];
+    }
+  });
+
+  it('accepts the Upstash names', () => {
+    process.env.UPSTASH_REDIS_REST_URL = 'https://example.upstash.io';
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'tok';
+    expect(() => createRedisClient()).not.toThrow();
+  });
+
+  it("accepts Vercel's KV_REST_API_* aliases", () => {
+    process.env.KV_REST_API_URL = 'https://example.upstash.io';
+    process.env.KV_REST_API_TOKEN = 'tok';
+    expect(() => createRedisClient()).not.toThrow();
+  });
+
+  /**
+   * The read-only token authenticates but rejects writes. Falling back to it would
+   * yield a client that reads fine and fails every enqueue — worse than not
+   * connecting, because the failure looks like a queue bug rather than a config one.
+   */
+  it('does NOT fall back to the read-only token', () => {
+    process.env.KV_REST_API_URL = 'https://example.upstash.io';
+    process.env.KV_REST_API_READ_ONLY_TOKEN = 'readonly';
+    expect(() => createRedisClient()).toThrow(/Missing Redis credentials/);
+  });
+
+  it('treats a blank value as absent', () => {
+    process.env.UPSTASH_REDIS_REST_URL = '  ';
+    process.env.UPSTASH_REDIS_REST_TOKEN = '';
+    expect(() => createRedisClient()).toThrow(/Missing Redis credentials/);
+  });
+});
 
 /**
  * The in-memory `KvStore` is what every unit test in this pass runs against, so its
