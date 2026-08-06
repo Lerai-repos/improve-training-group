@@ -6,8 +6,8 @@ loadEnv({ path: '.env.local' });
 import {
   agendaBoardId,
   MONDAY_API_VERSION,
-  INPLANNEN_GROUP_ID,
   RECOMMENDATION_STATUS_COLUMN,
+  triggerGroupIds,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 
@@ -64,14 +64,24 @@ async function main(): Promise<void> {
 
   console.log(`\n${board.name}  (${board.id})\n`);
 
-  // Groups matter for the TRIGGER (a move into Inplannen starts a run), not for the
+  // Groups matter for the TRIGGER (a move into one of them starts a run), not for the
   // status column: a column belongs to the board, so one column serves every group.
+  //
+  // Resolved through `triggerGroupIds()` rather than read from env directly, so this
+  // diagnostic can never disagree with what the webhook actually routes on — the
+  // reason it exists. Two group titles here contain "Inplannen", so eyeballing is
+  // exactly what this is meant to replace.
+  const triggers = triggerGroupIds();
   console.log('GROUPS');
   for (const g of board.groups) {
-    const mark = g.id === (process.env.MONDAY_INPLANNEN_GROUP_ID || INPLANNEN_GROUP_ID)
-      ? '   ← the trigger group'
-      : '';
+    const mark = triggers.includes(g.id) ? '   ← TRIGGER GROUP' : '';
     console.log(`  ${g.id.padEnd(24)} ${g.title}${mark}`);
+  }
+  // A configured id that matches no group on this board would otherwise be invisible:
+  // every row unmarked looks the same as "this board has no trigger groups".
+  const missing = triggers.filter((id) => !board.groups.some((g) => g.id === id));
+  if (missing.length > 0) {
+    console.log(`\n  ⚠ configured but NOT on this board: ${missing.join(', ')}`);
   }
   console.log('');
 

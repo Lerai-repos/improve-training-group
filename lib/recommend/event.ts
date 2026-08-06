@@ -50,7 +50,8 @@ export type WebhookParse =
   | { kind: 'ignore'; reason: string };
 
 export interface WebhookRouting {
-  inplannenGroupId: string;
+  /** Groups whose arrival triggers a run — "Inplannen" and "Herplannen / Inplannen". */
+  inplannenGroupIds: readonly string[];
   statusColumnId: string;
   runLabel: string;
 }
@@ -184,10 +185,10 @@ export function parseWebhook(body: unknown, routing: WebhookRouting): WebhookPar
     if (dest === undefined) {
       return { kind: 'malformed', reason: `${event.type} has no readable group id`, keys };
     }
-    if (dest === routing.inplannenGroupId) {
+    if (routing.inplannenGroupIds.includes(dest)) {
       return { kind: 'trigger', triggerUuid, triggerKind: 'group_move', mondayItemId };
     }
-    return { kind: 'ignore', reason: 'group move not into Inplannen' };
+    return { kind: 'ignore', reason: 'group move not into a trigger group' };
   }
 
   if (event.columnId === undefined) {

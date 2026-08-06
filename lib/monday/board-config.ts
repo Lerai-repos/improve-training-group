@@ -204,6 +204,53 @@ export const RECOMMENDATION_BUTTON_COLUMN = 'button_mkzw7xx2';
 export const TRAINER_LINK_COLUMN = 'board_relation_mkz4y7tb';
 /** The "Inplannen" group (verified live) — moving a training here triggers a run. */
 export const INPLANNEN_GROUP_ID = 'group_mkwtj07a';
+/**
+ * "Herplannen / Inplannen" — the group a training goes to when it is being REplanned,
+ * which is exactly when its recommendations should be recomputed.
+ *
+ * The id is a Monday default (`nieuwe_groep`) and the title is confusingly close to
+ * the group above, which is how a test drag once landed here and looked like a dead
+ * webhook: the move happened, just not into the group we subscribed to.
+ *
+ * n8n listens only to `INPLANNEN_GROUP_ID`, so trainings moved here are handled by us
+ * alone — there is no legacy result to compare against for this group.
+ */
+export const HERPLANNEN_GROUP_ID = 'nieuwe_groep';
+
+/** Every group whose arrival triggers a run. Order is irrelevant; membership is. */
+export const TRIGGER_GROUP_IDS: readonly string[] = [INPLANNEN_GROUP_ID, HERPLANNEN_GROUP_ID];
+
+/**
+ * The trigger groups, with `MONDAY_TRIGGER_GROUP_IDS` (comma-separated) able to
+ * override them. Setting it REPLACES the defaults rather than adding to them.
+ *
+ * Named for the list it is, not for one of the groups in it: the previous
+ * `MONDAY_INPLANNEN_GROUP_ID` was singular AND named one of the two groups it
+ * controlled, so setting it to "the Inplannen group id" silently unsubscribed
+ * Herplannen. No amount of comment could out-argue a name that says the wrong thing.
+ *
+ * Blank entries are dropped and an all-blank value falls back to the defaults. That
+ * is the same fail-closed rule the single-id version had, for the same reason: a
+ * trailing comma or `MONDAY_TRIGGER_GROUP_IDS=` would otherwise produce an empty id
+ * that matches no group, so every group-move trigger would be ignored behind a
+ * perfectly healthy 200 — nothing logged above debug, nothing on the board, nothing
+ * that looks broken.
+ *
+ * ⚠️ Configuration alone does NOT subscribe. Monday delivers
+ * `item_moved_to_specific_group` only for groups a webhook was registered for, so
+ * adding an id here without running `pnpm webhook:register` changes nothing. See
+ * §10 of `docs/m2b/README.md` before moving this to the Instellingen board.
+ *
+ * Lives here rather than in `deps.ts` so `webhook:register` can read it without
+ * pulling in the Redis/QStash dependency graph.
+ */
+export function triggerGroupIds(): readonly string[] {
+  const configured = (process.env.MONDAY_TRIGGER_GROUP_IDS ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '');
+  return configured.length > 0 ? configured : TRIGGER_GROUP_IDS;
+}
 
 /**
  * OUR status column — a SECOND status column on Agenda 2026, created by ITG, that

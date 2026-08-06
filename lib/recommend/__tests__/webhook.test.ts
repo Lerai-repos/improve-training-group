@@ -11,7 +11,7 @@ import { handleParsedWebhook, type RunQueue } from '../webhook';
  */
 
 const routing: WebhookRouting = {
-  inplannenGroupId: 'group_mkwtj07a',
+  inplannenGroupIds: ['group_mkwtj07a'],
   statusColumnId: 'color_mkzwfy42',
   runLabel: 'RUN',
 };

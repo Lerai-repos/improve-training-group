@@ -10,7 +10,7 @@
 ## 1. What it does
 
 ```
-Monday (Aanbevelingen button, or a move into Inplannen)
+Monday (a move into Inplannen OR Herplannen / Inplannen)
    └─ webhook → durable trigger record + per-training generation → QStash
         └─ job → read training + roster + qualifications LIVE
                  eligibility (effective-GREEN for EVERY theme)
@@ -196,6 +196,7 @@ pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm buil
 | `MONDAY_API_TOKEN` | all reads + the status write | |
 | `MONDAY_WEBHOOK_TOKEN` | webhook route | The `?token=` shared secret. Unset ⇒ the route rejects everything. |
 | `MONDAY_RECOMMENDATION_STATUS_COLUMN` | status write | **Our** column. Refuses `color_mkzwfy42`. |
+| `MONDAY_TRIGGER_GROUP_IDS` | webhook routing + `webhook:register` | **Comma-separated** group ids whose arrival triggers a run, and it **REPLACES the defaults rather than adding to them** — the singular name is a leftover, so setting one id silently unsubscribes the other group. Unset ⇒ both `group_mkwtj07a` (*Inplannen*) and `nieuwe_groep` (*Herplannen / Inplannen*). Blank entries are dropped and an all-blank value falls back — an empty id would match no group, so every trigger would be ignored behind a healthy 200. Run `pnpm columns:list` after changing it: it marks the resolved trigger groups and warns about ids absent from the board. |
 | `MONDAY_AGENDA_BOARD_ID` | every Agenda read + the status write | **Test override.** Points the whole pipeline at a DUPLICATE of Agenda 2026 (a Monday board copy keeps every column id and group id, so this is the only value that changes). Unset ⇒ production `5087396949`. ⚠️ **Unset it before going live** — while set, the engine never touches ITG's real board, which is a silent no-op rather than a visible failure. `pnpm preflight` prints the board name and warns whenever the override is active. |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | queue state, outcomes, travel cache | Set by the Vercel Upstash integration. |
 | `QSTASH_TOKEN` | publishing | |
@@ -254,6 +255,28 @@ don't read them.
   must keep the same fail-closed rule: a missing financial row in production is an
   error, never a default. Config is rates and group ids, no PII, so a short Redis cache
   is fine here (unlike the roster).
+- **Trigger groups on the Instellingen board — read this before moving them there.**
+  `MONDAY_TRIGGER_GROUP_IDS` looks like ordinary config, but it is only *half* of a
+  subscription. Monday delivers `item_moved_to_specific_group` **only for groups a
+  webhook was explicitly registered for**, so adding a group to a settings board would
+  change routing and change nothing observable: no webhook, no event, no run — and no
+  error either. That is the same silent shape as a mistyped group id.
+
+  Two ways out, and they should be decided together, not one at a time:
+
+  1. **Subscribe to `item_moved_to_group`** (every group move on the board, no config)
+     and keep filtering in `parseWebhook`. Configuration then genuinely is
+     configuration — one webhook, forever, and adding a group in Instellingen just
+     works. Cost: we receive every group move on Agenda 2026, including planners
+     shuffling items between month groups, each an ignored 200. Cheap per event, but
+     it is real traffic and worth measuring before committing.
+  2. **Keep per-group webhooks and reconcile them** — the app, or a command, diffs
+     configured groups against registered webhooks and creates/deletes the difference.
+     Keeps event volume minimal, but it means something automatically mutates Monday
+     webhooks, which today is deliberately a hand-run operator action.
+
+  Whichever is chosen, `pnpm columns:list` already marks the resolved trigger groups
+  and warns about ids that are not on the board — the cheap half of the safety net.
 - **Reconciliation sweep** for Inplannen trainings whose status is stale or blank. The
   `publish-pending` cron is its natural home.
 - **A "Herbereken" trigger of our own.** Today the manual path is n8n's Aanbevelingen

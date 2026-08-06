@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { keyShape, parseWebhook, type WebhookRouting } from '../event';
 
 const routing: WebhookRouting = {
-  inplannenGroupId: 'inplannen',
+  inplannenGroupIds: ['inplannen', 'herplannen'],
   statusColumnId: 'color_x',
   runLabel: 'RUN',
 };
@@ -49,6 +49,45 @@ describe('parseWebhook', () => {
       routing
     );
     expect(p.kind).toBe('ignore');
+  });
+
+  // "Herplannen / Inplannen" is where a training goes to be REplanned, which is
+  // exactly when its recommendations must be recomputed. Its Monday id is the
+  // default `nieuwe_groep` and its title is confusingly close to "Inplannen" —
+  // a real drag once landed there and looked like a dead webhook.
+  it('routes a move into the SECOND trigger group as group_move too', () => {
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'move_pulse_into_group',
+          pulseId: 7,
+          groupId: 'herplannen',
+          originalTriggerUuid: 'u9',
+        },
+      },
+      routing
+    );
+    expect(p).toEqual({
+      kind: 'trigger',
+      triggerUuid: 'u9',
+      triggerKind: 'group_move',
+      mondayItemId: '7',
+    });
+  });
+
+  it('a group outside the configured set is still ignored', () => {
+    const p = parseWebhook(
+      {
+        event: {
+          type: 'move_pulse_into_group',
+          pulseId: 7,
+          groupId: 'nieuwe_orders',
+          originalTriggerUuid: 'u9',
+        },
+      },
+      routing
+    );
+    expect(p).toEqual({ kind: 'ignore', reason: 'group move not into a trigger group' });
   });
 
   it('routes a RUN value on the status column as manual_button', () => {

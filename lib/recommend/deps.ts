@@ -4,10 +4,10 @@ import { parseAcknowledgements } from '@lib/monday';
 import {
   agendaBoardId,
   ITEM_FIELDS,
-  INPLANNEN_GROUP_ID,
   MONDAY_API_VERSION,
   RECOMMENDATION_STATUS_COLUMN,
   RECOMMENDATION_STATUS_LABELS,
+  triggerGroupIds,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 
@@ -181,13 +181,10 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
   };
 }
 
-/** Webhook routing config (Inplannen group + status column + RUN label). */
+/** Webhook routing config (trigger groups + status column + RUN label). */
 export function webhookRouting(): WebhookRouting {
   return {
-    // `||`, not `??`: a blank override must fall back, not win. `??` would let
-    // `MONDAY_INPLANNEN_GROUP_ID=` produce an empty id that matches no group, so every
-    // group-move trigger would be silently ignored with a perfectly healthy 200.
-    inplannenGroupId: process.env.MONDAY_INPLANNEN_GROUP_ID || INPLANNEN_GROUP_ID,
+    inplannenGroupIds: triggerGroupIds(),
     // Unused in practice today: we register only the group-move webhook, so no column
     // event ever reaches us. Manual re-run belongs in the recommendations view, where
     // a button can call our API directly — no label, no automation, no second webhook.

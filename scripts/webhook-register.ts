@@ -5,9 +5,9 @@ loadEnv({ path: '.env.local' });
 
 import {
   agendaBoardId,
-  INPLANNEN_GROUP_ID,
   MONDAY_API_VERSION,
   RECOMMENDATION_STATUS_COLUMN,
+  triggerGroupIds,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 
@@ -54,7 +54,8 @@ function redact(url: string): string {
 }
 
 /**
- * ONE subscription: a training arriving in Inplannen.
+ * One subscription per trigger group: "Inplannen" and "Herplannen / Inplannen".
+ * Both are group moves — nothing else is subscribed to.
  *
  * We deliberately do NOT subscribe to n8n's status column. It was tempting, because the
  * Aanbevelingen button sets RUN there and that is the only manual trigger today — but
@@ -67,13 +68,11 @@ function redact(url: string): string {
  * Manual re-run belongs in the recommendations view instead, where a button can call
  * our API directly. Until that exists, use `pnpm recommend:enqueue <itemId>`.
  */
-const TARGETS = [
-  {
-    label: 'group move into Inplannen',
-    event: 'item_moved_to_specific_group',
-    config: { groupId: process.env.MONDAY_INPLANNEN_GROUP_ID || INPLANNEN_GROUP_ID },
-  },
-] as const;
+const TARGETS = triggerGroupIds().map((groupId) => ({
+  label: `group move into ${groupId}`,
+  event: 'item_moved_to_specific_group',
+  config: { groupId },
+}));
 
 const MONDAY_URL = 'https://api.monday.com/v2';
 
@@ -135,18 +134,20 @@ async function register(c: Client): Promise<void> {
   console.log(`\nRegistering against ${redact(url)}\n`);
 
   // NO automatic dedup: Monday's `webhooks` query returns id/event/config but NOT the
-  // url, so ours is indistinguishable from n8n's — and n8n already listens to both of
-  // these events on this board. Skipping on a matching event would therefore skip
-  // every time and register nothing at all. Re-running this DOES create duplicates;
-  // record the ids it prints and use `webhook:delete` to undo.
+  // url, so ours is indistinguishable from n8n's — and n8n already listens to this
+  // event on this board. Skipping on a matching event would therefore skip every time
+  // and register nothing at all. Re-running this DOES create duplicates; record the
+  // ids it prints and use `webhook:delete` to undo.
   const existing = await list(c);
   for (const target of TARGETS) {
-    const clashes = existing.filter((w) => w.event === target.event);
+    const clashes = existing.filter(
+      (w) => w.event === target.event && (w.config ?? '').includes(target.config.groupId)
+    );
     if (clashes.length > 0) {
       console.log(
-        `    note: ${clashes.length} existing webhook(s) for ${target.event} (id ${clashes
+        `    note: ${clashes.length} existing webhook(s) on ${target.config.groupId} (id ${clashes
           .map((w) => w.id)
-          .join(', ')}) — probably n8n's; adding ours alongside`
+          .join(', ')}) — n8n's, or a previous run of this script; adding ours alongside`
       );
     }
     try {
