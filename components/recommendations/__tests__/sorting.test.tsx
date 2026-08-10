@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  applySort,
+  addLevel,
   defaultDirection,
+  labelOf,
   levelOf,
-  MAX_SORT_LEVELS,
+  moveLevel,
+  removeLevel,
+  setDirection,
+  sortColumnsFor,
   sortRows,
   travelMarginCents,
 } from '../sorting';
@@ -18,66 +22,116 @@ const NAMES = new Map([
   ['c', 'Chris Jansen'],
 ]);
 
-describe('applySort', () => {
-  /**
-   * The behaviour the planner asked for: click price, then score, then travel time, and
-   * get exactly that ordering. Single-column sorting cannot express it — and with 24
-   * trainers on one €84 rate the whole list ties on price, so the later levels are what
-   * actually order it.
-   */
-  it('builds a chain, newest click first', () => {
-    let sort: SortLevel[] = [];
-    sort = applySort(sort, 'totalCostCents');
-    sort = applySort(sort, 'grade');
-    sort = applySort(sort, 'roundTripDurationMinutes');
+/**
+ * The panel's operations. Priority is explicit and reorderable — "most important first" —
+ * rather than implied by the order someone clicked headers in.
+ */
+describe('building the sort chain', () => {
+  it('adds a column at the END, the least important position', () => {
+    let sort = addLevel([], 'totalCostCents');
+    sort = addLevel(sort, 'grade');
 
-    expect(sort.map((s) => s.key)).toEqual([
-      'roundTripDurationMinutes',
-      'grade',
-      'totalCostCents',
+    expect(sort).toEqual([
+      { key: 'totalCostCents', direction: 'asc' },
+      { key: 'grade', direction: 'desc' },
     ]);
   });
 
-  it('flips the primary instead of re-adding it', () => {
-    const sort = applySort(applySort([], 'totalCostCents'), 'totalCostCents');
-
-    expect(sort).toEqual([{ key: 'totalCostCents', direction: 'desc' }]);
+  it('never adds the same column twice', () => {
+    const sort = addLevel(addLevel([], 'grade'), 'grade');
+    expect(sort).toHaveLength(1);
   });
 
-  it('promotes a column already lower in the chain rather than duplicating it', () => {
-    let sort: SortLevel[] = [];
-    sort = applySort(sort, 'grade');
-    sort = applySort(sort, 'totalCostCents');
-    sort = applySort(sort, 'grade');
-
-    expect(sort.map((s) => s.key)).toEqual(['grade', 'totalCostCents']);
-  });
-
-  it('keeps the chain to a usable depth', () => {
-    let sort: SortLevel[] = [];
+  /**
+   * "Good" points in different directions per column, so the default has to as well.
+   * A blanket `laag → hoog` would make "sort by cijfer" show the worst trainer first,
+   * which is never what anyone means by it.
+   */
+  it('starts each column at its useful end', () => {
+    // Less is better.
     for (const key of [
-      'rank',
-      'grade',
       'totalCostCents',
-      'roundTripDurationMinutes',
       'hourlyRateCents',
+      'trainerTravelCostCents',
+      'roundTripDurationMinutes',
+      'rank',
     ] as const) {
-      sort = applySort(sort, key);
+      expect(defaultDirection(key)).toBe('asc');
     }
-    expect(sort).toHaveLength(MAX_SORT_LEVELS);
+    // More is better.
+    for (const key of ['grade', 'themeAvgScore', 'timesTaught', 'travelMarginCents'] as const) {
+      expect(defaultDirection(key)).toBe('desc');
+    }
+    // Workload exists to spread work, so the useful end is the trainer with room.
+    expect(defaultDirection('assignmentsThisMonth')).toBe('asc');
+    expect(defaultDirection('assignmentsThisYear')).toBe('asc');
   });
 
-  /** "Sort by cijfer" never means "show me the worst trainer first". */
-  it('starts grades high-first and everything else low-first', () => {
-    expect(defaultDirection('grade')).toBe('desc');
-    expect(defaultDirection('totalCostCents')).toBe('asc');
-    expect(defaultDirection('roundTripDurationMinutes')).toBe('asc');
+  it('flips one level without touching the others', () => {
+    const sort = setDirection(
+      [
+        { key: 'totalCostCents', direction: 'asc' },
+        { key: 'grade', direction: 'asc' },
+      ],
+      'grade',
+      'desc'
+    );
+
+    expect(sort).toEqual([
+      { key: 'totalCostCents', direction: 'asc' },
+      { key: 'grade', direction: 'desc' },
+    ]);
+  });
+
+  it('removes a level', () => {
+    expect(removeLevel([{ key: 'grade', direction: 'asc' }], 'grade')).toEqual([]);
+  });
+
+  /** Reordering must keep the direction — deleting and re-adding would lose it. */
+  it('moves a level through the priority order, direction intact', () => {
+    const sort = [
+      { key: 'totalCostCents', direction: 'asc' } as const,
+      { key: 'grade', direction: 'desc' } as const,
+    ];
+
+    expect(moveLevel(sort, 'grade', -1)).toEqual([
+      { key: 'grade', direction: 'desc' },
+      { key: 'totalCostCents', direction: 'asc' },
+    ]);
+  });
+
+  it('will not move a level off either end', () => {
+    const sort = [{ key: 'grade', direction: 'asc' } as const];
+    expect(moveLevel(sort, 'grade', -1)).toEqual(sort);
+    expect(moveLevel(sort, 'grade', 1)).toEqual(sort);
+  });
+
+  /** No cap: the team is used to as many levels as they like, and there is no principled
+   *  place to stop them. */
+  it('accepts as many levels as the planner wants', () => {
+    let sort: ReturnType<typeof addLevel> = [];
+    for (const column of sortColumnsFor(true)) {
+      sort = addLevel(sort, column.key);
+    }
+    expect(sort.length).toBe(sortColumnsFor(true).length);
+    expect(sort.length).toBeGreaterThan(10);
+  });
+
+  /** A restricted caller has neither the money nor the score columns to sort on. */
+  it('offers a restricted caller only the columns they can see', () => {
+    const keys = sortColumnsFor(false).map((c) => c.key);
+    expect(keys).toEqual(['rank', 'trainer', 'roundTripDurationMinutes']);
+  });
+
+  it('labels columns as the table heads them', () => {
+    expect(labelOf('assignmentsThisMonth')).toBe('Opdrachten deze maand');
+    expect(labelOf('travelMarginCents')).toBe('Reismarge');
   });
 
   it('reports a column’s position for the header to show', () => {
-    const sort = applySort(applySort([], 'grade'), 'totalCostCents');
-    expect(levelOf(sort, 'totalCostCents')).toBe(1);
-    expect(levelOf(sort, 'grade')).toBe(2);
+    const sort = addLevel(addLevel([], 'grade'), 'totalCostCents');
+    expect(levelOf(sort, 'grade')).toBe(1);
+    expect(levelOf(sort, 'totalCostCents')).toBe(2);
     expect(levelOf(sort, 'rank')).toBeNull();
   });
 });
@@ -145,7 +199,7 @@ describe('sortRows', () => {
     ).toBe(-13_784);
   });
 
-  it('sorts by travel margin, highest first', () => {
+  it('sorts by travel margin', () => {
     const margins = [
       row({ trainerItemId: 'a', rank: 1, clientTravelChargeCents: 1_000, trainerTravelCostCents: 900, travelTimeCompensationCents: 0 }),
       row({ trainerItemId: 'b', rank: 2, clientTravelChargeCents: 5_000, trainerTravelCostCents: 1_000, travelTimeCompensationCents: 0 }),
@@ -156,7 +210,6 @@ describe('sortRows', () => {
         (r) => r.trainerItemId
       )
     ).toEqual(['b', 'a', 'c']);
-    expect(defaultDirection('travelMarginCents')).toBe('desc');
   });
 
   it('sorts trainers by the name on screen, not the id behind it', () => {

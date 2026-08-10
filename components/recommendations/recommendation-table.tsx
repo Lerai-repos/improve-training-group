@@ -15,15 +15,7 @@ import {
 import { cn } from '@lib/utils';
 
 import { duration, euros, grade } from './format';
-import {
-  applySort,
-  levelOf,
-  sortRows,
-  sumThemes,
-  travelMarginCents,
-  type SortKey,
-  type SortLevel,
-} from './sorting';
+import { levelOf, sortRows, sumThemes, travelMarginCents, type SortKey, type SortLevel } from './sorting';
 
 import type { Row } from './types';
 
@@ -47,7 +39,6 @@ interface RecommendationTableProps {
   canPlan: boolean;
   /** The sort chain, primary first. Clicking a header rebuilds it. */
   sort: readonly SortLevel[];
-  onSortChange: (levels: SortLevel[]) => void;
   onApproachedChange: (trainerItemId: string, approached: boolean) => void;
   /** Link this trainer to the training. Written client-side, as the planner. */
   onPick: (trainerItemId: string) => void;
@@ -75,7 +66,6 @@ export const RecommendationTable = ({
   canViewFull,
   canPlan,
   sort,
-  onSortChange,
   onApproachedChange,
   onPick,
   picking,
@@ -85,51 +75,47 @@ export const RecommendationTable = ({
   stale,
 }: RecommendationTableProps) => {
   const sorted = sortRows(rows, sort, names);
-  const handleSort = (key: SortKey): void => {
-    onSortChange(applySort(sort, key));
-  };
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableHead sortKey="rank" sort={sort} onSort={handleSort}>
+          <SortableHead sortKey="rank" sort={sort}>
             #
           </SortableHead>
-          <SortableHead sortKey="trainer" sort={sort} onSort={handleSort}>
+          <SortableHead sortKey="trainer" sort={sort}>
             Trainer
           </SortableHead>
           {canViewFull && (
             <>
-              <SortableHead sortKey="themeAvgScore" sort={sort} onSort={handleSort}>
+              <SortableHead sortKey="themeAvgScore" sort={sort}>
                 Cijfer thema
               </SortableHead>
-              <SortableHead sortKey="grade" sort={sort} onSort={handleSort}>
+              <SortableHead sortKey="grade" sort={sort}>
                 Cijfer totaal
               </SortableHead>
-              <SortableHead sortKey="themeEvalCount" sort={sort} onSort={handleSort} align="right">
+              <SortableHead sortKey="themeEvalCount" sort={sort} align="right">
                 Evals thema
               </SortableHead>
-              <SortableHead sortKey="totalEvalCount" sort={sort} onSort={handleSort} align="right">
+              <SortableHead sortKey="totalEvalCount" sort={sort} align="right">
                 Evals totaal
               </SortableHead>
-              <SortableHead sortKey="timesTaught" sort={sort} onSort={handleSort} align="right">
+              <SortableHead sortKey="timesTaught" sort={sort} align="right">
                 Keer gegeven
               </SortableHead>
             </>
           )}
-          <SortableHead sortKey="roundTripDurationMinutes" sort={sort} onSort={handleSort}>
+          <SortableHead sortKey="roundTripDurationMinutes" sort={sort}>
             Reistijd (retour)
           </SortableHead>
           {canViewFull && (
             <>
-              <SortableHead sortKey="hourlyRateCents" sort={sort} onSort={handleSort} align="right">
+              <SortableHead sortKey="hourlyRateCents" sort={sort} align="right">
                 Uurtarief
               </SortableHead>
               <SortableHead
                 sortKey="trainerTravelCostCents"
                 sort={sort}
-                onSort={handleSort}
                 align="right"
               >
                 Reiskosten
@@ -137,18 +123,16 @@ export const RecommendationTable = ({
               <SortableHead
                 sortKey="travelMarginCents"
                 sort={sort}
-                onSort={handleSort}
                 align="right"
               >
                 Reismarge
               </SortableHead>
-              <SortableHead sortKey="totalCostCents" sort={sort} onSort={handleSort} align="right">
+              <SortableHead sortKey="totalCostCents" sort={sort} align="right">
                 Totale kosten
               </SortableHead>
               <SortableHead
                 sortKey="assignmentsThisMonth"
                 sort={sort}
-                onSort={handleSort}
                 align="right"
               >
                 Opdr. deze maand
@@ -156,7 +140,6 @@ export const RecommendationTable = ({
               <SortableHead
                 sortKey="assignmentsThisYear"
                 sort={sort}
-                onSort={handleSort}
                 align="right"
               >
                 Opdr. dit jaar
@@ -192,7 +175,6 @@ export const RecommendationTable = ({
 interface SortableHeadProps {
   sortKey: SortKey;
   sort: readonly SortLevel[];
-  onSort: (key: SortKey) => void;
   align?: 'right';
   children: React.ReactNode;
 }
@@ -204,11 +186,13 @@ interface SortableHeadProps {
  * alone on three columns says nothing about their order, so the position number carries
  * that and the arrow carries direction.
  */
-const SortableHead = ({ sortKey, sort, onSort, align, children }: SortableHeadProps) => {
-  const handleClick = (): void => {
-    onSort(sortKey);
-  };
-
+/**
+ * A header that shows its place in the sort, but does not change it.
+ *
+ * All sorting lives in the Sort panel — priority is explicit and reorderable there,
+ * where clicking headers could only ever imply it.
+ */
+const SortableHead = ({ sortKey, sort, align, children }: SortableHeadProps) => {
   const position = levelOf(sort, sortKey);
   const level = position === null ? null : sort[position - 1];
   const Arrow = level?.direction === 'desc' ? ArrowDown : ArrowUp;
@@ -230,14 +214,11 @@ const SortableHead = ({ sortKey, sort, onSort, align, children }: SortableHeadPr
       }
       className={cn(align === 'right' && 'text-right')}
     >
-      <button
-        type="button"
-        onClick={handleClick}
+      <span
         className={cn(
-          'inline-flex items-center gap-1 hover:underline',
+          'inline-flex items-center gap-1',
           // NOT `text-primary`: #0073EA on Monday's #191B32 is 3.73:1, under the 4.5:1
-          // normal-text minimum. The button keeps the action blue; small text gets a
-          // lighter one.
+          // normal-text minimum. Buttons keep the action blue; small text gets a lighter one.
           position !== null && 'font-semibold text-[#0073EA] dark:text-[#77B8F5]'
         )}
       >
@@ -254,7 +235,7 @@ const SortableHead = ({ sortKey, sort, onSort, align, children }: SortableHeadPr
             , sorteerniveau {position}, {level?.direction === 'asc' ? 'oplopend' : 'aflopend'}
           </span>
         )}
-      </button>
+      </span>
     </TableHead>
   );
 };

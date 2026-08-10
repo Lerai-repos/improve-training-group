@@ -22,7 +22,6 @@ function renderTable(props: Partial<Parameters<typeof RecommendationTable>[0]> =
       canViewFull
       canPlan
       sort={[{ key: 'rank', direction: 'asc' }]}
-      onSortChange={noop}
       onApproachedChange={noop}
       onPick={noop}
       picking={null}
@@ -242,58 +241,23 @@ describe('RecommendationTable', () => {
    * direction.
    */
   it('shows the chain position once more than one column is sorting', async () => {
-    const onSortChange = vi.fn();
     renderTable({
       sort: [
         { key: 'totalCostCents', direction: 'asc' },
         { key: 'grade', direction: 'desc' },
       ],
-      onSortChange,
     });
 
-    expect(screen.getByRole('button', { name: /Totale kosten/ }).textContent).toContain('1');
-    expect(screen.getByRole('button', { name: /Cijfer totaal/ }).textContent).toContain('2');
+    expect(screen.getByText('Totale kosten').textContent).toContain('1');
+    expect(screen.getByText('Cijfer totaal').textContent).toContain('2');
 
     // A single level needs no numbering — it would just be noise.
     cleanup();
     renderTable({ sort: [{ key: 'totalCostCents', direction: 'asc' }] });
-    expect(screen.getByRole('button', { name: /Totale kosten/ }).textContent).not.toContain('1');
+    expect(screen.getByText('Totale kosten').textContent).not.toContain('1');
   });
 
-  it('reports the new chain when a header is clicked', async () => {
-    const onSortChange = vi.fn();
-    renderTable({ sort: [{ key: 'totalCostCents', direction: 'asc' }], onSortChange });
 
-    await userEvent.click(screen.getByRole('button', { name: /Cijfer totaal/ }));
-
-    expect(onSortChange).toHaveBeenCalledWith([
-      { key: 'grade', direction: 'desc' },
-      { key: 'totalCostCents', direction: 'asc' },
-    ]);
-  });
-
-  /** Every legacy column that has data today, and every one that will have it later. */
-  it('makes every column sortable', () => {
-    renderTable();
-    for (const label of [
-      /^#/,
-      /Trainer/,
-      /Cijfer thema/,
-      /Cijfer totaal/,
-      /Evals thema/,
-      /Evals totaal/,
-      /Keer gegeven/,
-      /Reistijd/,
-      /Uurtarief/,
-      /Reiskosten/,
-      /Reismarge/,
-      /Totale kosten/,
-      /Opdr. deze maand/,
-      /Opdr. dit jaar/,
-    ]) {
-      expect(screen.getByRole('button', { name: label })).toBeDefined();
-    }
-  });
 
   describe('sorting', () => {
     const rows = [

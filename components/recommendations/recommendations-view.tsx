@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 
 import { Button } from '@components/ui/button';
@@ -9,6 +9,7 @@ import { cn } from '@lib/utils';
 
 import { failureMessage } from './format';
 import { RecommendationTable } from './recommendation-table';
+import { SortButton, SortPanel } from './sort-panel';
 import { defaultDirection, type SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
 
@@ -44,6 +45,20 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
    * cheapest trainer at the top.
    */
   const [sort, setSort] = useState<readonly SortLevel[] | null>(null);
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortButtonRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * Closing must return focus to the trigger.
+   *
+   * Every way out of the panel — Sluiten, Escape — unmounts the focused element, and the
+   * browser then drops focus to `document.body`. A keyboard user would be silently sent
+   * back to the top of the page instead of to the button they opened.
+   */
+  const closeSort = (): void => {
+    setSortOpen(false);
+    sortButtonRef.current?.focus();
+  };
   const defaultKey = caps?.canViewFull ? 'totalCostCents' : 'rank';
   const effectiveSort: readonly SortLevel[] = sort ?? [
     { key: defaultKey, direction: defaultDirection(defaultKey) },
@@ -92,8 +107,25 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
         view.theme === 'dark' && 'dark'
       )}
     >
-      <header className="flex items-center justify-between gap-4">
+      <header className="relative flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">Aanbevolen trainers</h1>
+        <div className="flex items-center gap-2">
+          <SortButton
+            count={effectiveSort.length}
+            open={sortOpen}
+            buttonRef={sortButtonRef}
+            onToggle={() => {
+              setSortOpen((open) => !open);
+            }}
+          />
+          {sortOpen && (
+            <SortPanel
+              sort={effectiveSort}
+              onChange={setSort}
+              canViewFull={caps?.canViewFull ?? false}
+              onClose={closeSort}
+            />
+          )}
         {caps?.canPlan && (
           <Button
             variant="outline"
@@ -109,6 +141,7 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
             Opnieuw berekenen
           </Button>
         )}
+        </div>
       </header>
 
       {view.warning !== null && (
@@ -137,7 +170,7 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
 
       <LinkedBanner view={view} names={names.byId} />
 
-      <Body view={view} sort={effectiveSort} onSortChange={setSort} names={names.byId} />
+      <Body view={view} sort={effectiveSort} names={names.byId} />
     </div>
   );
 };
@@ -181,7 +214,6 @@ const LinkedBanner = ({
 interface BodyProps {
   view: UseRecommendationView;
   sort: readonly SortLevel[];
-  onSortChange: (levels: SortLevel[]) => void;
   names: ReadonlyMap<string, string>;
 }
 
@@ -190,7 +222,7 @@ function linkedIdsOf(view: UseRecommendationView): readonly string[] {
   return view.linked.kind === 'ready' ? view.linked.trainerItemIds : [];
 }
 
-const Body = ({ view, sort, onSortChange, names }: BodyProps) => {
+const Body = ({ view, sort, names }: BodyProps) => {
   if (view.status.kind === 'loading') {
     return <Skeleton className="h-40 w-full" />;
   }
@@ -247,7 +279,6 @@ const Body = ({ view, sort, onSortChange, names }: BodyProps) => {
           canViewFull={caps.canViewFull}
           canPlan={caps.canPlan}
           sort={sort}
-          onSortChange={onSortChange}
           onApproachedChange={(trainerItemId, approached) => {
             void view.setApproached(trainerItemId, approached);
           }}

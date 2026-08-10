@@ -1,16 +1,17 @@
 import type { Row } from './types';
 
 /**
- * Multi-level sorting, built by clicking column headers.
+ * Multi-level sorting, driven by an explicit Sort panel — the same shape as the Airtable
+ * interface this replaces.
  *
- * A planner does not think "sort by cost" — they think "cheapest, and among equals the
- * best-rated, and if that ties the nearest". Single-column sorting cannot express that,
- * and with 24 trainers on one €84 rate it matters: the whole list ties on price, so the
- * second and third levels are what actually order it.
+ * A planner does not think "sort by cost", they think "cheapest, and among equals the
+ * best-rated, and if that ties the nearest". With 24 trainers on one €84 rate that is not
+ * a nicety: the whole list ties on price, so the second and third levels are what
+ * actually order it.
  *
- * Clicking a header makes it the PRIMARY level and pushes what was there down, so
- * clicking price → score → travel reads exactly as it sounds. Clicking the current
- * primary again flips its direction instead of re-adding it.
+ * Building the chain by clicking headers could express that, but not legibly — the
+ * priority was implicit in click order and invisible afterwards. The panel makes the
+ * order explicit, reorderable, and as long as the planner wants.
  */
 
 export type SortKey =
@@ -36,44 +37,107 @@ export interface SortLevel {
   direction: SortDirection;
 }
 
-/**
- * Three is the useful depth. Beyond it the levels stop being ones anybody chose on
- * purpose, and the header numbering turns into noise.
- */
-export const MAX_SORT_LEVELS = 3;
-
-/**
- * What a first click on each column should mean.
- *
- * Cheap-first and near-first are obvious; **grades are high-first**, because "sort by
- * cijfer" never means "show me the worst trainer". Getting this wrong is the kind of
- * thing people work around by clicking twice every time instead of reporting.
- */
-const HIGH_FIRST: readonly SortKey[] = [
-  'themeAvgScore',
-  'grade',
-  'themeEvalCount',
-  'totalEvalCount',
-  'timesTaught',
-  'travelMarginCents',
-];
-
-export function defaultDirection(key: SortKey): SortDirection {
-  return HIGH_FIRST.includes(key) ? 'desc' : 'asc';
+/** Every sortable column, in the order the panel offers them. */
+export interface SortColumn {
+  key: SortKey;
+  label: string;
+  /**
+   * Which end of this column a planner wants FIRST.
+   *
+   * Declared per column, not one blanket default, because "good" points in different
+   * directions: cheapest cost, best grade, nearest travel, biggest margin, emptiest
+   * diary. A single `laag → hoog` would make "sort by cijfer" show the worst trainer,
+   * which is never what anyone means by it.
+   */
+  defaultDirection: SortDirection;
+  /** Hidden from a restricted caller, who has neither the money nor the score columns. */
+  fullOnly?: boolean;
 }
 
-/** Click a header: promote it to primary, or flip it if it already is. */
-export function applySort(levels: readonly SortLevel[], key: SortKey): SortLevel[] {
-  const [primary] = levels;
-  if (primary?.key === key) {
-    const flipped: SortLevel = {
-      key,
-      direction: primary.direction === 'asc' ? 'desc' : 'asc',
-    };
-    return [flipped, ...levels.slice(1)];
+export const SORT_COLUMNS: readonly SortColumn[] = [
+  // The engine's own ranking: 1 is its best answer.
+  { key: 'rank', label: 'Aanbevolen volgorde', defaultDirection: 'asc' },
+  { key: 'trainer', label: 'Trainer', defaultDirection: 'asc' },
+  // Grades and experience: more is better.
+  { key: 'themeAvgScore', label: 'Cijfer thema', defaultDirection: 'desc', fullOnly: true },
+  { key: 'grade', label: 'Cijfer totaal', defaultDirection: 'desc', fullOnly: true },
+  { key: 'themeEvalCount', label: 'Evals thema', defaultDirection: 'desc', fullOnly: true },
+  { key: 'totalEvalCount', label: 'Evals totaal', defaultDirection: 'desc', fullOnly: true },
+  { key: 'timesTaught', label: 'Keer gegeven', defaultDirection: 'desc', fullOnly: true },
+  // Distance and money: less is better.
+  { key: 'roundTripDurationMinutes', label: 'Reistijd (retour)', defaultDirection: 'asc' },
+  { key: 'hourlyRateCents', label: 'Uurtarief', defaultDirection: 'asc', fullOnly: true },
+  { key: 'trainerTravelCostCents', label: 'Reiskosten', defaultDirection: 'asc', fullOnly: true },
+  // …except the margin, where a bigger number is the good end.
+  { key: 'travelMarginCents', label: 'Reismarge', defaultDirection: 'desc', fullOnly: true },
+  { key: 'totalCostCents', label: 'Totale kosten', defaultDirection: 'asc', fullOnly: true },
+  /**
+   * Workload low-first: the column exists to spread work, so the useful end is the
+   * trainer with room. Sorting busiest-first would answer a question nobody is asking.
+   */
+  {
+    key: 'assignmentsThisMonth',
+    label: 'Opdrachten deze maand',
+    defaultDirection: 'asc',
+    fullOnly: true,
+  },
+  {
+    key: 'assignmentsThisYear',
+    label: 'Opdrachten dit jaar',
+    defaultDirection: 'asc',
+    fullOnly: true,
+  },
+];
+
+export function sortColumnsFor(canViewFull: boolean): readonly SortColumn[] {
+  return canViewFull ? SORT_COLUMNS : SORT_COLUMNS.filter((column) => column.fullOnly !== true);
+}
+
+export function labelOf(key: SortKey): string {
+  return SORT_COLUMNS.find((column) => column.key === key)?.label ?? key;
+}
+
+/** The useful end of this column — see {@link SortColumn.defaultDirection}. */
+export function defaultDirection(key: SortKey): SortDirection {
+  return SORT_COLUMNS.find((column) => column.key === key)?.defaultDirection ?? 'asc';
+}
+
+/** Add a column to the end of the chain — the least important position. */
+export function addLevel(levels: readonly SortLevel[], key: SortKey): SortLevel[] {
+  if (levels.some((level) => level.key === key)) {
+    return [...levels];
   }
-  const rest = levels.filter((level) => level.key !== key);
-  return [{ key, direction: defaultDirection(key) }, ...rest].slice(0, MAX_SORT_LEVELS);
+  return [...levels, { key, direction: defaultDirection(key) }];
+}
+
+export function removeLevel(levels: readonly SortLevel[], key: SortKey): SortLevel[] {
+  return levels.filter((level) => level.key !== key);
+}
+
+export function setDirection(
+  levels: readonly SortLevel[],
+  key: SortKey,
+  direction: SortDirection
+): SortLevel[] {
+  return levels.map((level) => (level.key === key ? { ...level, direction } : level));
+}
+
+/**
+ * Move a level up or down the priority order.
+ *
+ * Priority is the whole point of the panel — "most important first" — so it has to be
+ * changeable without deleting and re-adding, which would lose the direction too.
+ */
+export function moveLevel(levels: readonly SortLevel[], key: SortKey, delta: number): SortLevel[] {
+  const from = levels.findIndex((level) => level.key === key);
+  const to = from + delta;
+  if (from === -1 || to < 0 || to >= levels.length) {
+    return [...levels];
+  }
+  const next = [...levels];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
 }
 
 /** Which level a column occupies, 1-based, or null when it is not part of the sort. */
