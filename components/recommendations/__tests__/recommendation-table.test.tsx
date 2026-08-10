@@ -21,7 +21,7 @@ function renderTable(props: Partial<Parameters<typeof RecommendationTable>[0]> =
       names={NAMES}
       canViewFull
       canPlan
-      sort={[{ key: 'rank', direction: 'asc' }]}
+      sort={[]}
       onApproachedChange={noop}
       onPick={noop}
       picking={null}
@@ -271,7 +271,8 @@ describe('RecommendationTable', () => {
         .slice(1)
         .map((tr) => tr.children[1].textContent ?? '');
 
-    it('defaults to rank', () => {
+    /** No chain at all: the engine's own ranking, which is what Reset returns to. */
+    it('falls back to the recommended order when nothing is sorted', () => {
       renderTable({ rows });
       expect(names()).toEqual(['Sanne de Vries', 'Joris Bakker']);
     });

@@ -15,8 +15,6 @@ import type { Row } from './types';
  */
 
 export type SortKey =
-  | 'rank'
-  | 'trainer'
   | 'themeAvgScore'
   | 'grade'
   | 'themeEvalCount'
@@ -55,9 +53,6 @@ export interface SortColumn {
 }
 
 export const SORT_COLUMNS: readonly SortColumn[] = [
-  // The engine's own ranking: 1 is its best answer.
-  { key: 'rank', label: 'Aanbevolen volgorde', defaultDirection: 'asc' },
-  { key: 'trainer', label: 'Trainer', defaultDirection: 'asc' },
   // Grades and experience: more is better.
   { key: 'themeAvgScore', label: 'Cijfer thema', defaultDirection: 'desc', fullOnly: true },
   { key: 'grade', label: 'Cijfer totaal', defaultDirection: 'desc', fullOnly: true },
@@ -189,8 +184,6 @@ export function sumThemes(row: Row, field: 'evaluationCount' | 'timesTaught'): n
  */
 function valueOf(row: Row, key: SortKey): number | string | null {
   switch (key) {
-    case 'trainer':
-      return row.trainerItemId;
     case 'themeAvgScore':
       return row.themeAvgScore ?? null;
     case 'grade':
@@ -220,16 +213,23 @@ function valueOf(row: Row, key: SortKey): number | string | null {
   }
 }
 
-function compareLevel(a: Row, b: Row, level: SortLevel, names: ReadonlyMap<string, string>): number {
-  // Trainer sorts by the NAME on screen, not the id behind it — an id ordering would
-  // look arbitrary to the only person who ever uses this column.
-  if (level.key === 'trainer') {
-    const left = names.get(a.trainerItemId) ?? `#${a.trainerItemId}`;
-    const right = names.get(b.trainerItemId) ?? `#${b.trainerItemId}`;
-    const order = left.localeCompare(right, 'nl');
-    return level.direction === 'asc' ? order : -order;
-  }
+/**
+ * No "Aanbevolen volgorde" column, deliberately.
+ *
+ * An empty chain already falls back to `rank` below, so the engine's own order is what
+ * the list arrives in and what Reset returns to. Offering it as a selectable column would
+ * be a second way to say the same thing — and a confusing one, since picking it as level
+ * 3 would do nothing that the fallback was not already doing.
+ */
 
+/**
+ * Trainer name is deliberately NOT sortable.
+ *
+ * Alphabetical order answers no question a planner has: they are choosing on cost,
+ * distance, grade or workload, and never on where a name falls in the alphabet. It was in
+ * the legacy list, and leaving it in would be copying a column rather than a use.
+ */
+function compareLevel(a: Row, b: Row, level: SortLevel): number {
   const left = valueOf(a, level.key);
   const right = valueOf(b, level.key);
 
@@ -249,14 +249,10 @@ function compareLevel(a: Row, b: Row, level: SortLevel, names: ReadonlyMap<strin
   return level.direction === 'asc' ? order : -order;
 }
 
-export function sortRows(
-  rows: readonly Row[],
-  levels: readonly SortLevel[],
-  names: ReadonlyMap<string, string>
-): Row[] {
+export function sortRows(rows: readonly Row[], levels: readonly SortLevel[]): Row[] {
   return [...rows].sort((a, b) => {
     for (const level of levels) {
-      const order = compareLevel(a, b, level, names);
+      const order = compareLevel(a, b, level);
       if (order !== 0) {
         return order;
       }

@@ -16,12 +16,6 @@ import { row } from './fakes';
 
 import type { SortLevel } from '../sorting';
 
-const NAMES = new Map([
-  ['a', 'Anna Bakker'],
-  ['b', 'Bram de Vries'],
-  ['c', 'Chris Jansen'],
-]);
-
 /**
  * The panel's operations. Priority is explicit and reorderable — "most important first" —
  * rather than implied by the order someone clicked headers in.
@@ -54,7 +48,6 @@ describe('building the sort chain', () => {
       'hourlyRateCents',
       'trainerTravelCostCents',
       'roundTripDurationMinutes',
-      'rank',
     ] as const) {
       expect(defaultDirection(key)).toBe('asc');
     }
@@ -119,8 +112,16 @@ describe('building the sort chain', () => {
 
   /** A restricted caller has neither the money nor the score columns to sort on. */
   it('offers a restricted caller only the columns they can see', () => {
-    const keys = sortColumnsFor(false).map((c) => c.key);
-    expect(keys).toEqual(['rank', 'trainer', 'roundTripDurationMinutes']);
+    expect(sortColumnsFor(false).map((c) => c.key)).toEqual(['roundTripDurationMinutes']);
+  });
+
+  /**
+   * Alphabetical order answers no question a planner has — they choose on cost, distance,
+   * grade or workload, never on where a name falls in the alphabet. It was in the legacy
+   * list; keeping it would be copying a column rather than a use.
+   */
+  it('does not offer the trainer name as a sort', () => {
+    expect(sortColumnsFor(true).map((c) => c.label)).not.toContain('Trainer');
   });
 
   it('labels columns as the table heads them', () => {
@@ -132,7 +133,15 @@ describe('building the sort chain', () => {
     const sort = addLevel(addLevel([], 'grade'), 'totalCostCents');
     expect(levelOf(sort, 'grade')).toBe(1);
     expect(levelOf(sort, 'totalCostCents')).toBe(2);
-    expect(levelOf(sort, 'rank')).toBeNull();
+    expect(levelOf(sort, 'timesTaught')).toBeNull();
+  });
+
+  /**
+   * Not offered as a column: an empty chain already falls back to it, so the engine's
+   * order is where the list starts and where Reset returns to.
+   */
+  it('does not offer the recommended order as a column', () => {
+    expect(sortColumnsFor(true).map((c) => c.label)).not.toContain('Aanbevolen volgorde');
   });
 });
 
@@ -143,7 +152,7 @@ describe('sortRows', () => {
     row({ trainerItemId: 'c', rank: 2, totalCostCents: 30_000, overallAverageDisplay: 6.0, roundTripDurationMinutes: 5 }),
   ];
   const order = (levels: SortLevel[]): string[] =>
-    sortRows(rows, levels, NAMES).map((r) => r.trainerItemId);
+    sortRows(rows, levels).map((r) => r.trainerItemId);
 
   it('sorts by one column', () => {
     expect(order([{ key: 'totalCostCents', direction: 'asc' }])).toEqual(['b', 'c', 'a']);
@@ -168,6 +177,11 @@ describe('sortRows', () => {
 
   it('falls back to rank so the order never shuffles between renders', () => {
     expect(order([{ key: 'hourlyRateCents', direction: 'asc' }])).toEqual(['b', 'c', 'a']);
+  });
+
+  /** No levels at all is the engine's own ranking. */
+  it('returns the recommended order for an empty chain', () => {
+    expect(order([])).toEqual(['b', 'c', 'a']);
   });
 
   /**
@@ -206,16 +220,12 @@ describe('sortRows', () => {
       row({ trainerItemId: 'c', rank: 3, clientTravelChargeCents: 900, trainerTravelCostCents: 1_000, travelTimeCompensationCents: 0 }),
     ];
     expect(
-      sortRows(margins, [{ key: 'travelMarginCents', direction: 'desc' }], NAMES).map(
+      sortRows(margins, [{ key: 'travelMarginCents', direction: 'desc' }]).map(
         (r) => r.trainerItemId
       )
     ).toEqual(['b', 'a', 'c']);
   });
 
-  it('sorts trainers by the name on screen, not the id behind it', () => {
-    expect(order([{ key: 'trainer', direction: 'asc' }])).toEqual(['a', 'b', 'c']);
-    expect(order([{ key: 'trainer', direction: 'desc' }])).toEqual(['c', 'b', 'a']);
-  });
 
   describe('trainers with no grades', () => {
     const withGap = [
@@ -224,7 +234,7 @@ describe('sortRows', () => {
       row({ trainerItemId: 'c', rank: 3, overallAverageDisplay: 9.0 }),
     ];
     const graded = (direction: 'asc' | 'desc'): string[] =>
-      sortRows(withGap, [{ key: 'grade', direction }], NAMES).map((r) => r.trainerItemId);
+      sortRows(withGap, [{ key: 'grade', direction }]).map((r) => r.trainerItemId);
 
     /**
      * "No grades" is unknown, not worst and not best. It sinks in BOTH directions, so
@@ -238,7 +248,7 @@ describe('sortRows', () => {
 
   it('leaves the caller’s array untouched', () => {
     const original = [...rows];
-    sortRows(rows, [{ key: 'grade', direction: 'desc' }], NAMES);
+    sortRows(rows, [{ key: 'grade', direction: 'desc' }]);
     expect(rows).toEqual(original);
   });
 });

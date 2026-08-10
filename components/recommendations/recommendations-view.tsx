@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 
 import { Button } from '@components/ui/button';
@@ -10,7 +10,7 @@ import { cn } from '@lib/utils';
 import { failureMessage } from './format';
 import { RecommendationTable } from './recommendation-table';
 import { SortButton, SortPanel } from './sort-panel';
-import { defaultDirection, type SortLevel } from './sorting';
+import type { SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
 
 import type { MondayBridge } from './monday-client';
@@ -35,16 +35,14 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
   const caps = view.status.kind === 'loaded' ? view.status.view.caps : null;
 
   /**
-   * The sort chain, primary first — built by clicking headers.
+   * The sort chain, primary first — empty by default.
    *
-   * Two different defaults, because the two payloads are different contracts. A `full`
-   * caller starts on total cost (the spec's *"Totale kosten = de sorteerkolom"*); a
-   * restricted caller has no cost field at all, so `rank` is the only thing to order by.
-   * Defaulting everyone to `rank` looks identical today only because ranking IS
-   * cost-first — the moment that changes, a full caller would silently stop seeing the
-   * cheapest trainer at the top.
+   * Empty IS the engine's recommended order, because `sortRows` falls back to `rank`. So
+   * the list arrives the way the engine ranked it, Reset returns to exactly that, and
+   * there is no "Aanbevolen volgorde" column duplicating the fallback.
    */
   const [sort, setSort] = useState<readonly SortLevel[] | null>(null);
+  const effectiveSort: readonly SortLevel[] = sort ?? [];
   const [sortOpen, setSortOpen] = useState(false);
   const sortButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -55,15 +53,35 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
    * browser then drops focus to `document.body`. A keyboard user would be silently sent
    * back to the top of the page instead of to the button they opened.
    */
-  const closeSort = (): void => {
+  const closeSort = useCallback((): void => {
     setSortOpen(false);
     sortButtonRef.current?.focus();
-  };
-  const defaultKey = caps?.canViewFull ? 'totalCostCents' : 'rank';
-  const effectiveSort: readonly SortLevel[] = sort ?? [
-    { key: defaultKey, direction: defaultDirection(defaultKey) },
-  ];
+  }, []);
 
+  /**
+   * Clicking anywhere else closes it — the behaviour every dropdown has, and its absence
+   * is the kind of thing people notice by being mildly annoyed rather than by reporting.
+   *
+   * Only while open, and `mousedown` rather than `click` so it fires before the target
+   * handles its own press. Focus does NOT return to the trigger here: the planner has
+   * already moved their attention elsewhere, and yanking it back would fight them.
+   */
+  const sortAreaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sortOpen) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent): void => {
+      const target = event.target;
+      if (target instanceof Node && sortAreaRef.current?.contains(target) !== true) {
+        setSortOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [sortOpen]);
   // A different training, or a change in what this caller may see, invalidates a manual
   // chain — the columns it names may not even exist any more.
   useEffect(() => {
@@ -90,6 +108,40 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
       : [];
   const names = useTrainerNames(monday, trainerIds);
 
+  /**
+   * Before the context arrives we know neither the theme nor the item, so anything
+   * rendered now is rendered in a guess.
+   *
+   * A transparent background was only half the fix: the heading, and especially the
+   * outline Sort button with its own `bg-background`, still paint in light tokens — so a
+   * dark workspace gets a pale button and dark text for the length of one postMessage
+   * round trip. An empty transparent shell has nothing to be wrong about.
+   *
+   * A context FAILURE is different and must still render: that error is the only thing
+   * telling the planner why the view is empty.
+   */
+  const pending = view.theme === null && view.status.kind !== 'error';
+
+  /**
+   * Context failed, so we will NEVER learn the theme — and unlike `pending`, this is not
+   * a moment that passes.
+   *
+   * Rendering the normal view here would leave the header and an active Sort control
+   * painted in light tokens over a dark workspace, permanently, above a list that cannot
+   * load. So this state gets its own surface: an opaque white card, legible against
+   * either Monday theme, carrying the message and nothing to click.
+   */
+  if (view.theme === null && view.status.kind === 'error') {
+    return (
+      <div className="flex min-h-screen flex-col gap-4 p-4">
+        <div className="rounded-md border border-[#D0D4E4] bg-white p-4 text-sm text-[#323338]">
+          <p className="mb-1 font-medium">De aanbevelingen konden niet worden geladen.</p>
+          <p className="text-[#676879]">{view.status.message}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       /* Monday's theme, applied to THIS container only.
@@ -103,74 +155,88 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
        * and persisted, so setting it would rewrite the user's theme in every other tab,
        * and a storage event from one of those could flip the iframe back mid-session. */
       className={cn(
-        'monday-surface flex min-h-screen flex-col gap-4 bg-background p-4 text-foreground',
+        'monday-surface flex min-h-screen flex-col gap-4 p-4 text-foreground',
+        // No background until Monday has told us which one. Painting a guess is what
+        // produces the white flash in a dark workspace; transparent lets the host's own
+        // backdrop show through for the moment it takes the context to arrive.
+        view.theme === null ? 'bg-transparent' : 'bg-background',
         view.theme === 'dark' && 'dark'
       )}
     >
-      <header className="relative flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">Aanbevolen trainers</h1>
-        <div className="flex items-center gap-2">
-          <SortButton
-            count={effectiveSort.length}
-            open={sortOpen}
-            buttonRef={sortButtonRef}
-            onToggle={() => {
-              setSortOpen((open) => !open);
-            }}
-          />
-          {sortOpen && (
-            <SortPanel
-              sort={effectiveSort}
-              onChange={setSort}
-              canViewFull={caps?.canViewFull ?? false}
-              onClose={closeSort}
+      {pending ? null : (
+        <>
+          <header className="relative flex items-center justify-between gap-4">
+            <h1 className="text-lg font-semibold">Aanbevolen trainers</h1>
+            <div className="flex items-center gap-2">
+              {/* The outside-click boundary is the trigger and panel ALONE. Wrapping the
+              whole group would count Recalculate as "inside", leaving the panel hanging
+              open over a list that is about to be replaced. */}
+              <div ref={sortAreaRef} className="relative">
+                <SortButton
+                  count={effectiveSort.length}
+                  open={sortOpen}
+                  buttonRef={sortButtonRef}
+                  onToggle={() => {
+                    setSortOpen((open) => !open);
+                  }}
+                />
+                {sortOpen && (
+                  <SortPanel
+                    sort={effectiveSort}
+                    onChange={setSort}
+                    canViewFull={caps?.canViewFull ?? false}
+                    onClose={closeSort}
+                  />
+                )}
+              </div>
+              {caps?.canPlan && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void view.recalculate()}
+                  disabled={view.busy}
+                >
+                  {view.recalculating ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 size-4" />
+                  )}
+                  Opnieuw berekenen
+                </Button>
+              )}
+            </div>
+          </header>
+
+          {/* Nothing is painted until Monday's theme is known — see `pending` above. */}
+          {view.warning !== null && (
+            <Warning
+              message={view.warning}
+              onDismiss={view.dismissWarning}
+              onReset={view.stale ? () => void view.reset() : null}
             />
           )}
-        {caps?.canPlan && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void view.recalculate()}
-            disabled={view.busy}
-          >
-            {view.recalculating ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 size-4" />
-            )}
-            Opnieuw berekenen
-          </Button>
-        )}
-        </div>
-      </header>
 
-      {view.warning !== null && (
-        <Warning
-          message={view.warning}
-          onDismiss={view.dismissWarning}
-          onReset={view.stale ? () => void view.reset() : null}
-        />
-      )}
+          {names.error !== null && rows.length > 0 && (
+            <Notice>
+              De namen konden niet worden opgehaald — de lijst toont item-id&apos;s. ({names.error})
+            </Notice>
+          )}
 
-      {names.error !== null && rows.length > 0 && (
-        <Notice>
-          De namen konden niet worden opgehaald — de lijst toont item-id&apos;s. ({names.error})
-        </Notice>
-      )}
-
-      {/* Frozen, with the only way out beside it — otherwise the warning tells the
+          {/* Frozen, with the only way out beside it — otherwise the warning tells the
           planner to refresh while nothing on screen can. */}
-      {view.stale && view.warning === null && (
-        <Warning
-          message="Deze lijst is verouderd."
-          onDismiss={view.dismissWarning}
-          onReset={() => void view.reset()}
-        />
+          {view.stale && view.warning === null && (
+            <Warning
+              message="Deze lijst is verouderd."
+              onDismiss={view.dismissWarning}
+              onReset={() => void view.reset()}
+            />
+          )}
+
+          <LinkedBanner view={view} names={names.byId} />
+
+          <Body view={view} sort={effectiveSort} names={names.byId} />
+        </>
       )}
-
-      <LinkedBanner view={view} names={names.byId} />
-
-      <Body view={view} sort={effectiveSort} names={names.byId} />
     </div>
   );
 };
@@ -295,13 +361,7 @@ const Body = ({ view, sort, names }: BodyProps) => {
   }
 };
 
-const Notice = ({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone?: 'error';
-}) => (
+const Notice = ({ children, tone }: { children: React.ReactNode; tone?: 'error' }) => (
   <p className={tone === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
     {children}
   </p>

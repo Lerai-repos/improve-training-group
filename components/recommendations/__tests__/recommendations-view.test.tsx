@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { RecommendationsView } from '../recommendations-view';
@@ -60,12 +61,72 @@ describe('RecommendationsView', () => {
       expect(container.firstElementChild?.classList.contains('dark')).toBe(false);
     });
 
-    /** Nothing is applied until Monday says which theme it is — no guessed default. */
-    it('applies nothing before the context has arrived', () => {
+    /**
+     * Nothing is painted until Monday says which theme it is.
+     *
+     * Guessing light is what produced the white flash in a dark workspace: the browser
+     * paints the iframe, our page paints white again while `get('context')` is in
+     * flight, and only then does the real colour arrive. Transparent lets the host's own
+     * backdrop show through for that moment instead.
+     */
+    it('paints no background before the context has arrived', () => {
       const { container } = renderView({ theme: null });
+      const root = container.firstElementChild;
 
-      expect(container.firstElementChild?.classList.contains('dark')).toBe(false);
+      expect(root?.classList.contains('dark')).toBe(false);
+      expect(root?.classList.contains('bg-transparent')).toBe(true);
+      expect(root?.classList.contains('bg-background')).toBe(false);
       expect(document.documentElement.classList.contains('dark')).toBe(false);
+    });
+
+    /**
+     * A transparent background was only half of it: the heading and the outline Sort
+     * button carry their own light tokens, so a dark workspace still got a pale flash.
+     * Nothing renders until Monday says which theme it is.
+     */
+    it('renders nothing at all before the context has arrived', () => {
+      renderView({ theme: null });
+
+      expect(screen.queryByText('Aanbevolen trainers')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Sorteren/ })).toBeNull();
+    });
+
+    /**
+     * A context failure means we will never learn the theme — so unlike `pending`, this
+     * is not a moment that passes. Showing the normal view would leave a light-token
+     * header and a working Sort button over a dark workspace permanently, above a list
+     * that cannot load.
+     */
+    describe('when the context never arrives', () => {
+      const failed = { theme: null, status: { kind: 'error' as const, message: 'geen context' } };
+
+      it('says what went wrong', () => {
+        renderView(failed);
+        expect(screen.getByText(/geen context/)).toBeDefined();
+        expect(screen.getByText(/konden niet worden geladen/)).toBeDefined();
+      });
+
+      it('shows no toolbar to click', () => {
+        renderView(failed);
+
+        expect(screen.queryByRole('button', { name: /Sorteren/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Opnieuw berekenen/ })).toBeNull();
+        expect(screen.queryByText('Aanbevolen trainers')).toBeNull();
+      });
+
+      /** Its own opaque surface, since neither theme's tokens can be trusted here. */
+      it('does not rely on the theme tokens it never received', () => {
+        const { container } = renderView(failed);
+        const root = container.firstElementChild;
+
+        expect(root?.classList.contains('monday-surface')).toBe(false);
+        expect(root?.classList.contains('bg-background')).toBe(false);
+      });
+    });
+
+    it('paints its own background once the theme is known', () => {
+      const { container } = renderView({ theme: 'dark' });
+      expect(container.firstElementChild?.classList.contains('bg-background')).toBe(true);
     });
   });
 
@@ -102,6 +163,52 @@ describe('RecommendationsView', () => {
     it('offers a way out', () => {
       renderView({ stale: true, warning: 'Deze lijst is verouderd.' });
       expect(screen.getByRole('button', { name: 'Ververs lijst' })).toBeDefined();
+    });
+  });
+
+  describe('the sort panel', () => {
+    it('opens from the button and closes on a click outside', async () => {
+      renderView();
+
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+      expect(screen.getByRole('dialog', { name: 'Sorteren' })).toBeDefined();
+
+      // Anywhere else on the page — the behaviour every dropdown has.
+      await userEvent.click(document.body);
+
+      expect(screen.queryByRole('dialog', { name: 'Sorteren' })).toBeNull();
+    });
+
+    /**
+     * Recalculate sits next to the trigger but is not part of it. Counting it as
+     * "inside" would leave the panel hanging open over a list that is about to be
+     * replaced.
+     */
+    it('closes when an adjacent action is used', async () => {
+      renderView();
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+      expect(screen.getByRole('dialog', { name: 'Sorteren' })).toBeDefined();
+
+      await userEvent.click(screen.getByRole('button', { name: /Opnieuw berekenen/ }));
+
+      expect(screen.queryByRole('dialog', { name: 'Sorteren' })).toBeNull();
+    });
+
+    it('stays open while the planner works inside it', async () => {
+      renderView();
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+
+      await userEvent.click(screen.getByRole('button', { name: /Totale kosten/ }));
+
+      expect(screen.getByRole('dialog', { name: 'Sorteren' })).toBeDefined();
+    });
+
+    /** No default chain: the list arrives in the engine's own order. */
+    it('starts with nothing sorted', async () => {
+      renderView();
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+
+      expect(screen.getByText(/Nog geen sortering/)).toBeDefined();
     });
   });
 

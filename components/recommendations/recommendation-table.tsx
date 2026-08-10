@@ -22,14 +22,21 @@ import type { Row } from './types';
 /**
  * The ranked list.
  *
- * **Two column sets, chosen by capability.** A `full` caller sees the money and sorts by
- * total cost — the spec's *"Totale kosten = de sorteerkolom"*. A restricted caller has no
- * money at all in their payload, so there is nothing to sort by but `rank`, and the
- * header says so rather than implying a hidden column exists.
+ * **Two column sets, chosen by capability.** A `full` caller sees the money, the grades
+ * and the workload; a restricted caller receives none of those fields at all, so their
+ * table is genuinely narrower rather than hiding columns it holds.
  *
- * Sorting is client-side over an already-complete list: it is at most a few dozen rows,
- * and a round trip to reorder them would be slower and could return a different
- * generation.
+ * **No default sort, for anyone.** The rows arrive in the engine's own ranking and stay
+ * there until the planner builds a chain in the Sort panel — `sortRows` falls back to
+ * `rank` on an empty chain, which is also what Reset returns to. (The spec's *"Totale
+ * kosten = de sorteerkolom"* is satisfied only incidentally today, because that ranking
+ * IS cost-first; if phase 3 makes it score-first, the opening order follows it.)
+ *
+ * Headers show their place in the chain but do not change it — priority is explicit and
+ * reorderable in the panel, where clicking headers could only ever imply it.
+ *
+ * Sorting is client-side over an already-complete list: at most a few dozen rows, and a
+ * round trip to reorder them would be slower and could return a different generation.
  */
 
 interface RecommendationTableProps {
@@ -74,18 +81,14 @@ export const RecommendationTable = ({
   busy,
   stale,
 }: RecommendationTableProps) => {
-  const sorted = sortRows(rows, sort, names);
+  const sorted = sortRows(rows, sort);
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableHead sortKey="rank" sort={sort}>
-            #
-          </SortableHead>
-          <SortableHead sortKey="trainer" sort={sort}>
-            Trainer
-          </SortableHead>
+          <TableHead>#</TableHead>
+          <TableHead>Trainer</TableHead>
           {canViewFull && (
             <>
               <SortableHead sortKey="themeAvgScore" sort={sort}>
