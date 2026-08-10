@@ -1,3 +1,4 @@
+import type { AssignmentCounts } from './assignments';
 import type { Capabilities } from './capabilities';
 import type { StoredRow, StoredRowTheme } from './view-row';
 
@@ -34,6 +35,16 @@ export interface FullRow {
   travelTimeCompensationCents: number;
   clientTravelChargeCents: number;
   totalCostCents: number;
+  /**
+   * How much this trainer already has on in the training's month / year.
+   *
+   * Resolved at READ time, not stored: linking a trainer elsewhere changes their load
+   * without touching this training's generation, so a persisted count would be served
+   * for months with nothing to mark it stale. **Null means "we could not find out"** —
+   * never 0, which is a real and very different answer.
+   */
+  assignmentsThisMonth: number | null;
+  assignmentsThisYear: number | null;
   approached: boolean;
 }
 
@@ -59,7 +70,11 @@ export interface RestrictedRow {
 
 export type PublicRow = FullRow | RestrictedRow;
 
-export function toFullRow(row: StoredRow, approached: boolean): FullRow {
+export function toFullRow(
+  row: StoredRow,
+  approached: boolean,
+  workload: AssignmentCounts | null = null
+): FullRow {
   return {
     trainerItemId: row.trainerItemId,
     rank: row.rank,
@@ -75,6 +90,8 @@ export function toFullRow(row: StoredRow, approached: boolean): FullRow {
     travelTimeCompensationCents: row.travelTimeCompensationCents,
     clientTravelChargeCents: row.clientTravelChargeCents,
     totalCostCents: row.totalCostCents,
+    assignmentsThisMonth: workload?.thisMonth ?? null,
+    assignmentsThisYear: workload?.thisYear ?? null,
     approached,
   };
 }
@@ -94,11 +111,18 @@ export function toRestrictedRow(row: StoredRow, approached: boolean): Restricted
  * `approached` is present in BOTH shapes: a restricted user with `plan` may tick
  * `Benaderd`, so they must be able to see its current state.
  */
+/** Looks up a trainer's current workload; null when it could not be determined. */
+export type WorkloadLookup = (trainerItemId: string) => AssignmentCounts | null;
+
 export function toPublicRows(
   rows: readonly StoredRow[],
   approached: ReadonlySet<string>,
-  caps: Capabilities
+  caps: Capabilities,
+  workload: WorkloadLookup = () => null
 ): PublicRow[] {
-  const map = caps.full ? toFullRow : toRestrictedRow;
-  return rows.map((row) => map(row, approached.has(row.trainerItemId)));
+  return rows.map((row) =>
+    caps.full
+      ? toFullRow(row, approached.has(row.trainerItemId), workload(row.trainerItemId))
+      : toRestrictedRow(row, approached.has(row.trainerItemId))
+  );
 }

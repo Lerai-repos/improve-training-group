@@ -160,6 +160,7 @@ describe('handleApproached', () => {
     await h.store.enqueueOrGet({ triggerUuid: 'u1', mondayItemId: ITEM, nowMs: 0 });
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
+      trainingMonth: null,
       rows: trainerIds.map((trainerItemId, index) => storedRow({ trainerItemId, rank: index + 1 })),
     });
   }

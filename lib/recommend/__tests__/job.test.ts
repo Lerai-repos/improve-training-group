@@ -41,6 +41,7 @@ const artifact: InputArtifact = {
 const ok = (status: 'GEREED' | 'GEEN MATCH'): RecommendationResult => ({
   ok: true,
   resultStatus: status,
+  trainingMonth: '2026-09',
   recommendations: [],
   // Mirrors `service.ts`: GEREED means at least one trainer was ranked, GEEN MATCH means
   // none were. A fixture pairing GEREED with an empty list would be a state the engine
@@ -255,7 +256,7 @@ describe('runJob', () => {
       runRecommendation: async () => {
         // The race has to happen DURING compute: `runJob` reads the stored outcome
         // before computing, so pre-seeding it would short-circuit and prove nothing.
-        await outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+        await outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
         return failed(false); // ours failed terminally, but it lost the claim
       },
     };

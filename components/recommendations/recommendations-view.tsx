@@ -8,7 +8,8 @@ import { Skeleton } from '@components/ui/skeleton';
 import { cn } from '@lib/utils';
 
 import { failureMessage } from './format';
-import { RecommendationTable, type SortKey } from './recommendation-table';
+import { RecommendationTable } from './recommendation-table';
+import { defaultDirection, type SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
 
 import type { MondayBridge } from './monday-client';
@@ -33,21 +34,25 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
   const caps = view.status.kind === 'loaded' ? view.status.view.caps : null;
 
   /**
-   * Two default sorts, because the two payloads are different contracts.
+   * The sort chain, primary first — built by clicking headers.
    *
-   * A `full` caller sorts by total cost — the spec's *"Totale kosten = de sorteerkolom"*.
-   * A restricted caller has no cost field at all, so `rank` is the only thing there is
-   * to order by. Defaulting everyone to `rank` happens to look the same today only
-   * because ranking IS cost-first; the moment phase 3 changes that rule, a full caller
-   * would silently stop seeing the cheapest trainer at the top.
+   * Two different defaults, because the two payloads are different contracts. A `full`
+   * caller starts on total cost (the spec's *"Totale kosten = de sorteerkolom"*); a
+   * restricted caller has no cost field at all, so `rank` is the only thing to order by.
+   * Defaulting everyone to `rank` looks identical today only because ranking IS
+   * cost-first — the moment that changes, a full caller would silently stop seeing the
+   * cheapest trainer at the top.
    */
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const effectiveSortKey: SortKey = sortKey ?? (caps?.canViewFull ? 'totalCostCents' : 'rank');
+  const [sort, setSort] = useState<readonly SortLevel[] | null>(null);
+  const defaultKey = caps?.canViewFull ? 'totalCostCents' : 'rank';
+  const effectiveSort: readonly SortLevel[] = sort ?? [
+    { key: defaultKey, direction: defaultDirection(defaultKey) },
+  ];
 
   // A different training, or a change in what this caller may see, invalidates a manual
-  // choice — the column it named may not even exist any more.
+  // chain — the columns it names may not even exist any more.
   useEffect(() => {
-    setSortKey(null);
+    setSort(null);
   }, [view.itemId, caps?.canViewFull]);
 
   const linkedIds = view.linked.kind === 'ready' ? view.linked.trainerItemIds : [];
@@ -132,7 +137,7 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
 
       <LinkedBanner view={view} names={names.byId} />
 
-      <Body view={view} sortKey={effectiveSortKey} onSort={setSortKey} names={names.byId} />
+      <Body view={view} sort={effectiveSort} onSortChange={setSort} names={names.byId} />
     </div>
   );
 };
@@ -175,8 +180,8 @@ const LinkedBanner = ({
 
 interface BodyProps {
   view: UseRecommendationView;
-  sortKey: SortKey;
-  onSort: (key: SortKey) => void;
+  sort: readonly SortLevel[];
+  onSortChange: (levels: SortLevel[]) => void;
   names: ReadonlyMap<string, string>;
 }
 
@@ -185,7 +190,7 @@ function linkedIdsOf(view: UseRecommendationView): readonly string[] {
   return view.linked.kind === 'ready' ? view.linked.trainerItemIds : [];
 }
 
-const Body = ({ view, sortKey, onSort, names }: BodyProps) => {
+const Body = ({ view, sort, onSortChange, names }: BodyProps) => {
   if (view.status.kind === 'loading') {
     return <Skeleton className="h-40 w-full" />;
   }
@@ -241,8 +246,8 @@ const Body = ({ view, sortKey, onSort, names }: BodyProps) => {
           names={names}
           canViewFull={caps.canViewFull}
           canPlan={caps.canPlan}
-          sortKey={sortKey}
-          onSort={onSort}
+          sort={sort}
+          onSortChange={onSortChange}
           onApproachedChange={(trainerItemId, approached) => {
             void view.setApproached(trainerItemId, approached);
           }}

@@ -71,6 +71,8 @@ const storedRowsSchema = z.discriminatedUnion('kind', [
   z.object({
     v: z.literal(1),
     kind: z.literal('ready'),
+    /** The training's own month, for read-time workload counts. Absent on older rows. */
+    trainingMonth: z.string().nullable().default(null),
     // At least one. `service.ts` emits GEREED exactly when `ranked.length > 0` and
     // GEEN MATCH otherwise, so a ready-but-empty artifact contradicts the label it was
     // stored beside, and the view would render it as a successful empty recommendation.
@@ -97,7 +99,7 @@ export type StoredDetail = z.infer<typeof storedRowsSchema>;
 
 /** What one execution wants to record. The label is derived, never passed separately. */
 export type OutcomeClaim =
-  | { kind: 'ready'; rows: StoredRow[] }
+  | { kind: 'ready'; rows: StoredRow[]; trainingMonth: string | null }
   | { kind: 'no_match' }
   | { kind: 'failed'; stage: string; message: string | null };
 
@@ -131,7 +133,13 @@ function encodeDetail(claim: OutcomeClaim): string {
 
 function detailOf(claim: OutcomeClaim): StoredDetail {
   if (claim.kind === 'ready') {
-    return { v: 1, kind: 'ready', rows: claim.rows, failure: null };
+    return {
+      v: 1,
+      kind: 'ready',
+      rows: claim.rows,
+      trainingMonth: claim.trainingMonth,
+      failure: null,
+    };
   }
   if (claim.kind === 'no_match') {
     return { v: 1, kind: 'no_match', rows: [], failure: null };

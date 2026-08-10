@@ -45,7 +45,7 @@ function toClaim(result: RecommendationResult): OutcomeClaim {
     return { kind: 'failed', stage: result.failure.stage, message: result.failure.message };
   }
   return result.resultStatus === 'GEREED'
-    ? { kind: 'ready', rows: result.rows }
+    ? { kind: 'ready', rows: result.rows, trainingMonth: result.trainingMonth }
     : { kind: 'no_match' };
 }
 

@@ -86,6 +86,18 @@ export const storedRowSchema = z.object({
   totalCostCents: moneySchema,
 });
 
+/**
+ * Workload — legacy's "Opdrachten deze maand / dit jaar" — is deliberately NOT here.
+ *
+ * It is volatile: linking a trainer to a DIFFERENT Agenda item changes their load without
+ * touching this training's generation, so a count frozen into this row would keep being
+ * served, and sorted on, for up to twelve months with nothing to mark it stale. Immutable
+ * artifacts may only hold what was true at compute time and stays true.
+ *
+ * It is resolved at read time instead, from a short-lived shared index — see
+ * `assignment-cache.ts` and `toFullRow`.
+ */
+
 export type StoredRowTheme = z.infer<typeof storedRowThemeSchema>;
 export type StoredRow = z.infer<typeof storedRowSchema>;
 

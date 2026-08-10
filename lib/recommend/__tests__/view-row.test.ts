@@ -34,6 +34,7 @@ const qual = (
   conflicted: false,
 });
 
+
 describe('toStoredRows', () => {
   /**
    * The whole point of storing ids instead of names: a breach of the key/value store

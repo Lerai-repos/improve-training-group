@@ -42,6 +42,9 @@ export interface Row extends BaseRow {
   travelTimeCompensationCents?: number;
   clientTravelChargeCents?: number;
   totalCostCents?: number;
+  /** Legacy "Opdrachten deze maand / dit jaar" — the month/year of THIS training. */
+  assignmentsThisMonth?: number | null;
+  assignmentsThisYear?: number | null;
 }
 
 export type ViewState =

@@ -21,8 +21,8 @@ function renderTable(props: Partial<Parameters<typeof RecommendationTable>[0]> =
       names={NAMES}
       canViewFull
       canPlan
-      sortKey="rank"
-      onSort={noop}
+      sort={[{ key: 'rank', direction: 'asc' }]}
+      onSortChange={noop}
       onApproachedChange={noop}
       onPick={noop}
       picking={null}
@@ -57,10 +57,50 @@ describe('RecommendationTable', () => {
    * qualified trainer at the bottom of the column planners read as quality.
    */
   it('shows "geen cijfers" rather than a zero for an unevaluated trainer', () => {
-    renderTable({ rows: [row({ overallAverageDisplay: null })] });
+    renderTable({ rows: [row({ overallAverageDisplay: null, themeAvgScore: null })] });
 
-    expect(screen.getByText('geen cijfers')).toBeDefined();
+    // Both score columns — theme and overall — and neither may render a zero.
+    expect(screen.getAllByText('geen cijfers')).toHaveLength(2);
     expect(screen.queryByText('0,0')).toBeNull();
+  });
+
+  /**
+   * Legacy "Opdrachten deze maand / dit jaar" — how much the trainer already has on in
+   * the month and year of THIS training. A real 0 is meaningful (nothing booked) and
+   * must not render as the em dash that means "not recorded".
+   */
+  it('shows workload counts, with zero distinct from unknown', () => {
+    renderTable({
+      rows: [
+        row({ trainerItemId: '900', assignmentsThisMonth: 0, assignmentsThisYear: 31 }),
+        row({ trainerItemId: '901', rank: 2, assignmentsThisMonth: null, assignmentsThisYear: null }),
+      ],
+    });
+
+    const [busy, unknown] = screen.getAllByRole('row').slice(1);
+    expect(busy.textContent).toContain('31');
+    expect(within(busy).getAllByText('0').length).toBeGreaterThan(0);
+    expect(within(unknown).getAllByText('—').length).toBeGreaterThanOrEqual(2);
+  });
+
+  /** Counts are em-dashed when absent: "none recorded" is not "zero". */
+  it('em-dashes the evaluation counts until phase 3 fills them', () => {
+    renderTable({
+      rows: [row({ overallEvaluationCount: null, themes: [] })],
+    });
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+  });
+
+  /**
+   * Legacy Airtable's "Travel Profit Margin": what the client is charged for travel minus
+   * what the trainer's travel costs us. Both halves were already stored — nothing ever
+   * subtracted them.
+   */
+  it('shows the travel margin, derived from figures already in the row', () => {
+    renderTable({
+      rows: [row({ clientTravelChargeCents: 2_500, trainerTravelCostCents: 1_500 })],
+    });
+    expect(screen.getByText('€ 10')).toBeDefined();
   });
 
   it('shows a real average when there is one', () => {
@@ -79,7 +119,11 @@ describe('RecommendationTable', () => {
       const table = screen.getByRole('table');
       expect(within(table).queryByText('Totale kosten')).toBeNull();
       expect(within(table).queryByText('Uurtarief')).toBeNull();
-      expect(within(table).queryByText('Cijfer')).toBeNull();
+      expect(within(table).queryByText('Reismarge')).toBeNull();
+      expect(within(table).queryByText('Cijfer totaal')).toBeNull();
+      expect(within(table).queryByText('Keer gegeven')).toBeNull();
+      // Workload is internal planning data, so it stays out of the restricted payload.
+      expect(within(table).queryByText('Opdr. dit jaar')).toBeNull();
       // …while what a restricted caller DOES get is still there.
       expect(within(table).getByText('Reistijd (retour)')).toBeDefined();
       expect(within(table).getByText('Sanne de Vries')).toBeDefined();
@@ -192,6 +236,65 @@ describe('RecommendationTable', () => {
     });
   });
 
+  /**
+   * The chain has to be legible: with three levels active, an arrow on three columns
+   * says nothing about which is primary. The number carries the order, the arrow the
+   * direction.
+   */
+  it('shows the chain position once more than one column is sorting', async () => {
+    const onSortChange = vi.fn();
+    renderTable({
+      sort: [
+        { key: 'totalCostCents', direction: 'asc' },
+        { key: 'grade', direction: 'desc' },
+      ],
+      onSortChange,
+    });
+
+    expect(screen.getByRole('button', { name: /Totale kosten/ }).textContent).toContain('1');
+    expect(screen.getByRole('button', { name: /Cijfer totaal/ }).textContent).toContain('2');
+
+    // A single level needs no numbering — it would just be noise.
+    cleanup();
+    renderTable({ sort: [{ key: 'totalCostCents', direction: 'asc' }] });
+    expect(screen.getByRole('button', { name: /Totale kosten/ }).textContent).not.toContain('1');
+  });
+
+  it('reports the new chain when a header is clicked', async () => {
+    const onSortChange = vi.fn();
+    renderTable({ sort: [{ key: 'totalCostCents', direction: 'asc' }], onSortChange });
+
+    await userEvent.click(screen.getByRole('button', { name: /Cijfer totaal/ }));
+
+    expect(onSortChange).toHaveBeenCalledWith([
+      { key: 'grade', direction: 'desc' },
+      { key: 'totalCostCents', direction: 'asc' },
+    ]);
+  });
+
+  /** Every legacy column that has data today, and every one that will have it later. */
+  it('makes every column sortable', () => {
+    renderTable();
+    for (const label of [
+      /^#/,
+      /Trainer/,
+      /Cijfer thema/,
+      /Cijfer totaal/,
+      /Evals thema/,
+      /Evals totaal/,
+      /Keer gegeven/,
+      /Reistijd/,
+      /Uurtarief/,
+      /Reiskosten/,
+      /Reismarge/,
+      /Totale kosten/,
+      /Opdr. deze maand/,
+      /Opdr. dit jaar/,
+    ]) {
+      expect(screen.getByRole('button', { name: label })).toBeDefined();
+    }
+  });
+
   describe('sorting', () => {
     const rows = [
       row({ trainerItemId: '900', rank: 1, totalCostCents: 35_100, overallAverageDisplay: null }),
@@ -210,13 +313,13 @@ describe('RecommendationTable', () => {
     });
 
     it('sorts by total cost when asked', () => {
-      renderTable({ rows, sortKey: 'totalCostCents' });
+      renderTable({ rows, sort: [{ key: 'totalCostCents', direction: 'asc' }] });
       expect(names()).toEqual(['Joris Bakker', 'Sanne de Vries']);
     });
 
     /** "No grades" is unknown, not worst — it sorts last rather than as a zero. */
     it('puts trainers without grades last, not first', () => {
-      renderTable({ rows, sortKey: 'grade' });
+      renderTable({ rows, sort: [{ key: 'grade', direction: 'desc' }] });
       expect(names()).toEqual(['Joris Bakker', 'Sanne de Vries']);
     });
   });

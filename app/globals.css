@@ -188,6 +188,13 @@
     --muted-foreground: 237 8% 44%; /* #676879 */
     --border: 229 27% 86%; /* #D0D4E4 */
     --input: 229 27% 86%;
+    --primary: 211 100% 46%; /* #0073EA — Monday's action blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 18% 97%;
+    --secondary-foreground: 230 6% 21%;
+    --accent: 211 85% 95%; /* #E6F1FD — the selected-row tint */
+    --accent-foreground: 230 6% 21%;
+    --ring: 211 100% 46%;
   }
 
   .monday-surface.dark {
@@ -198,5 +205,12 @@
     --muted-foreground: 229 8% 62%; /* #9699A6 */
     --border: 234 17% 35%; /* #4B4E69 */
     --input: 234 17% 35%;
+    --primary: 211 100% 46%; /* #0073EA — same blue in both themes, as Monday does */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 236 24% 25%;
+    --secondary-foreground: 222 14% 86%;
+    --accent: 235 37% 21%; /* #22254A */
+    --accent-foreground: 222 14% 86%;
+    --ring: 211 100% 46%;
   }
 }

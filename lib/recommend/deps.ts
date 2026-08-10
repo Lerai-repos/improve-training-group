@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { parseAcknowledgements } from '@lib/monday';
 import {
+  AGENDA_2026_COLUMNS,
   agendaBoardId,
   ITEM_FIELDS,
   MONDAY_API_VERSION,
@@ -15,6 +16,8 @@ import ackJson from '../../docs/m2a/acknowledgements.json';
 import { createAddressFormatter } from './address';
 import { assertAddressHashKey } from './address-key';
 import { createApproachedStore } from './approached';
+import { readAgendaScan } from './assignments';
+import { createCachedAssignments } from './assignment-cache';
 import { capabilityPolicyFromEnv } from './capabilities';
 import { createItemBoardReader, type ItemBoardReader } from './item-board';
 import type { ViewDeps } from './recommendation-view';
@@ -50,6 +53,14 @@ function requireEnv(name: string): string {
 }
 
 const ACK_VERSION_LENGTH = 16;
+
+/**
+ * How long a workload scan may take before the view gives up on it and renders `—`.
+ *
+ * Deliberately short: the list itself comes from Redis in milliseconds, and two extra
+ * columns are not worth making a planner wait.
+ */
+const WORKLOAD_DEADLINE_MS = 6_000;
 
 // Static-import the acknowledgements so Vercel's file tracing bundles them into
 // EVERY function that imports these deps (webhook + cron) — a runtime fs read is
@@ -230,7 +241,52 @@ export function buildViewDeps(): {
 
   return {
     auth: { session: sessionTokenConfigFromEnv(), policy: capabilityPolicyFromEnv() },
-    view: { queue: store, outcomes, approached },
+    view: {
+      queue: store,
+      outcomes,
+      approached,
+      /**
+       * Lazy Monday client on purpose: the workload scan is the ONLY part of a read that
+       * touches Monday, and it degrades to `—` rather than failing the view. Building the
+       * client eagerly would put a missing token back on the critical read path.
+       */
+      assignments: createCachedAssignments({
+        kv,
+        boardId: board,
+        load: () => {
+          /**
+           * Captured ONCE, here — not recomputed per check.
+           *
+           * `deadlineMs` is a callback the client consults on every attempt, so
+           * `() => Date.now() + 6_000` grants a fresh six seconds each time and an
+           * outage burns the full retry budget instead of degrading. An absolute
+           * timestamp is a deadline; a relative one is a renewal.
+           */
+          const deadline = Date.now() + WORKLOAD_DEADLINE_MS;
+          return readAgendaScan(
+            createMondayGraphQLClient({
+              token: requireEnv('MONDAY_API_TOKEN'),
+              apiVersion: MONDAY_API_VERSION,
+              /**
+               * Its OWN short deadline, not the worker's.
+               *
+               * `currentDeadlineMs` is null outside a run context, and the client then
+               * spends five 30-second attempts before giving up — so during a Monday
+               * outage the whole GET would time out long before `resolveWorkload` could
+               * degrade to dashes. Workload is the one part of a read that is allowed to
+               * be missing; it must fail fast enough for that to mean anything.
+               */
+              deadlineMs: () => deadline,
+            }),
+            {
+              boardId: board,
+              dateColumnId: AGENDA_2026_COLUMNS.datum,
+              trainerColumnId: AGENDA_2026_COLUMNS.trainerRelation,
+            }
+          );
+        },
+      }),
+    },
     recalculate: () => ({
       queue: createRunQueue(store, buildPublisher()),
       boards: boards(),

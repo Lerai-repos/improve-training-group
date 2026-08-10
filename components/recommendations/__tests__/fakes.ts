@@ -76,6 +76,8 @@ export function row(overrides: Partial<Row> = {}): Row {
     totalCostCents: 35_100,
     themes: [],
     themeAvgScore: null,
+    assignmentsThisMonth: 0,
+    assignmentsThisYear: 0,
     ...overrides,
   };
 }

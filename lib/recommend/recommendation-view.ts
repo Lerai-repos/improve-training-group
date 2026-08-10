@@ -3,7 +3,11 @@ import type { Capabilities } from './capabilities';
 import type { StatusLabel } from './delivery';
 import type { OutcomeStore } from './outcome';
 import type { QueueStore } from './queue-store';
-import { toPublicRows, type PublicRow } from './view-dto';
+import { log } from '@lib/logger';
+
+import { countsFor } from './assignments';
+import { toPublicRows, type PublicRow, type WorkloadLookup } from './view-dto';
+import type { CachedAssignments } from './assignment-cache';
 
 /**
  * What the item view is looking at right now.
@@ -57,6 +61,15 @@ export interface ViewDeps {
   queue: Pick<QueueStore, 'readGeneration'>;
   outcomes: Pick<OutcomeStore, 'read' | 'readDetail' | 'readCompletedGeneration'>;
   approached: ApproachedStore;
+  /**
+   * Current workload, resolved HERE rather than stored with the rows.
+   *
+   * Optional, and a failure is swallowed into `null` counts: the scan fails closed on
+   * malformed Monday data (as it must — an empty index is indistinguishable from "nobody
+   * is busy"), but that must not take down a list that is otherwise perfectly readable
+   * from Redis. The columns render `—`, which already means "not recorded".
+   */
+  assignments?: CachedAssignments;
 }
 
 export function viewCapabilities(caps: Capabilities): ViewCapabilities {
@@ -166,5 +179,54 @@ async function resolveState(
     detail.rows.map((row) => row.trainerItemId)
   );
 
-  return { kind: 'ready', generation, rows: toPublicRows(detail.rows, marked, caps) };
+  const workload = await resolveWorkload(deps, mondayItemId, detail.trainingMonth, caps);
+
+  return { kind: 'ready', generation, rows: toPublicRows(detail.rows, marked, caps, workload) };
+}
+
+/**
+ * Current workload per trainer, or a lookup that answers `null` for everyone.
+ *
+ * Only for `full` callers — the restricted shape has no workload columns, so a restricted
+ * planner's page view must not trigger a board scan on their behalf.
+ */
+async function resolveWorkload(
+  deps: ViewDeps,
+  mondayItemId: string,
+  storedMonth: string | null,
+  caps: Capabilities
+): Promise<WorkloadLookup> {
+  const none: WorkloadLookup = () => null;
+  if (!caps.full || deps.assignments === undefined) {
+    return none;
+  }
+  try {
+    const scan = await deps.assignments.read();
+    /**
+     * The training's CURRENT month, from the same scan — not the one stored with the
+     * rows. Rescheduling from September to October does not advance the generation, so a
+     * frozen month would keep counting October's trainers against September. The stored
+     * month is only a fallback for an item the scan did not cover.
+     */
+    /**
+     * Three cases, and only one of them may fall back.
+     *
+     * Scanned with a date → use it. Scanned WITHOUT one (the planner cleared it) → we
+     * know there is no month, so the answer is unknown, not the stale one the rows were
+     * computed with. Not scanned at all (deleted, moved, or outside the board) → the
+     * stored month is the best we have.
+     */
+    const scanned = scan.monthByItemId.has(mondayItemId);
+    const month = scanned ? scan.monthByItemId.get(mondayItemId) : storedMonth;
+    if (month === null || month === undefined) {
+      return none;
+    }
+    return (trainerItemId) => countsFor(scan.workload, trainerItemId, month);
+  } catch (error) {
+    // Degrade, never zero: the list is still correct and worth showing.
+    log.warn('recommendations: workload unavailable, rendering it as unknown', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return none;
+  }
 }

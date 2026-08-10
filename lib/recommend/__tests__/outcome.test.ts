@@ -6,7 +6,7 @@ import { storedRow } from './stored-row.fixture';
 
 const ITEM = '5029726254';
 
-const READY: OutcomeClaim = { kind: 'ready', rows: [storedRow()] };
+const READY: OutcomeClaim = { kind: 'ready', rows: [storedRow()], trainingMonth: null };
 const NO_MATCH: OutcomeClaim = { kind: 'no_match' };
 const FAILED: OutcomeClaim = { kind: 'failed', stage: 'travel', message: 'unreachable' };
 
@@ -238,7 +238,7 @@ describe('createOutcomeStore', () => {
     }
 
     it('leaves all three keys absent when the rows are malformed', async () => {
-      expect(await keysAfter({ kind: 'ready', rows: [storedRow({ totalCostCents: NaN })] })).toEqual(
+      expect(await keysAfter({ kind: 'ready', rows: [storedRow({ totalCostCents: NaN })], trainingMonth: null })).toEqual(
         []
       );
     });
@@ -252,14 +252,14 @@ describe('createOutcomeStore', () => {
      * rows would store an artifact contradicting the very label it is stored beside.
      */
     it('leaves all three keys absent for a ready claim with no rows', async () => {
-      expect(await keysAfter({ kind: 'ready', rows: [] })).toEqual([]);
+      expect(await keysAfter({ kind: 'ready', rows: [], trainingMonth: null })).toEqual([]);
     });
 
     it('does not disturb an outcome already claimed for another generation', async () => {
       const store = createOutcomeStore(createMemoryKvStore());
       await store.claim(ITEM, 1, READY);
 
-      await expect(store.claim(ITEM, 2, { kind: 'ready', rows: [] })).rejects.toThrow();
+      await expect(store.claim(ITEM, 2, { kind: 'ready', rows: [], trainingMonth: null })).rejects.toThrow();
 
       expect(await store.read(ITEM, 1)).toBe('GEREED');
       expect(await store.readCompletedGeneration(ITEM)).toBe(1);

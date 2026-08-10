@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createApproachedStore } from '../approached';
+import { staticAssignments } from '../assignment-cache';
+import { buildAssignmentIndex } from '../assignments';
 import { NO_CAPABILITIES, type Capabilities } from '../capabilities';
 import { createMemoryKvStore } from '../kv';
 import { createOutcomeStore, ROWS_TTL_MS } from '../outcome';
@@ -56,6 +58,7 @@ describe('resolveView', () => {
     await bump(h);
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
+      trainingMonth: null,
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
     });
 
@@ -106,7 +109,7 @@ describe('resolveView', () => {
       let now = 1_000;
       const h = harness(() => now);
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
 
       now += ROWS_TTL_MS + 1;
 
@@ -133,7 +136,7 @@ describe('resolveView', () => {
     it('does not report an older generation’s answer for a newer generation', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
       await bump(h); // a recalculate: generation 2, nothing stored yet
 
       expect((await resolveView(h.deps, ITEM, FULL)).state).toEqual({
@@ -166,7 +169,7 @@ describe('resolveView', () => {
 
     it('does not return the superseded generation as ready', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
 
       // Read generation 1, resolve its rows, then discover the current one is 2.
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 2]) };
@@ -179,9 +182,10 @@ describe('resolveView', () => {
 
     it('re-resolves against the new generation rather than giving up', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
       await h.outcomes.claim(ITEM, 2, {
         kind: 'ready',
+        trainingMonth: null,
         rows: [storedRow({ trainerItemId: 'newer' })],
       });
 
@@ -199,11 +203,179 @@ describe('resolveView', () => {
      */
     it('gives up after a few attempts and reports computing', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
 
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 3, 4, 5, 6, 7, 8, 9]) };
 
       expect((await resolveView(deps, ITEM, FULL)).state).toMatchObject({ kind: 'computing' });
+    });
+  });
+
+  /**
+   * Workload is resolved live, not stored: booking a trainer on a DIFFERENT training
+   * changes their load without advancing this generation, so a persisted count would be
+   * served for up to twelve months with nothing to mark it stale.
+   */
+  describe('workload, resolved at read time', () => {
+    const busy = staticAssignments([
+      { itemId: 'i1275', date: '2026-09-01', trainerItemIds: ['t1'] },
+      { itemId: 'i7107', date: '2026-09-20', trainerItemIds: ['t1'] },
+      { itemId: 'i5735', date: '2026-11-02', trainerItemIds: ['t1'] },
+    ]);
+
+    async function readyList(h: ReturnType<typeof harness>) {
+      await bump(h);
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        trainingMonth: '2026-09',
+        rows: [storedRow({ trainerItemId: 't1' })],
+      });
+    }
+
+    it('counts the training’s month and year, live', async () => {
+      const h = harness();
+      await readyList(h);
+
+      const { state } = await resolveView({ ...h.deps, assignments: busy }, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        assignmentsThisMonth: 2,
+        assignmentsThisYear: 3,
+      });
+    });
+
+    /**
+     * The whole reason it is not stored: nothing about this training changed, yet the
+     * numbers must. A frozen count could not do this.
+     */
+    it('reflects a booking made elsewhere, without a recalculate', async () => {
+      const h = harness();
+      await readyList(h);
+
+      const before = await resolveView({ ...h.deps, assignments: busy }, ITEM, FULL);
+      const after = await resolveView(
+        {
+          ...h.deps,
+          assignments: staticAssignments([
+            { itemId: 'i1275', date: '2026-09-01', trainerItemIds: ['t1'] },
+            { itemId: 'i7107', date: '2026-09-20', trainerItemIds: ['t1'] },
+            { itemId: 'i5735', date: '2026-11-02', trainerItemIds: ['t1'] },
+            { itemId: 'i7699', date: '2026-09-28', trainerItemIds: ['t1'] },
+          ]),
+        },
+        ITEM,
+        FULL
+      );
+
+      expect(before.state.kind === 'ready' && before.state.rows[0]).toMatchObject({
+        assignmentsThisMonth: 2,
+      });
+      expect(after.state.kind === 'ready' && after.state.rows[0]).toMatchObject({
+        assignmentsThisMonth: 3,
+      });
+    });
+
+    /**
+     * Degrade to null, NEVER to 0. The scan fails closed on malformed Monday data, but
+     * that must not take down a list that reads perfectly well from Redis — and a 0
+     * would be indistinguishable from a genuinely quiet month.
+     */
+    it('renders unknown rather than zero when the scan fails', async () => {
+      const h = harness();
+      await readyList(h);
+
+      const { state } = await resolveView(
+        { ...h.deps, assignments: { read: () => Promise.reject(new Error('Monday down')) } },
+        ITEM,
+        FULL
+      );
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        assignmentsThisMonth: null,
+        assignmentsThisYear: null,
+      });
+    });
+
+    /**
+     * Clearing a training's date does not advance its generation, so falling back to the
+     * month stored with the rows would keep counting against a month this training is no
+     * longer in. Scanned-and-undated is KNOWN to have no month; only an item the scan
+     * never saw may fall back.
+     */
+    it('reports unknown when the date has since been cleared', async () => {
+      const h = harness();
+      await readyList(h);
+
+      const { state } = await resolveView(
+        {
+          ...h.deps,
+          assignments: {
+            read: () =>
+              Promise.resolve({
+                workload: buildAssignmentIndex([
+                  { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
+                ]),
+                // Scanned, and it has no date any more.
+                monthByItemId: new Map([[ITEM, null]]),
+              }),
+          },
+        },
+        ITEM,
+        FULL
+      );
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        assignmentsThisMonth: null,
+        assignmentsThisYear: null,
+      });
+    });
+
+    /** An item the scan never saw still falls back to what the rows recorded. */
+    it('falls back to the stored month for an item outside the scan', async () => {
+      const h = harness();
+      await readyList(h);
+
+      const { state } = await resolveView(
+        {
+          ...h.deps,
+          assignments: {
+            read: () =>
+              Promise.resolve({
+                workload: buildAssignmentIndex([
+                  { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
+                ]),
+                monthByItemId: new Map(),
+              }),
+          },
+        },
+        ITEM,
+        FULL
+      );
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({ assignmentsThisMonth: 1 });
+    });
+
+    /** A restricted caller has no workload columns, so their page view must not scan. */
+    it('does not scan for a caller who cannot see the columns', async () => {
+      const h = harness();
+      await readyList(h);
+      let scans = 0;
+
+      await resolveView(
+        {
+          ...h.deps,
+          assignments: {
+            read: () => {
+              scans += 1;
+              return Promise.resolve({ workload: new Map(), monthByItemId: new Map() });
+            },
+          },
+        },
+        ITEM,
+        RESTRICTED
+      );
+
+      expect(scans).toBe(0);
     });
   });
 
@@ -213,6 +385,7 @@ describe('resolveView', () => {
       await bump(h);
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
+        trainingMonth: null,
         rows: [
           storedRow({ trainerItemId: 't1', rank: 1 }),
           storedRow({ trainerItemId: 't2', rank: 2 }),
@@ -239,7 +412,7 @@ describe('resolveView', () => {
     it('does not carry marks across a recalculate', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow({ trainerItemId: 't1' })] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null });
       await h.approached.write({
         mondayItemId: ITEM,
         generation: 1,
@@ -249,7 +422,7 @@ describe('resolveView', () => {
       });
 
       await bump(h);
-      await h.outcomes.claim(ITEM, 2, { kind: 'ready', rows: [storedRow({ trainerItemId: 't1' })] });
+      await h.outcomes.claim(ITEM, 2, { kind: 'ready', rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null });
 
       const { state } = await resolveView(h.deps, ITEM, FULL);
 
@@ -261,7 +434,7 @@ describe('resolveView', () => {
     it('gives a full caller the money, and a restricted one none of it', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
 
       const full = await resolveView(h.deps, ITEM, FULL);
       const restricted = await resolveView(h.deps, ITEM, RESTRICTED);

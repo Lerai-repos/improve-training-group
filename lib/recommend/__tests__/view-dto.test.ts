@@ -19,6 +19,9 @@ describe('the public row shapes', () => {
   it('pins the persisted field set, so a new one must be decided about', () => {
     expect(Object.keys(storedRow()).sort()).toEqual(
       [
+        // NOTE: workload ("Opdrachten deze maand / dit jaar") is deliberately NOT here.
+        // It is volatile — booking a trainer elsewhere changes it without advancing this
+        // generation — so it is resolved at read time and enriched onto FullRow instead.
         'billableHours',
         'clientTravelChargeCents',
         'hourlyRateCents',

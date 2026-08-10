@@ -15,6 +15,7 @@ import { priceTrainer, rankTrainers, type PricingContext } from './pricing';
 import { computeScores } from './scores';
 import type { TravelProvider } from './travel';
 import { resolveTravel, type TravelCache } from './travel-resolve';
+import { monthKeyOf } from './assignments';
 import { toStoredRows, type StoredRow } from './view-row';
 import type {
   CandidateTrainer,
@@ -115,6 +116,8 @@ export type RecommendationResult =
   | ({
       ok: true;
       resultStatus: 'GEREED' | 'GEEN MATCH';
+      /** The training's own month (`YYYY-MM`), for read-time workload counts. */
+      trainingMonth: string | null;
       recommendations: RankedRecommendation[];
       /**
        * The same list as `recommendations`, shaped for persistence and the item view:
@@ -385,6 +388,14 @@ export async function runRecommendation(
       resultStatus: ranked.length > 0 ? 'GEREED' : 'GEEN MATCH',
       recommendations: ranked,
       rows: toStoredRows(ranked, effective, live.themeExternalIds),
+      /**
+       * The training's own month, stored ONCE for the whole list rather than per row.
+       *
+       * Workload counts are resolved live at read time and need to know which month to
+       * count. Unlike the counts themselves this is a property of the training, not of
+       * the world around it, so it belongs in the immutable artifact.
+       */
+      trainingMonth: monthKeyOf(live.datum),
       artifact,
       artifactHash: hashArtifact(artifact),
       counts: {

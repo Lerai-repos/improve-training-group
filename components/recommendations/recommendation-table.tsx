@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Loader2 } from 'lucide-react';
 
 import { Button } from '@components/ui/button';
 import { Checkbox } from '@components/ui/checkbox';
@@ -15,6 +15,15 @@ import {
 import { cn } from '@lib/utils';
 
 import { duration, euros, grade } from './format';
+import {
+  applySort,
+  levelOf,
+  sortRows,
+  sumThemes,
+  travelMarginCents,
+  type SortKey,
+  type SortLevel,
+} from './sorting';
 
 import type { Row } from './types';
 
@@ -31,15 +40,14 @@ import type { Row } from './types';
  * generation.
  */
 
-export type SortKey = 'rank' | 'totalCostCents' | 'roundTripDurationMinutes' | 'grade';
-
 interface RecommendationTableProps {
   rows: Row[];
   names: ReadonlyMap<string, string>;
   canViewFull: boolean;
   canPlan: boolean;
-  sortKey: SortKey;
-  onSort: (key: SortKey) => void;
+  /** The sort chain, primary first. Clicking a header rebuilds it. */
+  sort: readonly SortLevel[];
+  onSortChange: (levels: SortLevel[]) => void;
   onApproachedChange: (trainerItemId: string, approached: boolean) => void;
   /** Link this trainer to the training. Written client-side, as the planner. */
   onPick: (trainerItemId: string) => void;
@@ -61,27 +69,13 @@ interface RecommendationTableProps {
   stale: boolean;
 }
 
-function sortValue(row: Row, key: SortKey): number {
-  switch (key) {
-    case 'totalCostCents':
-      return row.totalCostCents ?? Number.POSITIVE_INFINITY;
-    case 'roundTripDurationMinutes':
-      return row.roundTripDurationMinutes;
-    case 'grade':
-      // No grades sorts LAST rather than as a zero: "unknown" is not "worst".
-      return -(row.overallAverageDisplay ?? Number.NEGATIVE_INFINITY);
-    default:
-      return row.rank;
-  }
-}
-
 export const RecommendationTable = ({
   rows,
   names,
   canViewFull,
   canPlan,
-  sortKey,
-  onSort,
+  sort,
+  onSortChange,
   onApproachedChange,
   onPick,
   picking,
@@ -90,30 +84,82 @@ export const RecommendationTable = ({
   busy,
   stale,
 }: RecommendationTableProps) => {
-  const sorted = [...rows].sort((a, b) => sortValue(a, sortKey) - sortValue(b, sortKey));
+  const sorted = sortRows(rows, sort, names);
+  const handleSort = (key: SortKey): void => {
+    onSortChange(applySort(sort, key));
+  };
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableHead sortKey="rank" active={sortKey} onSort={onSort}>
+          <SortableHead sortKey="rank" sort={sort} onSort={handleSort}>
             #
           </SortableHead>
-          <TableHead>Trainer</TableHead>
+          <SortableHead sortKey="trainer" sort={sort} onSort={handleSort}>
+            Trainer
+          </SortableHead>
           {canViewFull && (
-            <SortableHead sortKey="grade" active={sortKey} onSort={onSort}>
-              Cijfer
-            </SortableHead>
+            <>
+              <SortableHead sortKey="themeAvgScore" sort={sort} onSort={handleSort}>
+                Cijfer thema
+              </SortableHead>
+              <SortableHead sortKey="grade" sort={sort} onSort={handleSort}>
+                Cijfer totaal
+              </SortableHead>
+              <SortableHead sortKey="themeEvalCount" sort={sort} onSort={handleSort} align="right">
+                Evals thema
+              </SortableHead>
+              <SortableHead sortKey="totalEvalCount" sort={sort} onSort={handleSort} align="right">
+                Evals totaal
+              </SortableHead>
+              <SortableHead sortKey="timesTaught" sort={sort} onSort={handleSort} align="right">
+                Keer gegeven
+              </SortableHead>
+            </>
           )}
-          <SortableHead sortKey="roundTripDurationMinutes" active={sortKey} onSort={onSort}>
+          <SortableHead sortKey="roundTripDurationMinutes" sort={sort} onSort={handleSort}>
             Reistijd (retour)
           </SortableHead>
           {canViewFull && (
             <>
-              <TableHead className="text-right">Uurtarief</TableHead>
-              <TableHead className="text-right">Reiskosten</TableHead>
-              <SortableHead sortKey="totalCostCents" active={sortKey} onSort={onSort} align="right">
+              <SortableHead sortKey="hourlyRateCents" sort={sort} onSort={handleSort} align="right">
+                Uurtarief
+              </SortableHead>
+              <SortableHead
+                sortKey="trainerTravelCostCents"
+                sort={sort}
+                onSort={handleSort}
+                align="right"
+              >
+                Reiskosten
+              </SortableHead>
+              <SortableHead
+                sortKey="travelMarginCents"
+                sort={sort}
+                onSort={handleSort}
+                align="right"
+              >
+                Reismarge
+              </SortableHead>
+              <SortableHead sortKey="totalCostCents" sort={sort} onSort={handleSort} align="right">
                 Totale kosten
+              </SortableHead>
+              <SortableHead
+                sortKey="assignmentsThisMonth"
+                sort={sort}
+                onSort={handleSort}
+                align="right"
+              >
+                Opdr. deze maand
+              </SortableHead>
+              <SortableHead
+                sortKey="assignmentsThisYear"
+                sort={sort}
+                onSort={handleSort}
+                align="right"
+              >
+                Opdr. dit jaar
               </SortableHead>
             </>
           )}
@@ -145,34 +191,93 @@ export const RecommendationTable = ({
 
 interface SortableHeadProps {
   sortKey: SortKey;
-  active: SortKey;
+  sort: readonly SortLevel[];
   onSort: (key: SortKey) => void;
   align?: 'right';
   children: React.ReactNode;
 }
 
-const SortableHead = ({ sortKey, active, onSort, align, children }: SortableHeadProps) => {
+/**
+ * A header that shows its place in the chain, not just that it is "the" sort.
+ *
+ * With three levels active the planner has to be able to see WHICH is primary — an arrow
+ * alone on three columns says nothing about their order, so the position number carries
+ * that and the arrow carries direction.
+ */
+const SortableHead = ({ sortKey, sort, onSort, align, children }: SortableHeadProps) => {
   const handleClick = (): void => {
     onSort(sortKey);
   };
 
-  // `aria-sort` belongs on the column header, not on the control inside it: the button
-  // role does not support the attribute, so a screen reader would ignore it there.
+  const position = levelOf(sort, sortKey);
+  const level = position === null ? null : sort[position - 1];
+  const Arrow = level?.direction === 'desc' ? ArrowDown : ArrowUp;
+
+  // `aria-sort` belongs on the column header rather than the button inside it (the
+  // button role does not support it) — and on the PRIMARY column only. The attribute
+  // names *the* sorted column, so marking all three of a chain tells assistive tech
+  // there are three current sorts, which is worse than saying nothing. The secondary and
+  // tertiary levels are announced as text instead.
+  const isPrimary = position === 1;
   return (
     <TableHead
-      aria-sort={active === sortKey ? 'ascending' : 'none'}
+      aria-sort={
+        !isPrimary || level === null
+          ? 'none'
+          : level.direction === 'asc'
+            ? 'ascending'
+            : 'descending'
+      }
       className={cn(align === 'right' && 'text-right')}
     >
       <button
         type="button"
         onClick={handleClick}
-        className={cn('hover:underline', active === sortKey && 'font-semibold text-primary')}
+        className={cn(
+          'inline-flex items-center gap-1 hover:underline',
+          // NOT `text-primary`: #0073EA on Monday's #191B32 is 3.73:1, under the 4.5:1
+          // normal-text minimum. The button keeps the action blue; small text gets a
+          // lighter one.
+          position !== null && 'font-semibold text-[#0073EA] dark:text-[#77B8F5]'
+        )}
       >
         {children}
+        {level !== null && <Arrow className="size-3" aria-hidden />}
+        {/* Only worth showing once more than one level is in play. */}
+        {position !== null && sort.length > 1 && (
+          <span className="text-[10px] font-normal tabular-nums" aria-hidden>
+            {position}
+          </span>
+        )}
+        {position !== null && !isPrimary && (
+          <span className="sr-only">
+            , sorteerniveau {position}, {level?.direction === 'asc' ? 'oplopend' : 'aflopend'}
+          </span>
+        )}
       </button>
     </TableHead>
   );
 };
+
+/**
+ * A score, or "geen cijfers" — never a zero.
+ *
+ * The distinction this whole display layer exists for: an unevaluated trainer is unknown,
+ * not bad, and rendering `0,0` would put them at the bottom of a column planners read as
+ * quality.
+ */
+const ScoreCell = ({ value }: { value: number | null }) => (
+  <TableCell className={cn(value === null && 'text-muted-foreground italic')}>
+    {grade(value)}
+  </TableCell>
+);
+
+/** A count, or an em dash. "None recorded" and "zero" are different facts. */
+const CountCell = ({ value }: { value: number | null }) => (
+  <TableCell className={cn('text-right', value === null && 'text-muted-foreground')}>
+    {value ?? '—'}
+  </TableCell>
+);
 
 interface TrainerRowProps {
   row: Row;
@@ -213,7 +318,9 @@ const TrainerRow = ({
 
   return (
     <TableRow
-      className={cn(row.approached && 'text-muted-foreground', linked && 'bg-primary-lighter')}
+      // `bg-accent`, not `bg-primary-lighter` — the latter is a CSS variable this project
+      // never registered with Tailwind, so it silently rendered nothing.
+      className={cn(row.approached && 'text-muted-foreground', linked && 'bg-accent')}
     >
       <TableCell>{row.rank}</TableCell>
       <TableCell>
@@ -222,7 +329,7 @@ const TrainerRow = ({
           {name ?? <span className="text-muted-foreground">#{row.trainerItemId}</span>}
           {linked && (
             <span
-              className="flex items-center gap-1 text-xs font-medium text-primary"
+              className="flex items-center gap-1 text-xs font-medium text-[#0073EA] dark:text-[#77B8F5]"
               title="Deze trainer is aan de training gekoppeld"
             >
               <Check className="size-3" />
@@ -232,18 +339,23 @@ const TrainerRow = ({
         </span>
       </TableCell>
       {canViewFull && (
-        <TableCell
-          className={cn(row.overallAverageDisplay === null && 'text-muted-foreground italic')}
-        >
-          {grade(row.overallAverageDisplay)}
-        </TableCell>
+        <>
+          <ScoreCell value={row.themeAvgScore ?? null} />
+          <ScoreCell value={row.overallAverageDisplay ?? null} />
+          <CountCell value={sumThemes(row, 'evaluationCount')} />
+          <CountCell value={row.overallEvaluationCount ?? null} />
+          <CountCell value={sumThemes(row, 'timesTaught')} />
+        </>
       )}
       <TableCell>{duration(row.roundTripDurationMinutes)}</TableCell>
       {canViewFull && (
         <>
           <TableCell className="text-right">{euros(row.hourlyRateCents)}</TableCell>
           <TableCell className="text-right">{euros(row.trainerTravelCostCents)}</TableCell>
+          <TableCell className="text-right">{euros(travelMarginCents(row) ?? undefined)}</TableCell>
           <TableCell className="text-right font-medium">{euros(row.totalCostCents)}</TableCell>
+          <CountCell value={row.assignmentsThisMonth ?? null} />
+          <CountCell value={row.assignmentsThisYear ?? null} />
         </>
       )}
       <TableCell className="text-center">
@@ -261,7 +373,9 @@ const TrainerRow = ({
               what actually decides whether it lands. */}
           <Button
             size="sm"
-            variant={linked ? 'ghost' : 'secondary'}
+            // The primary action on the row, so it gets Monday's action blue rather than
+            // the near-black `secondary` our own dark palette resolves to.
+            variant={linked ? 'ghost' : 'default'}
             onClick={handlePick}
             // `busy` covers a recalculate running alongside: it can advance the
             // generation between a pick's before- and after-checks, so both pass while

@@ -48,7 +48,7 @@ describe('handleFailureCallback', () => {
   it('re-delivers a stored GEREED rather than replacing it with FOUT', async () => {
     const h = harness();
     await generationAt(h.store, 1);
-    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
+    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
 
     const result = await handleFailureCallback(h.deps, callback);
 
@@ -90,6 +90,7 @@ describe('handleFailureCallback', () => {
     await h.deps.outcomes.claim(ITEM, 1, {
       kind: 'ready',
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
+      trainingMonth: null,
     });
 
     await handleFailureCallback(h.deps, callback);
