@@ -34,7 +34,8 @@
     "recommend:enqueue": "tsx scripts/recommend-enqueue.ts",
     "recommend:parity": "tsx scripts/recommend-parity.ts",
     "replay:verify": "tsx scripts/replay-verify.ts",
-    "parity": "tsx scripts/parity-check.ts"
+    "parity": "tsx scripts/parity-check.ts",
+    "view:smoke": "tsx scripts/view-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",

@@ -166,3 +166,37 @@
 .suggestion-highlight {
   @apply bg-blue-200 hover:bg-blue-300 dark:bg-blue-500/40 dark:text-blue-50 dark:hover:bg-blue-400/50;
 }
+
+/**
+ * The Monday item view lives inside someone else's chrome.
+ *
+ * Our own dark palette is near-black (`240 10% 3.9%`), which reads as a hole punched in
+ * a Monday workspace — theirs is #191B32, a desaturated navy. So the iframe overrides the
+ * shadcn tokens with Monday's own surface colours rather than our brand ones: inside this
+ * container `bg-background`, `text-foreground` and the rest resolve to what the host uses,
+ * and every child follows without knowing anything about it.
+ *
+ * Scoped to the container on purpose — see `recommendations-view.tsx`. Nothing here
+ * touches the document root or the shared `next-themes` preference.
+ */
+@layer base {
+  .monday-surface {
+    --background: 0 0% 100%; /* #FFFFFF */
+    --foreground: 230 6% 21%; /* #323338 */
+    --card: 220 18% 97%; /* #F5F6F8 */
+    --muted: 220 18% 97%;
+    --muted-foreground: 237 8% 44%; /* #676879 */
+    --border: 229 27% 86%; /* #D0D4E4 */
+    --input: 229 27% 86%;
+  }
+
+  .monday-surface.dark {
+    --background: 235 33% 15%; /* #191B32 — Monday's dark canvas */
+    --foreground: 222 14% 86%; /* #D5D8DF */
+    --card: 236 24% 25%; /* #30324E */
+    --muted: 236 24% 25%;
+    --muted-foreground: 229 8% 62%; /* #9699A6 */
+    --border: 234 17% 35%; /* #4B4E69 */
+    --input: 234 17% 35%;
+  }
+}

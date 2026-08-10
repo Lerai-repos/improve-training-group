@@ -50,21 +50,6 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
     setSortKey(null);
   }, [view.itemId, caps?.canViewFull]);
 
-  /**
-   * Monday's theme, applied to THIS container only.
-   *
-   * Not through `next-themes`. That provider's preference is shared across the whole
-   * origin and persisted to local storage, so setting it here would rewrite the user's
-   * theme for every other tab while the iframe is open — and a storage event from one of
-   * those tabs could flip the iframe back mid-session. Restoring on unmount does not
-   * help: the write has already happened, and the restore can clobber a newer choice
-   * made elsewhere.
-   *
-   * `darkMode: ['class']` matches the class on any ancestor, so a `dark` class on this
-   * wrapper themes everything inside it and nothing outside. `bg-background` and
-   * `text-foreground` are set here too, because the page background is owned by the root
-   * element we are deliberately not touching.
-   */
   const linkedIds = view.linked.kind === 'ready' ? view.linked.trainerItemIds : [];
 
   /**
@@ -87,8 +72,18 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
 
   return (
     <div
+      /* Monday's theme, applied to THIS container only.
+       *
+       * `monday-surface` re-points the shadcn tokens at Monday's own palette (#191B32
+       * dark, #FFFFFF light) — our own dark is near-black and reads as a hole punched in
+       * their workspace. `darkMode: ['class']` matches an ancestor, so the `dark` class
+       * here themes everything inside and nothing outside.
+       *
+       * Deliberately NOT via `next-themes`: that preference is shared across the origin
+       * and persisted, so setting it would rewrite the user's theme in every other tab,
+       * and a storage event from one of those could flip the iframe back mid-session. */
       className={cn(
-        'flex min-h-screen flex-col gap-4 bg-background p-4 text-foreground',
+        'monday-surface flex min-h-screen flex-col gap-4 bg-background p-4 text-foreground',
         view.theme === 'dark' && 'dark'
       )}
     >
