@@ -83,10 +83,49 @@ QStash observes, not what a timed-out function keeps doing. A stale write is the
 > advisory lock released at commit, **before** the Monday HTTP call. What made that
 > design safe was detect-and-repair, and that is what we ported.
 
-**One immutable outcome per (training, generation).** Compute is not idempotent — it
-reads live data and calls paid providers — so every retry, repair and DLQ replay
-delivers the *recorded* label instead of recomputing. Outcomes have **no expiry**: DLQ
-retention is plan-dependent and can outlive any TTL we would pick.
+**One immutable outcome per (training, generation), in three keys.** Compute is not
+idempotent — it reads live data and calls paid providers — so every retry, repair and DLQ
+replay delivers the *recorded* answer instead of recomputing.
+
+| key | contents | expiry |
+|---|---|---|
+| `result:<item>:<gen>` | the label | **none** |
+| `rows:<item>:<gen>` | the ranked list, or the failure stage | **12 months** |
+| `completed-gen:<item>` | highest generation that produced a label | none |
+
+The **label** never expires. The pending sweep retries a stuck trigger indefinitely
+(§3 above), so the replay horizon is unbounded — not the DLQ's 30-day/3-month retention.
+A label that lapsed would let a recovered repair recompute an already-delivered answer.
+
+The **rows** do expire: they are performance and rate data about identifiable trainers,
+so keeping them forever should be a decision, not a side effect. Twelve months is 4× the
+longest DLQ tier.
+
+All three are written by **one Lua script** (`outcome.ts`). Two calls could crash in
+between, and `runJob` short-circuits on the label, so the missing rows would never be
+repaired — a delivered answer whose list was silently lost. `createOutcomeStore` keeps a
+TypeScript twin of the same rules for the in-memory tests, exactly as `queue-store.ts`
+does; production must use `createUpstashOutcomeStore`.
+
+The **watermark** is what stops an expired list from reading as "still computing":
+generation `G` with no label is `computing` when the watermark is `< G`, `unavailable`
+when `>= G`. One integer per training, so it cannot grow without bound. A value that is
+not a non-negative integer **throws on both paths** rather than defaulting — `NaN` is
+neither `< G` nor `>= G`, and 0 would resurrect the permanent spinner it exists to
+prevent.
+
+The rows are validated against a discriminated union **on write as well as on read**:
+`ready` must carry at least one row (the engine emits GEREED only when `ranked.length >
+0`), `failed` must carry a stage and no rows, cents must be whole and non-negative.
+Read-side validation alone would not be enough — the label is permanent and `runJob`
+short-circuits on it, so a bad detail written beside a good label could never be
+repaired. Both preconditions, the detail and the watermark, are checked **before the
+first key is written**: a Redis script is atomic but does not roll back the writes it
+made before erroring, so a late check would strand a permanent label on a failed claim.
+A rejected claim leaves all three keys absent and is safe to retry.
+
+**Legacy records** — written before the split — are bare label strings under the same
+`result:` key, so every delivery path reads them unchanged. They simply have no rows.
 
 **Retryability is explicit** (`failure.retryable`, set where the error is raised):
 
@@ -162,12 +201,17 @@ blocks every older generation from writing, so the training ends with no answer 
 | `pnpm recommend:parity [--limit=N]` | Compare recommended trainer SETS against the legacy Airtable snapshot. |
 | `pnpm replay:verify` | Deterministic replay of `fixtures/replay/`. **Must stay 4/4.** |
 | `pnpm test:unit` | Unit tests, in-memory adapters only. |
+| `pnpm test:routes` | The recommendation routes over real HTTP. Starts its own server on **3111** with pinned auth config, so it neither touches nor depends on a dev server on 3000. Needs Redis + `MONDAY_API_TOKEN`; **fails rather than skips when `CI` is set**, because a green run that exercised no route is worse than a red one. |
 
 Full gate:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm build
+pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:routes && pnpm replay:verify && pnpm build
 ```
+
+`test:routes` is **not optional**. It is the only thing that runs the authorization
+wiring — every capability decision below is a unit test of a pure function until an
+actual request goes through a route file.
 
 **Not covered by unit tests**, deliberately — verify these live after deploy:
 
@@ -203,6 +247,11 @@ pnpm typecheck && pnpm lint && pnpm test:unit && pnpm replay:verify && pnpm buil
 | `QSTASH_URL` | publishing | Only for a REGIONAL account (e.g. `https://qstash-eu-central-1.upstash.io`). Unset ⇒ the global default. Wrong or missing on a regional account ⇒ every publish fails. |
 | `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` | job + failure routes | Both required; verification is against the raw body and URL. |
 | `PUBLIC_BASE_URL` | QStash callbacks | Falls back to `VERCEL_URL`. Set explicitly for local tunnelling. |
+| `MONDAY_APP_CLIENT_SECRET` | the item view's three routes | The Monday app's client secret; every `sessionToken` is verified against it, HS256 only. Unset ⇒ those routes answer **503**, not 500 — the feature is not configured, which is a deployment state with an obvious fix rather than a crash. |
+| `MONDAY_ACCOUNT_ID` | the item view's three routes | ITG's account. A validly signed token from any other account is refused. No default: "any account" is not a safe fallback. |
+| `MONDAY_RECOMMENDATION_DEFAULT_CAPS` | the item view's three routes | What **every verified member of ITG's account** gets: a comma-separated list of `view`, `plan`, `full`. ITG's decision (6-Aug-2026) is no gating, so production is `view,plan,full` and the map below stays empty. ⚠️ **Account-wide is wider than board-wide.** A session token names the account and the user, never which boards they can open — so this reaches anyone in the account, including someone with no access to Agenda 2026. Monday's own permissions still govern the *pick* (a client-side write as that user); they do not govern our read. **Unset ⇒ nobody has access**, so an empty configuration denies rather than exposes rates. |
+| `MONDAY_API_TOKEN` | …and the item view's **mutating** routes | Used for the board check. Built lazily, so a missing or rotated token stops new work being queued but does **not** take the view down — the stored list is served entirely from Redis. |
+| `MONDAY_RECOMMENDATION_CAPS` | the item view's three routes | Per-user overrides, only needed to give **more** than the default: `userId:caps; userId:caps`, e.g. `222:plan; 333:full`. Unions with the default — a listed entry can never take a capability away. Malformed input throws on the first request rather than silently denying: a typo like `veiw` would otherwise look exactly like a permissions bug. A user who ends up with `plan`/`full` but no `view` is rejected too, since they could not open the list to use either. |
 | `CRON_SECRET` | `/api/cron/publish-pending` | Unset ⇒ the endpoint rejects everything. |
 | `CONFIG_API_SECRET` | `/api/config/trainer-groups` | Unset ⇒ rejects everything. |
 | `GOOGLE_MAPS_API_KEY` | travel | Needs the **Routes API** enabled *and* allowed in the key's restrictions. |

@@ -5,6 +5,7 @@ import { createMemoryKvStore } from '../kv';
 import { createOutcomeStore } from '../outcome';
 import { createQueueStore, type QueueStore } from '../queue-store';
 import { runJob, type JobDeps } from '../job';
+import { storedRow } from './stored-row.fixture';
 import type { InputArtifact } from '../artifact';
 import type { RecommendationResult } from '../service';
 import type { JobPublisher, PublishedJob } from '../queue';
@@ -41,6 +42,10 @@ const ok = (status: 'GEREED' | 'GEEN MATCH'): RecommendationResult => ({
   ok: true,
   resultStatus: status,
   recommendations: [],
+  // Mirrors `service.ts`: GEREED means at least one trainer was ranked, GEEN MATCH means
+  // none were. A fixture pairing GEREED with an empty list would be a state the engine
+  // cannot produce, and the outcome store now refuses it.
+  rows: status === 'GEREED' ? [storedRow()] : [],
   artifact,
   artifactHash: 'h',
   counts: { candidate: 1, eligible: 1, recommended: status === 'GEREED' ? 1 : 0 },
@@ -104,6 +109,63 @@ describe('runJob', () => {
     ]);
   });
 
+  /**
+   * The label and the rows are claimed together. If they could be written separately, a
+   * crash in between would leave a delivered answer whose list was lost for good — the
+   * early return on a stored label means this code never runs again to repair it.
+   */
+  it('records the rows alongside the label, and the watermark with them', async () => {
+    const h = harness(ok('GEREED'));
+    await generationAt(h.store, 1);
+
+    await runJob(h.deps, job);
+
+    expect(await h.deps.outcomes.read(ITEM, 1)).toBe('GEREED');
+    expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({ kind: 'ready' });
+    expect(await h.deps.outcomes.readCompletedGeneration(ITEM)).toBe(1);
+  });
+
+  it('records GEEN MATCH as an empty list, not as a missing one', async () => {
+    const h = harness(ok('GEEN MATCH'));
+    await generationAt(h.store, 1);
+
+    await runJob(h.deps, job);
+
+    // The view must show "niemand gevonden", never a spinner or an error.
+    expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
+      kind: 'no_match',
+      rows: [],
+    });
+  });
+
+  it('records a terminal failure with its stage, and no rows', async () => {
+    const h = harness(failed(false));
+    await generationAt(h.store, 1);
+
+    await runJob(h.deps, job);
+
+    expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
+      kind: 'failed',
+      rows: null,
+    });
+  });
+
+  /**
+   * A transient failure must leave the generation completely undecided — no label, no
+   * rows, and no watermark. Otherwise the retry that follows would find a stored answer
+   * and deliver it instead of computing one.
+   */
+  it('records nothing at all for a retryable failure', async () => {
+    const h = harness(failed(true));
+    await generationAt(h.store, 1);
+
+    await runJob(h.deps, job);
+
+    expect(await h.deps.outcomes.read(ITEM, 1)).toBeNull();
+    expect(await h.deps.outcomes.readDetail(ITEM, 1)).toBeNull();
+    expect(await h.deps.outcomes.readCompletedGeneration(ITEM)).toBe(0);
+  });
+
   it('skips compute entirely when a newer generation exists', async () => {
     const h = harness(ok('GEREED'));
     await generationAt(h.store, 2);
@@ -123,7 +185,7 @@ describe('runJob', () => {
   it('re-delivers a stored outcome without recomputing', async () => {
     const h = harness(ok('GEREED'));
     await generationAt(h.store, 1);
-    await h.deps.outcomes.claim(ITEM, 1, 'GEEN MATCH');
+    await h.deps.outcomes.claim(ITEM, 1, { kind: 'no_match' });
 
     const outcome = await runJob(h.deps, job);
 
@@ -193,7 +255,7 @@ describe('runJob', () => {
       runRecommendation: async () => {
         // The race has to happen DURING compute: `runJob` reads the stored outcome
         // before computing, so pre-seeding it would short-circuit and prove nothing.
-        await outcomes.claim(ITEM, 1, 'GEREED');
+        await outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
         return failed(false); // ours failed terminally, but it lost the claim
       },
     };

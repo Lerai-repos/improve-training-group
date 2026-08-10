@@ -14,6 +14,13 @@ import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import ackJson from '../../docs/m2a/acknowledgements.json';
 import { createAddressFormatter } from './address';
 import { assertAddressHashKey } from './address-key';
+import { createApproachedStore } from './approached';
+import { capabilityPolicyFromEnv } from './capabilities';
+import { createItemBoardReader, type ItemBoardReader } from './item-board';
+import type { ViewDeps } from './recommendation-view';
+import type { ApproachedDeps, RecalculateDeps } from './recommendation-actions';
+import { sessionTokenConfigFromEnv } from './session-token';
+import type { AuthDeps } from './view-auth';
 import { canonicalJson } from './artifact';
 import { currentDeadlineMs } from './deadline';
 import { createOpenRouterCompletion } from './completion';
@@ -26,7 +33,7 @@ import { createKvTravelCacheStore, createTravelCache } from './travel-cache';
 import type { StatusWriter } from './delivery';
 import { createAlertGate, type FailureCallbackDeps } from './failure-callback';
 import { createRedisClient, createUpstashKvStore } from './kv';
-import { createOutcomeStore, type OutcomeStore } from './outcome';
+import { createUpstashOutcomeStore, type OutcomeStore } from './outcome';
 import { createQStashClient, createQStashPublisher, publicBaseUrl } from './qstash';
 import { createRunQueue, type JobPublisher } from './queue';
 import { createUpstashQueueStore, type QueueStore } from './queue-store';
@@ -98,7 +105,7 @@ function buildRedisState(): { store: QueueStore; outcomes: OutcomeStore } {
   const redis = createRedisClient();
   return {
     store: createUpstashQueueStore(redis),
-    outcomes: createOutcomeStore(createUpstashKvStore(redis)),
+    outcomes: createUpstashOutcomeStore(redis),
   };
 }
 
@@ -130,7 +137,7 @@ export function buildFailureCallbackDeps(): FailureCallbackDeps {
   const redis = createRedisClient();
   return {
     store: createUpstashQueueStore(redis),
-    outcomes: createOutcomeStore(createUpstashKvStore(redis)),
+    outcomes: createUpstashOutcomeStore(redis),
     publisher: buildPublisher(),
     alerts: createAlertGate(createUpstashKvStore(redis)),
     writer: buildStatusWriter(),
@@ -178,6 +185,64 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
     ack: ACK,
     config: buildEngineConfig({ ackVersion: ACK_VERSION }),
     owner: newWorkerOwner(),
+  };
+}
+
+/**
+ * Deps for the item view's three routes.
+ *
+ * Deliberately cheap: no roster, no providers, no address formatter. Opening the view
+ * reads Redis and — for the mutating routes only — one Monday id lookup. Building the
+ * engine here would put a paginated trainers-board read behind every page open.
+ */
+export function buildViewDeps(): {
+  auth: AuthDeps;
+  /** Redis only. Everything a `GET` needs, and nothing it does not. */
+  view: ViewDeps;
+  /**
+   * FUNCTIONS, deliberately — the mutating routes need configuration that reading does
+   * not, and building it eagerly made every `GET` depend on all of it.
+   *
+   * `recalculate` needs `PUBLIC_BASE_URL` for the QStash callbacks. BOTH need
+   * `MONDAY_API_TOKEN` for the board check, which is the sharper one: the stored list is
+   * served entirely from Redis, so a missing or rotated Monday token has no business
+   * taking the view down. It should stop new work being queued, not stop planners
+   * reading a list that is already computed.
+   */
+  recalculate: () => RecalculateDeps;
+  approached: () => ApproachedDeps;
+} {
+  const redis = createRedisClient();
+  const kv = createUpstashKvStore(redis);
+  const store = createUpstashQueueStore(redis);
+  const outcomes = createUpstashOutcomeStore(redis);
+  const approached = createApproachedStore(kv);
+  const board = agendaBoardId();
+
+  const boards = (): ItemBoardReader =>
+    createItemBoardReader(
+      createMondayGraphQLClient({
+        token: requireEnv('MONDAY_API_TOKEN'),
+        apiVersion: MONDAY_API_VERSION,
+        deadlineMs: currentDeadlineMs,
+      })
+    );
+
+  return {
+    auth: { session: sessionTokenConfigFromEnv(), policy: capabilityPolicyFromEnv() },
+    view: { queue: store, outcomes, approached },
+    recalculate: () => ({
+      queue: createRunQueue(store, buildPublisher()),
+      boards: boards(),
+      agendaBoardId: board,
+    }),
+    approached: () => ({
+      queue: store,
+      outcomes,
+      approached,
+      boards: boards(),
+      agendaBoardId: board,
+    }),
   };
 }
 

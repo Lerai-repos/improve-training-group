@@ -26,9 +26,20 @@ export interface KvWriteOptions {
 
 export interface KvStore {
   get(key: string): Promise<string | null>;
+  /**
+   * Several keys in one round trip, positionally aligned with `keys`; a missing key is
+   * `null`, never a hole or a shortened array.
+   *
+   * The item view reads one `approached:` key per recommended trainer, and a list can
+   * run to dozens — sequential GETs would put a serverless round trip between the
+   * planner and every row.
+   */
+  mget(keys: readonly string[]): Promise<(string | null)[]>;
   set(key: string, value: string, opts?: KvWriteOptions): Promise<void>;
   /** `SET … NX`. True when this call created the key. */
   setIfAbsent(key: string, value: string, opts?: KvWriteOptions): Promise<boolean>;
+  /** Idempotent: deleting an absent key is not an error. */
+  del(key: string): Promise<void>;
   incr(key: string): Promise<number>;
   ttl(key: string): Promise<TtlState>;
   /** Sorted-set ops — the durable pending index. */
@@ -70,6 +81,9 @@ export function createMemoryKvStore(now: () => number = Date.now): KvStore {
     get(key) {
       return Promise.resolve(live(key)?.value ?? null);
     },
+    mget(keys) {
+      return Promise.resolve(keys.map((key) => live(key)?.value ?? null));
+    },
     set(key, value, opts) {
       map.set(key, { value, expiresAtMs: expiryFor(opts) });
       return Promise.resolve();
@@ -80,6 +94,10 @@ export function createMemoryKvStore(now: () => number = Date.now): KvStore {
       }
       map.set(key, { value, expiresAtMs: expiryFor(opts) });
       return Promise.resolve(true);
+    },
+    del(key) {
+      map.delete(key);
+      return Promise.resolve();
     },
     incr(key) {
       const current = live(key);
@@ -164,6 +182,21 @@ const PTTL_ABSENT = -2;
 const PTTL_NO_EXPIRY = -1;
 
 /**
+ * The two sentinels are easy to mistake for durations — `-1` in particular reads as
+ * "already expired" rather than "never expires", which is the opposite. Anything
+ * translating a `PTTL` reply goes through here so that reading is done once.
+ */
+export function ttlStateFromPttl(pttl: number): TtlState {
+  if (pttl === PTTL_ABSENT) {
+    return { kind: 'absent' };
+  }
+  if (pttl === PTTL_NO_EXPIRY) {
+    return { kind: 'no-expiry' };
+  }
+  return { kind: 'expires', ms: pttl };
+}
+
+/**
  * Redis' literal for "unbounded below" in a BYSCORE range. It must be the STRING
  * `-inf`, never `Number.NEGATIVE_INFINITY`.
  *
@@ -180,6 +213,22 @@ export function createUpstashKvStore(redis: Redis): KvStore {
     async get(key) {
       return await redis.get<string>(key);
     },
+    async mget(keys) {
+      // MGET with no arguments is a Redis syntax error, and the caller asking for
+      // nothing is entirely normal — a training with no rows yet has no trainers to
+      // look up.
+      if (keys.length === 0) {
+        return [];
+      }
+      const values = await redis.mget<(string | null)[]>(...keys);
+      // Defensive, and cheap: the positional contract is the whole point of this
+      // method, and a caller zipping a short array against its keys would silently
+      // attribute one trainer's state to another.
+      if (!Array.isArray(values) || values.length !== keys.length) {
+        throw new Error(`MGET returned ${values?.length ?? 'no'} values for ${keys.length} keys`);
+      }
+      return values.map((value) => value ?? null);
+    },
     async set(key, value, opts) {
       await (opts?.ttlMs === undefined
         ? redis.set(key, value)
@@ -192,18 +241,14 @@ export function createUpstashKvStore(redis: Redis): KvStore {
           : await redis.set(key, value, { nx: true, px: opts.ttlMs });
       return res === 'OK';
     },
+    async del(key) {
+      await redis.del(key);
+    },
     async incr(key) {
       return await redis.incr(key);
     },
     async ttl(key) {
-      const pttl = await redis.pttl(key);
-      if (pttl === PTTL_ABSENT) {
-        return { kind: 'absent' };
-      }
-      if (pttl === PTTL_NO_EXPIRY) {
-        return { kind: 'no-expiry' };
-      }
-      return { kind: 'expires', ms: pttl };
+      return ttlStateFromPttl(await redis.pttl(key));
     },
     async zadd(key, score, member) {
       await redis.zadd(key, { score, member });

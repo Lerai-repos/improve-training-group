@@ -5,6 +5,7 @@ import { createMemoryKvStore } from '../kv';
 import { createOutcomeStore } from '../outcome';
 import { createQueueStore, type QueueStore } from '../queue-store';
 import { handleFailureCallback, type FailureCallbackDeps } from '../failure-callback';
+import { storedRow } from './stored-row.fixture';
 import type { JobPublisher } from '../queue';
 
 const ITEM = '5029726254';
@@ -47,7 +48,7 @@ describe('handleFailureCallback', () => {
   it('re-delivers a stored GEREED rather than replacing it with FOUT', async () => {
     const h = harness();
     await generationAt(h.store, 1);
-    await h.deps.outcomes.claim(ITEM, 1, 'GEREED');
+    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()] });
 
     const result = await handleFailureCallback(h.deps, callback);
 
@@ -68,6 +69,35 @@ describe('handleFailureCallback', () => {
     expect(h.writer.writes[0].label).toBe('FOUT');
     // Immutable from here: a DLQ replay cannot now compute a different answer.
     expect(await h.deps.outcomes.read(ITEM, 1)).toBe('FOUT');
+    // There is no compute stage to name — compute never finished. `dlq_exhausted` says
+    // exactly that, and keeps it distinguishable from a failure the engine diagnosed.
+    expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
+      kind: 'failed',
+      rows: null,
+      failure: { stage: 'dlq_exhausted' },
+    });
+  });
+
+  /**
+   * The delivery-only case, verified live on 2026-08-06: compute stored GEREED, the
+   * Monday write failed against a bogus column, and the callback re-delivered GEREED
+   * rather than stamping FOUT. Its rows must survive that path untouched too — they are
+   * what the planner is about to look at.
+   */
+  it('keeps a stored run’s rows when it re-delivers instead of failing', async () => {
+    const h = harness();
+    await generationAt(h.store, 1);
+    await h.deps.outcomes.claim(ITEM, 1, {
+      kind: 'ready',
+      rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
+    });
+
+    await handleFailureCallback(h.deps, callback);
+
+    expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
+      kind: 'ready',
+      rows: [{ trainerItemId: 't1', rank: 1 }],
+    });
   });
 
   it('no-ops when a newer generation already exists', async () => {

@@ -41,6 +41,9 @@ yarn-error.log*
 
 # Playwright
 /test-results/
+# Where playwright.config.ts actually points `outputDir` — the root rule above never
+# matched it, so every run left an untracked tests/test-results/.last-run.json behind.
+/tests/test-results/
 /playwright-report/
 /blob-report/
 /playwright/*

@@ -112,6 +112,42 @@ describe('createMemoryKvStore', () => {
     expect(await kv.get('k')).toBe('new');
   });
 
+  /**
+   * The positional contract is the whole point: the view zips these values back against
+   * the trainer ids it asked about, so a compacted or reordered result would attribute
+   * one trainer's `Benaderd` state to another.
+   */
+  describe('mget', () => {
+    it('returns one value per key, in order, with null for the absent ones', async () => {
+      const kv = createMemoryKvStore();
+      await kv.set('a', '1');
+      await kv.set('c', '3');
+
+      expect(await kv.mget(['a', 'b', 'c'])).toEqual(['1', null, '3']);
+    });
+
+    it('answers an empty request with an empty list', async () => {
+      // Normal, not exceptional: a training with no rows yet has no trainers to look up.
+      expect(await createMemoryKvStore().mget([])).toEqual([]);
+    });
+
+    it('reports an expired key as absent, like get does', async () => {
+      let now = 0;
+      const kv = createMemoryKvStore(() => now);
+      await kv.set('gone', 'v', { ttlMs: 100 });
+      await kv.set('stays', 'v');
+      now = 200;
+
+      expect(await kv.mget(['gone', 'stays'])).toEqual([null, 'v']);
+    });
+
+    it('repeats a duplicated key rather than collapsing it', async () => {
+      const kv = createMemoryKvStore();
+      await kv.set('a', '1');
+      expect(await kv.mget(['a', 'a'])).toEqual(['1', '1']);
+    });
+  });
+
   it('ttl distinguishes absent from no-expiry', async () => {
     const kv = createMemoryKvStore();
     expect(await kv.ttl('nope')).toEqual({ kind: 'absent' });

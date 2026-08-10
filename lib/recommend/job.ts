@@ -2,7 +2,7 @@ import { log } from '@lib/logger';
 
 import { deliverOutcome } from './deliver';
 import type { StatusLabel, StatusWriter } from './delivery';
-import type { OutcomeStore } from './outcome';
+import type { OutcomeClaim, OutcomeStore } from './outcome';
 import type { JobPublisher, PublishedJob } from './queue';
 import type { QueueStore } from './queue-store';
 import type { RecommendationResult, Stage } from './service';
@@ -35,6 +35,20 @@ export type JobOutcome =
   /** Transient: nothing terminal recorded. The queue should try again. */
   | { kind: 'retry'; stage: Stage | 'delivery'; message: string | null };
 
+/**
+ * A completed run as the outcome store wants it. `GEEN MATCH` keeps an empty row list
+ * rather than a null one: "we looked and found nobody" is an answer, and the view must
+ * not present it as a missing computation.
+ */
+function toClaim(result: RecommendationResult): OutcomeClaim {
+  if (!result.ok) {
+    return { kind: 'failed', stage: result.failure.stage, message: result.failure.message };
+  }
+  return result.resultStatus === 'GEREED'
+    ? { kind: 'ready', rows: result.rows }
+    : { kind: 'no_match' };
+}
+
 export async function runJob(deps: JobDeps, job: PublishedJob): Promise<JobOutcome> {
   const { mondayItemId, generation } = job;
 
@@ -65,7 +79,10 @@ export async function runJob(deps: JobDeps, job: PublishedJob): Promise<JobOutco
     return { kind: 'retry', stage: result.failure.stage, message: result.failure.message };
   }
 
-  const label = await deps.outcomes.claim(mondayItemId, generation, result.resultStatus);
+  // Label and rows are recorded together, so the board can never show an answer whose
+  // list was lost: a crash between two writes would be unrepairable, because the early
+  // return above short-circuits on the label and this code would never run again.
+  const label = await deps.outcomes.claim(mondayItemId, generation, toClaim(result));
   const delivered = await deliver(deps, job, label);
 
   // The AUTHORITATIVE label decides this, not `result` — they can disagree. If another

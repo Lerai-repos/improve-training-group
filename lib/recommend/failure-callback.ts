@@ -67,8 +67,18 @@ export async function handleFailureCallback(
   const alerted = await deps.alerts.shouldAlert(dlqId);
 
   // The stored outcome wins if there is one — the failure may have been delivery-only.
+  //
+  // When there is none, this call creates the authoritative FOUT. There is no compute
+  // stage to name, because compute never finished: `dlq_exhausted` says exactly that,
+  // and distinguishes it from a terminal failure the engine diagnosed itself.
   const stored = await deps.outcomes.read(mondayItemId, generation);
-  const label = stored ?? (await deps.outcomes.claim(mondayItemId, generation, 'FOUT'));
+  const label =
+    stored ??
+    (await deps.outcomes.claim(mondayItemId, generation, {
+      kind: 'failed',
+      stage: 'dlq_exhausted',
+      message: 'QStash retries exhausted before an outcome was recorded',
+    }));
 
   if (alerted) {
     log.error('recommendation job dead-lettered', {

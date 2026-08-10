@@ -15,6 +15,7 @@ import { priceTrainer, rankTrainers, type PricingContext } from './pricing';
 import { computeScores } from './scores';
 import type { TravelProvider } from './travel';
 import { resolveTravel, type TravelCache } from './travel-resolve';
+import { toStoredRows, type StoredRow } from './view-row';
 import type {
   CandidateTrainer,
   QualObservation,
@@ -115,6 +116,12 @@ export type RecommendationResult =
       ok: true;
       resultStatus: 'GEREED' | 'GEEN MATCH';
       recommendations: RankedRecommendation[];
+      /**
+       * The same list as `recommendations`, shaped for persistence and the item view:
+       * ids and numbers only, per-theme qualification attached. Built here rather than
+       * in the job because the qualification matrix is only in scope at this point.
+       */
+      rows: StoredRow[];
     } & Provenance)
   | {
       ok: false;
@@ -377,6 +384,7 @@ export async function runRecommendation(
       ok: true,
       resultStatus: ranked.length > 0 ? 'GEREED' : 'GEEN MATCH',
       recommendations: ranked,
+      rows: toStoredRows(ranked, effective, live.themeExternalIds),
       artifact,
       artifactHash: hashArtifact(artifact),
       counts: {
