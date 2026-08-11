@@ -90,7 +90,7 @@ function deps(over: Partial<ServiceDeps> = {}): { deps: ServiceDeps; spies: Spie
     addressFormatter: {
       format: () => {
         spies.addressCalls += 1;
-        return Promise.resolve({ kind: 'travel_required', formatted: 'Dest 1' });
+        return Promise.resolve({ kind: 'travel_required', formatted: 'Dest 1', city: 'Utrecht' });
       },
     },
     travelProvider: {
@@ -264,7 +264,11 @@ describe('runRecommendation — fail-closed stages', () => {
     // Provenance gathered before the failure survives — it is not fabricated, but
     // it is not thrown away either.
     expect(r.partial.mondayItemRevision).toBe('rev-1');
-    expect(r.partial.addressDecision).toEqual({ kind: 'travel_required', formatted: 'Dest 1' });
+    expect(r.partial.addressDecision).toEqual({
+      kind: 'travel_required',
+      formatted: 'Dest 1',
+      city: 'Utrecht',
+    });
   });
 
   it('an unreachable destination is TERMINAL, not a retryable provider hiccup', async () => {
@@ -373,5 +377,104 @@ describe('runRecommendation — exclusions', () => {
     }
     expect(r.recommendations[0].hourlyRateCents).toBe(9900);
     expect(r.excluded).toHaveLength(0);
+  });
+});
+
+/**
+ * The city is remembered for the WhatsApp message. It is decoration on a run that
+ * decides money, and these tests exist to keep it that way.
+ */
+describe('runRecommendation — the city side effect', () => {
+  it('remembers the classified town against the training location', async () => {
+    const remembered: Array<{ location: string; city: string }> = [];
+    const { deps: d } = deps({
+      cityStore: {
+        lookup: () => Promise.resolve(null),
+        remember: (location, _version, city) => {
+          remembered.push({ location, city });
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await runRecommendation(d, 'tr1');
+
+    expect(remembered).toEqual([{ location: training().locatie, city: 'Utrecht' }]);
+  });
+
+  it('remembers nothing when the model returned no town', async () => {
+    const remembered: string[] = [];
+    const { deps: d } = deps({
+      addressFormatter: {
+        format: () =>
+          Promise.resolve({ kind: 'travel_required' as const, formatted: 'Dest 1', city: null }),
+      },
+      cityStore: {
+        lookup: () => Promise.resolve(null),
+        remember: (_location, _version, city) => {
+          remembered.push(city);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await runRecommendation(d, 'tr1');
+
+    expect(remembered).toEqual([]);
+  });
+
+  /**
+   * The inversion this port exists to prevent: a cache write landing on the
+   * recommendation failure path would turn a completed run into a retryable FOUT.
+   *
+   * The store injected here does NOT swallow, on purpose. `createCityStore` does, but
+   * the guarantee cannot rest on every future implementation remembering to — so the
+   * call site catches too, and this is what proves it.
+   */
+  it('survives a store that throws', async () => {
+    const { deps: d } = deps({
+      cityStore: {
+        lookup: () => Promise.reject(new Error('redis down')),
+        remember: () => Promise.reject(new Error('redis down')),
+      },
+    });
+
+    const r = await runRecommendation(d, 'tr1');
+
+    expect(r.ok).toBe(true);
+    expect(r.resultStatus).toBe('GEREED');
+  });
+
+  /**
+   * A rejection is not the only way a nonessential write hurts. A SET that merely hangs
+   * sits on the critical path in front of the travel stage, where `catch` never fires.
+   */
+  it('does not wait forever for a store that hangs', async () => {
+    const { deps: d } = deps({
+      cityStore: {
+        lookup: () => Promise.resolve(null),
+        remember: () => new Promise<void>(() => undefined),
+      },
+    });
+
+    const r = await runRecommendation(d, 'tr1');
+
+    /**
+     * Completing IS the assertion. The injected store never settles, so without the
+     * bound this call hangs and the test times out.
+     *
+     * A wall-clock check was here and was removed: it measured the machine, not the
+     * code, and duly went red under parallel load while proving nothing the completion
+     * does not already prove.
+     */
+    expect(r.ok).toBe(true);
+    expect(r.resultStatus).toBe('GEREED');
+  });
+
+  it('needs no store at all', async () => {
+    const { deps: d } = deps();
+    const r = await runRecommendation(d, 'tr1');
+
+    expect(r.ok).toBe(true);
   });
 });

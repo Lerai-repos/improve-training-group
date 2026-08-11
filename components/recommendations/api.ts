@@ -13,7 +13,50 @@ import type { ApiEnvelope, RecommendationView } from './types';
  * a token expires between being fetched and being used.
  */
 
-export interface RecommendationsApi {
+export interface SavedWhatsapp {
+  edited: string;
+  base: string;
+}
+
+export interface WhatsappPayload {
+  generated: string;
+  saved: SavedWhatsapp | null;
+  /** Opaque concurrency token. Echo it back on every write; never interpret it. */
+  token: string;
+  /** Something IS stored and could not be read — not the same as nothing stored. */
+  unreadable: boolean;
+  warnings: string[];
+}
+
+export interface WhatsappWriteResult {
+  saved: SavedWhatsapp | null;
+  token: string;
+}
+
+/**
+ * Split out from {@link RecommendationsApi} so the panel can be tested against a fake
+ * that implements three methods rather than the whole surface.
+ */
+export interface WhatsappApi {
+  getWhatsapp(itemId: string): Promise<WhatsappPayload>;
+  saveWhatsapp(
+    itemId: string,
+    input: { edited: string; base: string; token: string },
+    /**
+     * `keepalive` lets the request outlive the document, for the last-gasp save when
+     * Monday hides or replaces the iframe. Best-effort, never a guarantee — the token
+     * fetch in front of it can still lose the race.
+     */
+    options?: { keepalive?: boolean }
+  ): Promise<WhatsappWriteResult>;
+  discardWhatsapp(
+    itemId: string,
+    token: string,
+    options?: { keepalive?: boolean }
+  ): Promise<WhatsappWriteResult>;
+}
+
+export interface RecommendationsApi extends WhatsappApi {
   get(itemId: string, signal?: AbortSignal): Promise<RecommendationView>;
   recalculate(itemId: string, actionId: string): Promise<void>;
   setApproached(
@@ -90,7 +133,73 @@ export function createRecommendationsApi(monday: MondayBridge): RecommendationsA
     async setApproached(itemId, input) {
       await send(`${base(itemId)}/approached`, { method: 'PUT', body: JSON.stringify(input) });
     },
+
+    async getWhatsapp(itemId) {
+      const body = await send(`${base(itemId)}/whatsapp`, { method: 'GET' });
+      return asWhatsapp(body.data);
+    },
+
+    async saveWhatsapp(itemId, input, options) {
+      const body = await send(`${base(itemId)}/whatsapp`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+        keepalive: options?.keepalive,
+      });
+      return asWrite(body.data);
+    },
+
+    async discardWhatsapp(itemId, token, options) {
+      const body = await send(`${base(itemId)}/whatsapp`, {
+        method: 'DELETE',
+        body: JSON.stringify({ token }),
+        keepalive: options?.keepalive,
+      });
+      return asWrite(body.data);
+    },
   };
+}
+
+/** As with `asView`: check the shape we branch on, not every field. */
+function asWhatsapp(data: unknown): WhatsappPayload {
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    'generated' in data &&
+    typeof data.generated === 'string' &&
+    'token' in data &&
+    typeof data.token === 'string'
+  ) {
+    const warnings = 'warnings' in data && Array.isArray(data.warnings) ? data.warnings : [];
+    return {
+      generated: data.generated,
+      token: data.token,
+      saved: 'saved' in data ? asSaved(data.saved) : null,
+      unreadable: 'unreadable' in data && data.unreadable === true,
+      warnings: warnings.filter((w): w is string => typeof w === 'string'),
+    };
+  }
+  throw new ApiError(0, 'the server sent an unrecognizable message');
+}
+
+function asWrite(data: unknown): WhatsappWriteResult {
+  if (typeof data === 'object' && data !== null && 'token' in data && typeof data.token === 'string') {
+    return { token: data.token, saved: 'saved' in data ? asSaved(data.saved) : null };
+  }
+  throw new ApiError(0, 'the server sent an unrecognizable message');
+}
+
+function asSaved(value: unknown): SavedWhatsapp | null {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'edited' in value &&
+    typeof value.edited === 'string' &&
+    'base' in value &&
+    typeof value.base === 'string'
+  ) {
+    return { edited: value.edited, base: value.base };
+  }
+  return null;
 }
 
 /**

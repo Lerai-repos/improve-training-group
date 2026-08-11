@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AGENDA_2026_COLUMNS } from '@lib/monday/board-config';
 
 import { pickTrainer } from '../pick-trainer';
-import { fakeMonday, readyView, row } from './fakes';
+import { fakeMonday, noWhatsapp, readyView, row } from './fakes';
 
 import type { RecommendationsApi } from '../api';
 import type { RecommendationView } from '../types';
@@ -27,6 +27,7 @@ function apiReturning(generations: number[]): RecommendationsApi {
       return Promise.resolve(at(generation));
     },
     recalculate: () => Promise.resolve(),
+      ...noWhatsapp(),
     setApproached: () => Promise.resolve(),
   };
 }
@@ -106,6 +107,7 @@ describe('pickTrainer', () => {
         return reads === 1 ? Promise.resolve(at(1)) : Promise.reject(new Error('Redis unreachable'));
       },
       recalculate: () => Promise.resolve(),
+      ...noWhatsapp(),
       setApproached: () => Promise.resolve(),
     };
 
@@ -121,6 +123,7 @@ describe('pickTrainer', () => {
     const api: RecommendationsApi = {
       get: () => Promise.reject(new Error('Redis unreachable')),
       recalculate: () => Promise.resolve(),
+      ...noWhatsapp(),
       setApproached: () => Promise.resolve(),
     };
 
@@ -152,6 +155,7 @@ describe('pickTrainer', () => {
           return Promise.resolve(view);
         },
         recalculate: () => Promise.resolve(),
+      ...noWhatsapp(),
         setApproached: () => Promise.resolve(),
       };
     };
@@ -212,6 +216,7 @@ describe('pickTrainer', () => {
       get: () =>
         Promise.resolve({ state: { kind: 'idle' }, caps: { canPlan: true, canViewFull: true } }),
       recalculate: () => Promise.resolve(),
+      ...noWhatsapp(),
       setApproached: () => Promise.resolve(),
     };
 

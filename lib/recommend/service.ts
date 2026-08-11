@@ -10,6 +10,7 @@ import {
 } from './address';
 import type { InputArtifact } from './artifact';
 import { hashArtifact } from './artifact';
+import type { CityStore } from './city-store';
 import { computeEffectiveQuals, filterEligible } from './eligibility';
 import { priceTrainer, rankTrainers, type PricingContext } from './pricing';
 import { computeScores } from './scores';
@@ -65,8 +66,63 @@ export interface ServiceDeps {
   addressFormatter: AddressFormatter;
   travelProvider: TravelProvider;
   travelCache: TravelCache;
+  /**
+   * Where the classified town is remembered, for the WhatsApp message to read later.
+   * Optional, and best-effort by contract — see {@link CityStore}. Nothing in a run
+   * depends on it, and a failure to write one must never become a run's failure.
+   */
+  cityStore?: CityStore;
   ack: Acknowledgements;
   config: EngineConfig;
+}
+
+/**
+ * How long the city write may hold up a run before we stop waiting for it.
+ *
+ * A rejection is not the only way a nonessential write can hurt: a SET that merely hangs
+ * would sit on the critical path in front of the travel stage, and `catch` never fires
+ * for something that has not failed yet.
+ */
+const CITY_WRITE_TIMEOUT_MS = 1500;
+
+/**
+ * Remember the town for the WhatsApp message — bounded, and unable to fail the run.
+ *
+ * `CityStore` swallows its own rejections by contract, and this does not rely on that:
+ * the guarantee is enforced at the CALL SITE so it holds for any implementation somebody
+ * injects later. Neither a rejection nor a hang can reach the caller.
+ */
+async function rememberCity(
+  store: CityStore | undefined,
+  rawLocation: string,
+  city: string,
+  mondayItemId: string
+): Promise<void> {
+  if (store === undefined) {
+    return;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      store.remember(rawLocation, ADDRESS_PROMPT_VERSION, city),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          log.warn('cityStore.remember timed out; continuing', {
+            mondayItemId,
+            timeoutMs: CITY_WRITE_TIMEOUT_MS,
+          });
+          resolve();
+        }, CITY_WRITE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    log.warn('cityStore.remember failed; continuing', {
+      mondayItemId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Where a run stopped. `freshness`/`persist` are gone with the snapshot and the DB. */
@@ -281,6 +337,19 @@ export async function runRecommendation(
         return fail('address', decision.detail, decision.kind === 'error');
       }
       addr = decision;
+
+      /**
+       * Remember the town for the WhatsApp message.
+       *
+       * `CityStore` swallows its own failures by contract — and this does not rely on
+       * that. A cache write for a decoration must not be able to fail a run that has
+       * already succeeded, so the guarantee is enforced HERE, at the call site, where it
+       * holds for any implementation somebody injects later. `live.locatie` is non-null
+       * because an empty location never reaches `travel_required`.
+       */
+      if (decision.kind === 'travel_required' && decision.city !== null && live.locatie !== null) {
+        await rememberCity(deps.cityStore, live.locatie, decision.city, mondayItemId);
+      }
 
       stage = 'travel';
       if (decision.kind === 'no_travel_confirmed') {

@@ -10,6 +10,9 @@ import { cn } from '@lib/utils';
 import { failureMessage } from './format';
 import { RecommendationTable } from './recommendation-table';
 import { SortButton, SortPanel } from './sort-panel';
+import { useDismissiblePanel } from './use-dismissible-panel';
+import { WhatsappButton, WhatsappPanel } from './whatsapp-panel';
+import { useWhatsappMessage } from './use-whatsapp-message';
 import type { SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
 
@@ -31,7 +34,7 @@ interface RecommendationsViewProps {
   view: UseRecommendationView;
 }
 
-export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) => {
+export const RecommendationsView = ({ monday, api, view }: RecommendationsViewProps) => {
   const caps = view.status.kind === 'loaded' ? view.status.view.caps : null;
 
   /**
@@ -43,45 +46,65 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
    */
   const [sort, setSort] = useState<readonly SortLevel[] | null>(null);
   const effectiveSort: readonly SortLevel[] = sort ?? [];
-  const [sortOpen, setSortOpen] = useState(false);
-  const sortButtonRef = useRef<HTMLButtonElement>(null);
 
   /**
-   * Closing must return focus to the trigger.
-   *
-   * Every way out of the panel — Sluiten, Escape — unmounts the focused element, and the
-   * browser then drops focus to `document.body`. A keyboard user would be silently sent
-   * back to the top of the page instead of to the button they opened.
+   * Two panels, one at a time. Opening either closes the other — they occupy the same
+   * corner, and two overlapping popovers is nobody's idea of a toolbar.
    */
-  const closeSort = useCallback((): void => {
-    setSortOpen(false);
-    sortButtonRef.current?.focus();
-  }, []);
+  const [panel, setPanel] = useState<'sort' | 'whatsapp' | null>(null);
+  const sortOpen = panel === 'sort';
+  const whatsappOpen = panel === 'whatsapp';
+
+  const whatsapp = useWhatsappMessage(api, view.itemId, whatsappOpen);
 
   /**
-   * Clicking anywhere else closes it — the behaviour every dropdown has, and its absence
-   * is the kind of thing people notice by being mildly annoyed rather than by reporting.
+   * EVERY way out of the WhatsApp panel saves first, and a failed save cancels the
+   * dismissal.
    *
-   * Only while open, and `mousedown` rather than `click` so it fires before the target
-   * handles its own press. Focus does NOT return to the trigger here: the planner has
-   * already moved their attention elsewhere, and yanking it back would fight them.
+   * Not just Sluiten and Escape: an outside click, losing the iframe's focus, and
+   * pressing Sorteren all remove the panel too, and routing only the polite exits
+   * through `flush` meant the other three hid a failed autosave and let the next load
+   * overwrite the draft. The panel that reports the error has to still be on screen.
    */
-  const sortAreaRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!sortOpen) {
-      return;
-    }
-    const onPointerDown = (event: MouseEvent): void => {
-      const target = event.target;
-      if (target instanceof Node && sortAreaRef.current?.contains(target) !== true) {
-        setSortOpen(false);
+  const leaveWhatsapp = useCallback(
+    (next: 'sort' | 'whatsapp' | null): void => {
+      void whatsapp.flush().then((saved) => {
+        if (saved) {
+          setPanel(next);
+        }
+      });
+    },
+    [whatsapp]
+  );
+
+  const requestPanel = useCallback(
+    (next: 'sort' | 'whatsapp' | null): void => {
+      if (whatsappOpen && next !== 'whatsapp') {
+        leaveWhatsapp(next);
+        return;
       }
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-    };
-  }, [sortOpen]);
+      setPanel(next);
+    },
+    [whatsappOpen, leaveWhatsapp]
+  );
+
+  const closeSortPanel = useCallback((): void => {
+    setPanel(null);
+  }, []);
+  const closeWhatsappPanel = useCallback((): void => {
+    leaveWhatsapp(null);
+  }, [leaveWhatsapp]);
+
+  const sortPanel = useDismissiblePanel<HTMLDivElement>(sortOpen, closeSortPanel);
+  const whatsappPanel = useDismissiblePanel<HTMLDivElement>(whatsappOpen, closeWhatsappPanel);
+
+  const toggleSort = useCallback((): void => {
+    requestPanel(sortOpen ? null : 'sort');
+  }, [requestPanel, sortOpen]);
+  const toggleWhatsapp = useCallback((): void => {
+    requestPanel(whatsappOpen ? null : 'whatsapp');
+  }, [requestPanel, whatsappOpen]);
+
   // A different training, or a change in what this caller may see, invalidates a manual
   // chain — the columns it names may not even exist any more.
   useEffect(() => {
@@ -171,24 +194,34 @@ export const RecommendationsView = ({ monday, view }: RecommendationsViewProps) 
               {/* The outside-click boundary is the trigger and panel ALONE. Wrapping the
               whole group would count Recalculate as "inside", leaving the panel hanging
               open over a list that is about to be replaced. */}
-              <div ref={sortAreaRef} className="relative">
+              <div ref={sortPanel.areaRef} className="relative">
                 <SortButton
                   count={effectiveSort.length}
                   open={sortOpen}
-                  buttonRef={sortButtonRef}
-                  onToggle={() => {
-                    setSortOpen((open) => !open);
-                  }}
+                  buttonRef={sortPanel.triggerRef}
+                  onToggle={toggleSort}
                 />
                 {sortOpen && (
                   <SortPanel
                     sort={effectiveSort}
                     onChange={setSort}
                     canViewFull={caps?.canViewFull ?? false}
-                    onClose={closeSort}
+                    onClose={sortPanel.close}
                   />
                 )}
               </div>
+              {caps?.canPlan && (
+                <div ref={whatsappPanel.areaRef} className="relative">
+                  <WhatsappButton
+                    open={whatsappOpen}
+                    buttonRef={whatsappPanel.triggerRef}
+                    onToggle={toggleWhatsapp}
+                  />
+                  {whatsappOpen && (
+                    <WhatsappPanel message={whatsapp} onClose={whatsappPanel.close} />
+                  )}
+                </div>
+              )}
               {caps?.canPlan && (
                 <Button
                   variant="outline"

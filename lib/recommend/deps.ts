@@ -33,10 +33,13 @@ import { createMondayReader } from './monday-reader';
 import { createMondayStatusWriter } from './monday-status';
 import { createGoogleRoutesTransport, createRoutesProvider } from './travel';
 import { createKvTravelCacheStore, createTravelCache } from './travel-cache';
+import { createCityStore } from './city-store';
 import type { StatusWriter } from './delivery';
 import { createAlertGate, type FailureCallbackDeps } from './failure-callback';
 import { createRedisClient, createUpstashKvStore } from './kv';
 import { createUpstashOutcomeStore, type OutcomeStore } from './outcome';
+import { createWhatsappTrainingReader, type WhatsappDeps } from './whatsapp-service';
+import { createUpstashWhatsappStore } from './whatsapp-store';
 import { createQStashClient, createQStashPublisher, publicBaseUrl } from './qstash';
 import { createRunQueue, type JobPublisher } from './queue';
 import { createUpstashQueueStore, type QueueStore } from './queue-store';
@@ -188,6 +191,9 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
     // another instance already looked up. Only keyed fingerprints and distances are
     // stored — never a raw address.
     travelCache: createTravelCache(createKvTravelCacheStore(createUpstashKvStore(createRedisClient()))),
+    // The town the address step resolved, kept for the WhatsApp message to read later.
+    // Best-effort on both sides: nothing in a run depends on it.
+    cityStore: createCityStore(createUpstashKvStore(createRedisClient())),
     statusWriter: createMondayStatusWriter({
       token,
       apiVersion: MONDAY_API_VERSION,
@@ -222,6 +228,7 @@ export function buildViewDeps(): {
    */
   recalculate: () => RecalculateDeps;
   approached: () => ApproachedDeps;
+  whatsapp: () => WhatsappDeps;
 } {
   const redis = createRedisClient();
   const kv = createUpstashKvStore(redis);
@@ -298,6 +305,24 @@ export function buildViewDeps(): {
       approached,
       boards: boards(),
       agendaBoardId: board,
+    }),
+    /**
+     * Lazy for the same reason as the two above: this one needs `MONDAY_API_TOKEN`, and
+     * a missing token has no business breaking a read that is served from Redis.
+     */
+    whatsapp: (): WhatsappDeps => ({
+      reader: createWhatsappTrainingReader(
+        createMondayGraphQLClient({
+          token: requireEnv('MONDAY_API_TOKEN'),
+          apiVersion: MONDAY_API_VERSION,
+          deadlineMs: currentDeadlineMs,
+        })
+      ),
+      store: createUpstashWhatsappStore(redis),
+      cities: createCityStore(kv),
+      boards: boards(),
+      kv,
+      boardId: board,
     }),
   };
 }

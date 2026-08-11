@@ -125,6 +125,105 @@ export const AGENDA_EXPECTED_COLUMNS: ExpectedColumn[] = [
   { id: 'dup__of_trainers', type: 'dropdown' }, // taal
 ];
 
+/**
+ * The columns the WhatsApp availability message is built from.
+ *
+ * A SEPARATE set from `AGENDA_EXPECTED_COLUMNS` because the consequence of drift is
+ * different: there, a retyped relation silently corrupts a ranking and the run must die;
+ * here, one line of a message the planner is about to edit anyway goes missing. So these
+ * are checked with the same rigour and handled by degrading — see `checkWhatsappColumns`.
+ *
+ * `settingsIncludes` is what catches SAME-TYPE drift. A Bedrijf mirror re-sourced to
+ * another board, or the Thema relation repointed, keeps its type and quietly yields the
+ * wrong klant or the wrong theme — a wrong answer, which is worse than a missing one.
+ */
+export interface WhatsappColumn extends ExpectedColumn {
+  field: WhatsappSourceField;
+  /** Declared absent on this board (not drift) — e.g. Acteuraantal on Agenda 2024. */
+  optional?: boolean;
+}
+
+export type WhatsappSourceField =
+  | 'datum'
+  | 'thema'
+  | 'themaRelation'
+  | 'tijden'
+  | 'taal'
+  | 'locatie'
+  | 'deelnemers'
+  | 'trainers'
+  | 'acteurs'
+  | 'klant';
+
+const AGENDA_2026_WHATSAPP_COLUMNS: readonly WhatsappColumn[] = [
+  { field: 'datum', id: 'datum_1', type: 'date' },
+  // Monday's free-text "Thema", NOT the board relation: the corpus shows the message
+  // carries "Boksen voor teams + co trainer" where the linked theme is merely "Boksen".
+  { field: 'thema', id: 'tekst', type: 'text' },
+  {
+    field: 'themaRelation',
+    id: 'board_relation_mkz4920y',
+    type: 'board_relation',
+    settingsIncludes: ['"boardIds":[5067928440]'],
+  },
+  { field: 'tijden', id: 'dup__of_workshop', type: 'text' },
+  { field: 'taal', id: 'dup__of_trainers', type: 'dropdown' },
+  { field: 'locatie', id: 'tekst7', type: 'text' },
+  { field: 'deelnemers', id: 'deelnemersaantal__1', type: 'text' },
+  { field: 'trainers', id: 'nummers5', type: 'numbers' },
+  { field: 'acteurs', id: 'numeric_mm0nhbn7', type: 'numbers' },
+  {
+    field: 'klant',
+    id: 'lookup_mkszzfvr',
+    type: 'mirror',
+    settingsIncludes: ['1279052045', 'connect_boards31'],
+  },
+];
+
+/**
+ * Per jaargang. Only 2026 is wired — the engine reads no other Agenda board — but the
+ * differences are recorded here because they are exactly what the Instellingen board has
+ * to carry, and because the 2025 relation ids have already caused one wrong-column bug.
+ *
+ * ⚠️ The 2024 and 2025 entries are derived from the cross-board difference table in
+ * `platform-structures/monday.md` and are NOT verified against those boards live.
+ */
+const AGENDA_2025_WHATSAPP_COLUMNS: readonly WhatsappColumn[] = AGENDA_2026_WHATSAPP_COLUMNS.map(
+  (column) =>
+    column.field === 'themaRelation' ? { ...column, id: 'board_relation_mkz4hjnt' } : column
+);
+
+const AGENDA_2024_WHATSAPP_COLUMNS: readonly WhatsappColumn[] = AGENDA_2026_WHATSAPP_COLUMNS.flatMap(
+  (column) => {
+    switch (column.field) {
+      // Acteuraantal does not exist on Agenda 2024 — a property of that board, not drift.
+      case 'acteurs':
+        return [];
+      case 'themaRelation':
+        return [{ ...column, id: 'board_relation_mkz45ap0' }];
+      case 'klant':
+        return [{ ...column, id: 'lookup_mkwyaxh1' }];
+      default:
+        return [column];
+    }
+  }
+);
+
+const WHATSAPP_COLUMNS_BY_BOARD: Record<string, readonly WhatsappColumn[]> = {
+  [AGENDA_2026_PRODUCTION_BOARD]: AGENDA_2026_WHATSAPP_COLUMNS,
+  '1703587792': AGENDA_2025_WHATSAPP_COLUMNS,
+  '1311331281': AGENDA_2024_WHATSAPP_COLUMNS,
+};
+
+/**
+ * Falls back to the 2026 set for an unknown board id — which is the right answer for the
+ * one that matters: `MONDAY_AGENDA_BOARD_ID` points at a DUPLICATE of Agenda 2026, and a
+ * board copy keeps every column id.
+ */
+export function whatsappColumnsFor(boardId: string): readonly WhatsappColumn[] {
+  return WHATSAPP_COLUMNS_BY_BOARD[boardId] ?? AGENDA_2026_WHATSAPP_COLUMNS;
+}
+
 export const TRAINER_EXPECTED_COLUMNS: ExpectedColumn[] = [
   { id: 'adres__1', type: 'text' },
   { id: 'e_mail__1', type: 'email' },

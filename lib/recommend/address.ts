@@ -9,7 +9,13 @@ import { z } from 'zod';
  */
 
 export type AddressDecision =
-  | { kind: 'travel_required'; formatted: string }
+  /**
+   * `city` is decoration, never a decision. It exists so the WhatsApp message can say
+   * "Amsterdam" where legacy did, instead of the full street address; nothing about
+   * travel, pricing or ranking reads it. It is nullable for exactly that reason — see
+   * the parse below, where a malformed city must not cost us a good classification.
+   */
+  | { kind: 'travel_required'; formatted: string; city: string | null }
   | { kind: 'no_travel_confirmed'; reason: 'online' }
   | { kind: 'unresolved_location'; detail: string }
   | { kind: 'error'; detail: string };
@@ -22,13 +28,19 @@ export interface AddressFormatter {
 export type Completion = (prompt: { system: string; user: string }) => Promise<string>;
 
 export const ADDRESS_MODEL = 'anthropic/claude-haiku-4.5';
-export const ADDRESS_PROMPT_VERSION = 'v1';
+/** `v2` added `city`. Provenance only — it is not part of any cache key. */
+export const ADDRESS_PROMPT_VERSION = 'v2';
+
+/** A city name is a city name; anything longer is the model misunderstanding the field. */
+export const CITY_MAX_LENGTH = 120;
 
 export const ADDRESS_SYSTEM_PROMPT = [
   'You classify a Dutch training location for driving-distance lookup.',
   'Respond with ONLY a JSON object (no prose) of the form:',
-  '{"outcome":"travel_required"|"online"|"unresolved","formatted":string|null,"reason":string|null}',
+  '{"outcome":"travel_required"|"online"|"unresolved","formatted":string|null,"city":string|null,"reason":string|null}',
   '- "travel_required": a real physical address/place; put a Google-Maps-ready address in "formatted".',
+  '- "city": just the town or city of that address ("Boxmeer" for "Raadhuisplein 1, 5831 JX Boxmeer",',
+  '  "Utrecht" for "Omgeving Utrecht"). Null if you cannot tell. Never invent one.',
   '- "online": the training is explicitly online/remote (Teams, Zoom, "online", "digitaal").',
   '- "unresolved": a vague/unknown physical location ("locatie volgt", "ergens in Utrecht", province only).',
   'Never guess an address you are not confident about — use "unresolved" instead.',
@@ -37,6 +49,23 @@ export const ADDRESS_SYSTEM_PROMPT = [
 const rawSchema = z.object({
   outcome: z.enum(['travel_required', 'online', 'unresolved']),
   formatted: z.string().nullish(),
+  /**
+   * Every link in this chain is load-bearing, and the obvious spellings are wrong.
+   *
+   * A bare `.nullish()` makes `{"city":42}` fail the WHOLE object, turning a perfectly
+   * good classification into an `error` decision and a retryable FOUT — a decoration
+   * costing us the answer. `.catch(null)` fixes the wrong-type case but not the missing
+   * one: `undefined` is *valid* for `nullish()`, so the catch never runs and the field
+   * survives as `undefined`. The `.transform` is what actually normalises absence.
+   */
+  city: z
+    .string()
+    .trim()
+    .min(1)
+    .max(CITY_MAX_LENGTH)
+    .nullish()
+    .catch(null)
+    .transform((value) => value ?? null),
   reason: z.string().nullish(),
 });
 
@@ -62,7 +91,7 @@ export function parseAiResponse(text: string): AddressDecision {
     if (!parsed.success) {
       return { kind: 'error', detail: `schema: ${parsed.error.message}` };
     }
-    const { outcome, formatted, reason } = parsed.data;
+    const { outcome, formatted, city, reason } = parsed.data;
     if (outcome === 'online') {
       return { kind: 'no_travel_confirmed', reason: 'online' };
     }
@@ -70,7 +99,7 @@ export function parseAiResponse(text: string): AddressDecision {
       return { kind: 'unresolved_location', detail: reason ?? 'unresolved' };
     }
     if (formatted && formatted.trim() !== '') {
-      return { kind: 'travel_required', formatted: formatted.trim() };
+      return { kind: 'travel_required', formatted: formatted.trim(), city };
     }
     return { kind: 'unresolved_location', detail: 'travel_required without a formatted address' };
   } catch (e) {

@@ -98,6 +98,11 @@ export const readyView = (rows: Row[], canViewFull = true, canPlan = true): Reco
   caps: { canPlan, canViewFull },
 });
 
+/**
+ * ⚠️ The counters below are GETTERS. Use this fake directly — `{ ...fakeApi(...) }`
+ * evaluates them once and freezes `gets` at 0, so every assertion against it passes
+ * vacuously. `fakeWhatsapp` uses a mutable `calls` object for exactly that reason.
+ */
 export function fakeApi(
   responses: RecommendationView[]
 ): RecommendationsApi & { gets: number; recalculates: string[]; approached: unknown[] } {
@@ -119,6 +124,7 @@ export function fakeApi(
       approached.push(input);
       return Promise.resolve();
     },
+    ...noWhatsapp(),
     get gets() {
       return gets;
     },
@@ -127,6 +133,61 @@ export function fakeApi(
     },
     get approached() {
       return approached;
+    },
+  };
+}
+
+
+/**
+ * The WhatsApp half of the API, for tests that do not exercise it.
+ *
+ * Throwing rather than resolving empty: a test that unexpectedly reaches the message
+ * endpoints should say so loudly, not quietly render a blank panel.
+ */
+export function noWhatsapp(): Pick<
+  RecommendationsApi,
+  'getWhatsapp' | 'saveWhatsapp' | 'discardWhatsapp'
+> {
+  const unused = (): never => {
+    throw new Error('the whatsapp API was not expected in this test');
+  };
+  return { getWhatsapp: unused, saveWhatsapp: unused, discardWhatsapp: unused };
+}
+
+
+/**
+ * A working WhatsApp API for the panel tests.
+ *
+ * The counters live on a mutable `calls` object rather than behind getters: callers
+ * compose this with `{ ...fakeApi(), ...fakeWhatsapp() }`, and spreading evaluates a
+ * getter once — freezing it at zero, so every assertion would pass vacuously.
+ */
+export interface WhatsappCalls {
+  saves: number;
+  discards: number;
+}
+
+export function fakeWhatsapp(
+  options: { generated?: string; failSave?: boolean } = {}
+): Pick<RecommendationsApi, 'getWhatsapp' | 'saveWhatsapp' | 'discardWhatsapp'> & {
+  calls: WhatsappCalls;
+} {
+  const { generated = 'Ben jij beschikbaar?\n\n23-03-2026\nRabobank', failSave = false } = options;
+  const calls: WhatsappCalls = { saves: 0, discards: 0 };
+
+  return {
+    calls,
+    getWhatsapp: () =>
+      Promise.resolve({ generated, saved: null, token: 'absent', unreadable: false, warnings: [] }),
+    saveWhatsapp: (_itemId, input) => {
+      calls.saves += 1;
+      return failSave
+        ? Promise.reject(new Error('netwerk weg'))
+        : Promise.resolve({ saved: { edited: input.edited, base: input.base }, token: 'tok-1' });
+    },
+    discardWhatsapp: () => {
+      calls.discards += 1;
+      return Promise.resolve({ saved: null, token: 'tok-gone' });
     },
   };
 }

@@ -208,9 +208,15 @@ function valueOf(row: Row, key: SortKey): number | string | null {
       return row.trainerTravelCostCents ?? null;
     case 'totalCostCents':
       return row.totalCostCents ?? null;
-    default:
-      return row.rank;
   }
+  /**
+   * No `default`, deliberately.
+   *
+   * A fallback here would compile for a sort key nobody mapped and silently sort by
+   * whatever it returned — the phase-3 columns are exactly the case: adding one and
+   * forgetting this switch would produce an order that looks plausible and is arbitrary.
+   * Exhaustive means TypeScript refuses the build instead.
+   */
 }
 
 /**

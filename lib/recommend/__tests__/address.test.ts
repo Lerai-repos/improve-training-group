@@ -5,9 +5,59 @@ import { createAddressFormatter, parseAiResponse, type Completion } from '../add
 describe('parseAiResponse', () => {
   it('travel_required with a formatted address', () => {
     const d = parseAiResponse(
-      '{"outcome":"travel_required","formatted":"Wolvenplein 25, Utrecht"}'
+      '{"outcome":"travel_required","formatted":"Wolvenplein 25, Utrecht","city":"Utrecht"}'
     );
-    expect(d).toEqual({ kind: 'travel_required', formatted: 'Wolvenplein 25, Utrecht' });
+    expect(d).toEqual({
+      kind: 'travel_required',
+      formatted: 'Wolvenplein 25, Utrecht',
+      city: 'Utrecht',
+    });
+  });
+
+  /**
+   * `city` is decoration on a decision that governs money. It must never be able to cost
+   * us the decision — so these assert on `formatted` and `kind`, not on the city.
+   *
+   * The hazard is real and specific: with a bare `z.string().nullish()`, `"city":42`
+   * fails the whole object, `parseAiResponse` returns `error`, and `service.ts` turns a
+   * good classification into a retryable FOUT. A field nobody prices would take the run
+   * down.
+   */
+  describe('a malformed city never invalidates the classification', () => {
+    it.each([
+      ['a number', '{"outcome":"travel_required","formatted":"X 1","city":42}'],
+      ['an object', '{"outcome":"travel_required","formatted":"X 1","city":{"name":"Utrecht"}}'],
+      ['an array', '{"outcome":"travel_required","formatted":"X 1","city":["Utrecht"]}'],
+      ['a blank string', '{"outcome":"travel_required","formatted":"X 1","city":"   "}'],
+      ['an absurd length', `{"outcome":"travel_required","formatted":"X 1","city":"${'x'.repeat(500)}"}`],
+    ])('%s becomes null and leaves the rest intact', (_label, raw) => {
+      expect(parseAiResponse(raw)).toEqual({
+        kind: 'travel_required',
+        formatted: 'X 1',
+        city: null,
+      });
+    });
+
+    /** `undefined` is *valid* for nullish(), so `.catch` never fires — `.transform` does. */
+    it('normalises a missing city to null rather than undefined', () => {
+      const d = parseAiResponse('{"outcome":"travel_required","formatted":"X 1"}');
+
+      expect(d).toEqual({ kind: 'travel_required', formatted: 'X 1', city: null });
+      expect(d.kind === 'travel_required' && 'city' in d && d.city === null).toBe(true);
+    });
+
+    it('trims a city the model padded', () => {
+      const d = parseAiResponse('{"outcome":"travel_required","formatted":"X 1","city":" Boxmeer "}');
+      expect(d).toMatchObject({ city: 'Boxmeer' });
+    });
+
+    /** An online training has no city, and asking for one would be inventing it. */
+    it('carries no city on the zero-travel path', () => {
+      expect(parseAiResponse('{"outcome":"online","city":"Utrecht"}')).toEqual({
+        kind: 'no_travel_confirmed',
+        reason: 'online',
+      });
+    });
   });
 
   it('online → the only zero-travel path', () => {
@@ -57,6 +107,10 @@ describe('createAddressFormatter', () => {
 
   it('passes model output through parseAiResponse', async () => {
     const f = createAddressFormatter(ok);
-    expect(await f.format('X 1')).toEqual({ kind: 'travel_required', formatted: 'X 1' });
+    expect(await f.format('X 1')).toEqual({
+      kind: 'travel_required',
+      formatted: 'X 1',
+      city: null,
+    });
   });
 });

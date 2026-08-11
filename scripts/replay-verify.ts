@@ -101,8 +101,23 @@ function stripIntentional(artifact: Record<string, unknown>): unknown {
   const trainers = Array.isArray(artifact.trainers) ? artifact.trainers : [];
   const rates = (artifact.rates ?? {}) as Record<string, unknown>;
   const rateCards = Array.isArray(rates.rateCards) ? rates.rateCards : [];
+  const enrichment = (artifact.enrichment ?? {}) as Record<string, unknown>;
   return {
     ...artifact,
+    enrichment: {
+      ...enrichment,
+      /**
+       * The address prompt gained a `city` field, so its version moved v1 → v2. The
+       * classification itself is unchanged — the baselines' own decisions are replayed
+       * from the fixtures, so any real drift would still show up in `addressDecision`.
+       *
+       * Pinned as a PAIR, not stripped as a field: a future v3 is not normalised and
+       * fails, which is the whole point of listing intentional differences rather than
+       * listing what to compare. Applied to both sides, so a recorded v1 stays v1 and
+       * only the live v2 folds onto it.
+       */
+      promptVersion: enrichment.promptVersion === 'v2' ? 'v1' : enrichment.promptVersion,
+    },
     // v2 → v3, deliberate.
     version: undefined,
     // Trainer identity moved from the internal uuid to the Monday item id; the old

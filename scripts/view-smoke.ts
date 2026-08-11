@@ -21,7 +21,9 @@ import { SignJWT } from 'jose';
  * Usage:
  *   pnpm view:smoke <mondayItemId> [--base=https://…] [--user=123] [--mutate]
  *
- * Read-only by default. `--mutate` additionally queues a REAL recalculation — real
+ * Read-only by default. `--mutate` additionally queues a REAL recalculation and writes
+ * (then removes) a WhatsApp message, which is the only exercise the Lua CAS script gets.
+ * Point it at a PREVIEW deployment aimed at the TEST board — real
  * provider calls, real money, a real board write — so it is opt-in.
  */
 
@@ -162,8 +164,31 @@ async function main(): Promise<void> {
     `${stale.status} ${JSON.stringify(stale.body)}`
   );
 
+  console.log('\n== D. the WhatsApp message ==');
+  const wa = await call(`${url}/whatsapp`, {}, jwt);
+  check(
+    'the message route answers',
+    wa.status === 200 || wa.status === 403 || wa.status === 404,
+    `${wa.status} ${JSON.stringify(wa.body).slice(0, 200)}`
+  );
+  if (wa.status === 200) {
+    const data = (wa.body as { data?: { generated?: string; token?: string } }).data;
+    check(
+      'it generated a message',
+      typeof data?.generated === 'string' && data.generated.startsWith('Ben jij beschikbaar?'),
+      String(data?.generated).split('\n').slice(0, 3).join(' | ')
+    );
+    check('it carries a token', typeof data?.token === 'string', String(data?.token));
+  }
+  check(
+    'the message needs a token like everything else',
+    (await call(`${url}/whatsapp`)).status === 401,
+    '401'
+  );
+
   if (!mutate) {
-    console.log('\n(Read-only. Pass --mutate to queue a real recalculation.)');
+    console.log('\n(Read-only. Pass --mutate to queue a real recalculation and exercise the');
+    console.log(' WhatsApp CAS script — only against a preview aimed at the TEST board.)');
   } else {
     console.log('\n== D. a REAL recalculation ==');
     const actionId = `smoke${Date.now()}`;
@@ -186,6 +211,62 @@ async function main(): Promise<void> {
       JSON.stringify(second.body)
     );
     console.log('\n  Watch it land:  pnpm view:smoke ' + itemId);
+
+    /**
+     * The only exercise the Lua CAS script ever gets — `redis.sha1hex` needs a real
+     * Redis, so the unit tests run against the TypeScript twin.
+     *
+     * Writes and then removes a message on THIS item. Safe only because `--mutate` is
+     * documented for a preview deployment pointed at the TEST board; a real Agenda item
+     * would mean overwriting a planner's note, and snapshot-and-restore is no safer,
+     * since the restore would clobber whatever they saved in between.
+     */
+    console.log('\n== E. the WhatsApp CAS script (writes, then cleans up) ==');
+    const before = await call(`${url}/whatsapp`, {}, jwt);
+    const beforeData = (before.body as { data?: { generated?: string; token?: string } }).data;
+    if (before.status !== 200 || typeof beforeData?.token !== 'string') {
+      check('the message could be read first', false, `${before.status}`);
+    } else {
+      const generated = beforeData.generated ?? 'Ben jij beschikbaar?';
+      const edited = `${generated}\n\n[smoke ${Date.now()}]`;
+      const saved = await call(
+        `${url}/whatsapp`,
+        { method: 'PUT', body: JSON.stringify({ edited, base: generated, token: beforeData.token }) },
+        jwt
+      );
+      check('saved', saved.status === 200, JSON.stringify(saved.body).slice(0, 200));
+      const savedToken = (saved.body as { data?: { token?: string } }).data?.token;
+
+      // The same write again with the ORIGINAL token: a lost response, not a conflict.
+      const replay = await call(
+        `${url}/whatsapp`,
+        { method: 'PUT', body: JSON.stringify({ edited, base: generated, token: beforeData.token }) },
+        jwt
+      );
+      check(
+        'a retried identical save is not a conflict',
+        replay.status === 200,
+        `${replay.status} ${JSON.stringify(replay.body).slice(0, 160)}`
+      );
+
+      // A genuinely different write on a stale token must be refused.
+      const conflict = await call(
+        `${url}/whatsapp`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ edited: `${edited} X`, base: generated, token: beforeData.token }),
+        },
+        jwt
+      );
+      check('a stale token is refused', conflict.status === CONFLICT, `${conflict.status}`);
+
+      const removed = await call(
+        `${url}/whatsapp`,
+        { method: 'DELETE', body: JSON.stringify({ token: savedToken }) },
+        jwt
+      );
+      check('cleaned up', removed.status === 200, JSON.stringify(removed.body).slice(0, 160));
+    }
   }
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);

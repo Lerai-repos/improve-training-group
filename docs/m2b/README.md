@@ -92,10 +92,37 @@ replay delivers the *recorded* answer instead of recomputing.
 | `result:<item>:<gen>` | the label | **none** |
 | `rows:<item>:<gen>` | the ranked list, or the failure stage | **12 months** |
 | `completed-gen:<item>` | highest generation that produced a label | none |
+| `whatsapp:<item>` | the planner's edited WhatsApp message, or a tombstone | **90 days** |
+| `city:v2:<address fingerprint>` | the town the address step resolved | **180 days** |
+| `board-of:<item>` | which board an item is on, for mutation authorization | **10 minutes** |
 
 The **label** never expires. The pending sweep retries a stuck trigger indefinitely
 (§3 above), so the replay horizon is unbounded — not the DLQ's 30-day/3-month retention.
 A label that lapsed would let a recovered repair recompute an already-delivered answer.
+
+The **WhatsApp message is the one free-text value in Redis**, and that is a deliberate
+exception to an otherwise firm rule — everything else here is ids and numbers, so a breach
+of the store yields opaque identifiers rather than readable content. The record holds the
+generated message (klant, locatie, deelnemersaantal — all already visible to anyone who
+can open the board) plus whatever a planner typed into it, which is why the panel says in
+so many words not to put personal data there. It is keyed on the TRAINING, not the
+generation: a recalculate must not throw away somebody's note. **Reading it requires
+`plan`, not `view`** — see §8.
+
+Concurrency on that key is compare-and-set against `sha1(stored bytes)`, with a tombstone
+on delete. Two properties are load-bearing: a hash of raw bytes still identifies a record
+nobody can *parse*, so an unreadable value can be overwritten or discarded rather than
+being stuck; and it has no ABA hole, where a revision counter restarting after a delete
+would let a delayed write match a brand-new record. A mismatch whose content is identical
+is reported as success, because that is a lost response, not a colleague.
+
+The **city** is cached against the ADDRESS, never frozen onto a generation. Freeze it and
+a planner who edits `Locatie` without recalculating keeps the old town, with nothing to
+mark it stale; keyed on the address, a changed location is a changed key and the message
+falls back to the raw text. `v2` in the key is the address prompt version, so a bad model
+vintage is abandoned wholesale by bumping it. Note that a `no_match` training normally has
+**no** city at all — the engine skips address classification when nothing is priceable
+(`service.ts`), so those show the raw `Locatie` text. Accepted, not overlooked.
 
 The **rows** do expire: they are performance and rate data about identifiable trainers,
 so keeping them forever should be a decision, not a side effect. Twelve months is 4× the
@@ -230,6 +257,15 @@ actual request goes through a route file.
    `color_mkzwfy42`.
 5. **Delivery-only failure.** Let compute store `GEREED`, then break the Monday token so
    delivery exhausts its retries ⇒ the failure callback re-delivers **GEREED**, never FOUT.
+6. **The WhatsApp CAS script.** Same gap as (2): the twin implements the rules in
+   TypeScript, so only a live run exercises `redis.sha1hex`. Use
+   `pnpm view:smoke <itemId> --mutate` **against a preview deployment whose
+   `MONDAY_AGENDA_BOARD_ID` points at the TEST board**. Production would refuse a
+   TEST-board item anyway, and snapshot-and-restore against a real Agenda item is not an
+   option either — the restore would clobber a concurrent planner's save.
+7. **The clipboard inside Monday's iframe.** `navigator.clipboard.writeText` needs the
+   host to grant `clipboard-write`, which Monday controls. Press **Kopieer** in the real
+   iframe and note which of the three fallbacks runs; no test here can tell you.
 
 ---
 
@@ -247,11 +283,11 @@ actual request goes through a route file.
 | `QSTASH_URL` | publishing | Only for a REGIONAL account (e.g. `https://qstash-eu-central-1.upstash.io`). Unset ⇒ the global default. Wrong or missing on a regional account ⇒ every publish fails. |
 | `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` | job + failure routes | Both required; verification is against the raw body and URL. |
 | `PUBLIC_BASE_URL` | QStash callbacks | Falls back to `VERCEL_URL`. Set explicitly for local tunnelling. |
-| `MONDAY_APP_CLIENT_SECRET` | the item view's three routes | The Monday app's client secret; every `sessionToken` is verified against it, HS256 only. Unset ⇒ those routes answer **503**, not 500 — the feature is not configured, which is a deployment state with an obvious fix rather than a crash. |
-| `MONDAY_ACCOUNT_ID` | the item view's three routes | ITG's account. A validly signed token from any other account is refused. No default: "any account" is not a safe fallback. |
-| `MONDAY_RECOMMENDATION_DEFAULT_CAPS` | the item view's three routes | What **every verified member of ITG's account** gets: a comma-separated list of `view`, `plan`, `full`. ITG's decision (6-Aug-2026) is no gating, so production is `view,plan,full` and the map below stays empty. ⚠️ **Account-wide is wider than board-wide.** A session token names the account and the user, never which boards they can open — so this reaches anyone in the account, including someone with no access to Agenda 2026. Monday's own permissions still govern the *pick* (a client-side write as that user); they do not govern our read. **Unset ⇒ nobody has access**, so an empty configuration denies rather than exposes rates. |
-| `MONDAY_API_TOKEN` | …and the item view's **mutating** routes | Used for the board check. Built lazily, so a missing or rotated token stops new work being queued but does **not** take the view down — the stored list is served entirely from Redis. |
-| `MONDAY_RECOMMENDATION_CAPS` | the item view's three routes | Per-user overrides, only needed to give **more** than the default: `userId:caps; userId:caps`, e.g. `222:plan; 333:full`. Unions with the default — a listed entry can never take a capability away. Malformed input throws on the first request rather than silently denying: a typo like `veiw` would otherwise look exactly like a permissions bug. A user who ends up with `plan`/`full` but no `view` is rejected too, since they could not open the list to use either. |
+| `MONDAY_APP_CLIENT_SECRET` | the item view's four routes | The Monday app's client secret; every `sessionToken` is verified against it, HS256 only. Unset ⇒ those routes answer **503**, not 500 — the feature is not configured, which is a deployment state with an obvious fix rather than a crash. |
+| `MONDAY_ACCOUNT_ID` | the item view's four routes | ITG's account. A validly signed token from any other account is refused. No default: "any account" is not a safe fallback. |
+| `MONDAY_RECOMMENDATION_DEFAULT_CAPS` | the item view's four routes | What **every verified member of ITG's account** gets: a comma-separated list of `view`, `plan`, `full`. ITG's decision (6-Aug-2026) is no gating, so production is `view,plan,full` and the map below stays empty. ⚠️ **Account-wide is wider than board-wide.** A session token names the account and the user, never which boards they can open — so this reaches anyone in the account, including someone with no access to Agenda 2026. Monday's own permissions still govern the *pick* (a client-side write as that user); they do not govern our read. **Unset ⇒ nobody has access**, so an empty configuration denies rather than exposes rates. |
+| `MONDAY_API_TOKEN` | …and the item view's **mutating** routes, plus the WhatsApp route | Used for the board check, and by the WhatsApp route for the one column read that builds the message. Built lazily, so a missing or rotated token stops new work being queued but does **not** take the view down — the stored list is served entirely from Redis. |
+| `MONDAY_RECOMMENDATION_CAPS` | the item view's four routes | Per-user overrides, only needed to give **more** than the default: `userId:caps; userId:caps`, e.g. `222:plan; 333:full`. Unions with the default — a listed entry can never take a capability away. Malformed input throws on the first request rather than silently denying: a typo like `veiw` would otherwise look exactly like a permissions bug. A user who ends up with `plan`/`full` but no `view` is rejected too, since they could not open the list to use either. |
 | `CRON_SECRET` | `/api/cron/publish-pending` | Unset ⇒ the endpoint rejects everything. |
 | `CONFIG_API_SECRET` | `/api/config/trainer-groups` | Unset ⇒ rejects everything. |
 | `GOOGLE_MAPS_API_KEY` | travel | Needs the **Routes API** enabled *and* allowed in the key's restrictions. |
@@ -264,6 +300,28 @@ actual request goes through a route file.
 
 Secrets live in **Doppler**. `.env*` files are agent-blocked — check git tracking,
 don't read them.
+
+---
+
+### Who may read the WhatsApp message
+
+The message route (`GET|PUT|DELETE /api/recommendations/[itemId]/whatsapp`) requires
+**`plan`**, not `view` — the only endpoint in the feature that does. Two reasons, stated
+so the narrowing is a decision rather than an accident:
+
+- the payload carries klant, locatie, deelnemersaantal and **arbitrary planner-typed
+  text**, where the main envelope carries ids and numbers;
+- capability is account-wide and board-blind (see `MONDAY_RECOMMENDATION_DEFAULT_CAPS`
+  above), so `view` can reach somebody who cannot open Agenda 2026 at all.
+
+It introduces **no new boundary**: `PUT approached` already writes account-wide shared
+state keyed only by item id for `plan` holders. What it adds is free text, and the panel
+tells the planner not to put personal data in it.
+
+Every mutation verifies the item's board independently, via `board-of:<item>` with a cold
+`ItemBoardReader` lookup behind it. The CAS token is a concurrency device, not an
+authorization one — `absent` is guessable — so without that check a `plan` holder could
+write records against arbitrary item ids.
 
 ---
 

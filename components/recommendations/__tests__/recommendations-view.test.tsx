@@ -1,9 +1,9 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RecommendationsView } from '../recommendations-view';
-import { fakeApi, fakeMonday, readyView, row } from './fakes';
+import { fakeApi, fakeMonday, fakeWhatsapp, readyView, row } from './fakes';
 
 import type { UseRecommendationView } from '../use-recommendation-view';
 
@@ -194,6 +194,24 @@ describe('RecommendationsView', () => {
       expect(screen.queryByRole('dialog', { name: 'Sorteren' })).toBeNull();
     });
 
+    /**
+     * The iframe only sees its own document, so a click on Monday's board around us
+     * never reaches the mousedown listener. Losing window focus is the one signal we get
+     * that the planner has moved on.
+     */
+    it('closes when the planner clicks out of the iframe entirely', async () => {
+      renderView();
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+      expect(screen.getByRole('dialog', { name: 'Sorteren' })).toBeDefined();
+
+      await act(async () => {
+        window.dispatchEvent(new Event('blur'));
+        await Promise.resolve();
+      });
+
+      expect(screen.queryByRole('dialog', { name: 'Sorteren' })).toBeNull();
+    });
+
     it('stays open while the planner works inside it', async () => {
       renderView();
       await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
@@ -217,5 +235,218 @@ describe('RecommendationsView', () => {
       status: { kind: 'loaded', view: readyView([row()], true, false) },
     });
     expect(screen.queryByRole('button', { name: /Opnieuw berekenen/ })).toBeNull();
+  });
+});
+
+describe('the WhatsApp panel', () => {
+  const withWhatsapp = (options: Parameters<typeof fakeWhatsapp>[0] = {}) => ({
+    ...fakeApi([readyView([row()])]),
+    ...fakeWhatsapp(options),
+  });
+
+  const renderWith = (
+    whatsappApi: ReturnType<typeof withWhatsapp>,
+    overrides: Partial<UseRecommendationView> = {}
+  ) => render(<RecommendationsView monday={monday} api={whatsappApi} view={view(overrides)} />);
+
+  const openPanel = async (): Promise<void> => {
+    await userEvent.click(screen.getByRole('button', { name: /WhatsApp-bericht/ }));
+    await screen.findByRole('dialog', { name: 'WhatsApp-bericht' });
+  };
+
+  it('shows the generated message', async () => {
+    renderWith(withWhatsapp());
+    await openPanel();
+
+    expect(await screen.findByDisplayValue(/Ben jij beschikbaar\?/)).toBeDefined();
+  });
+
+  /** Same corner, so two open popovers would overlap. */
+  it('closes the sort panel when it opens, and vice versa', async () => {
+    renderWith(withWhatsapp());
+
+    await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+    expect(screen.getByRole('dialog', { name: 'Sorteren' })).toBeDefined();
+
+    await openPanel();
+    expect(screen.queryByRole('dialog', { name: 'Sorteren' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+    expect(screen.queryByRole('dialog', { name: 'WhatsApp-bericht' })).toBeNull();
+  });
+
+  it('closes on a click outside', async () => {
+    renderWith(withWhatsapp());
+    await openPanel();
+
+    await userEvent.click(document.body);
+
+    expect(screen.queryByRole('dialog', { name: 'WhatsApp-bericht' })).toBeNull();
+  });
+
+  /** The iframe never sees a click on Monday's own board around it. */
+  it('closes when the planner leaves the iframe', async () => {
+    renderWith(withWhatsapp());
+    await openPanel();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('blur'));
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole('dialog', { name: 'WhatsApp-bericht' })).toBeNull();
+  });
+
+  it('is hidden from a caller who may not plan', () => {
+    renderWith(withWhatsapp(), {
+      status: { kind: 'loaded', view: readyView([row()], true, false) },
+    });
+
+    expect(screen.queryByRole('button', { name: /WhatsApp-bericht/ })).toBeNull();
+  });
+
+  describe('copying', () => {
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    });
+
+    it('uses the clipboard when the host allows it', async () => {
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+      renderWith(withWhatsapp());
+      await openPanel();
+      await userEvent.click(screen.getByRole('button', { name: 'Kopieer' }));
+
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Ben jij beschikbaar?'));
+      expect(await screen.findByText('Gekopieerd.')).toBeDefined();
+    });
+
+    /**
+     * Monday controls whether the iframe gets `clipboard-write`, so the refusal path is
+     * not hypothetical — and it must end somewhere the planner can still act.
+     */
+    it('falls back to a selection when the clipboard is refused', async () => {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: () => Promise.reject(new Error('blocked')) },
+        configurable: true,
+      });
+      const execCommand = vi.fn(() => false);
+      Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
+
+      renderWith(withWhatsapp());
+      await openPanel();
+      await userEvent.click(screen.getByRole('button', { name: 'Kopieer' }));
+
+      expect(execCommand).toHaveBeenCalledWith('copy');
+      expect(await screen.findByText(/druk Ctrl\/⌘-C/)).toBeDefined();
+    });
+  });
+
+  /**
+   * The one place the error handling and the dismissal handling contradict each other:
+   * closing anyway would unmount the message AND take the draft with it.
+   */
+  it('stays open when the closing save fails, keeping the draft and offering a way out', async () => {
+    renderWith(withWhatsapp({ failSave: true }));
+    await openPanel();
+
+    const box = await screen.findByLabelText('Berichttekst');
+    await userEvent.clear(box);
+    await userEvent.type(box, 'mijn aantekening');
+    await userEvent.click(screen.getByRole('button', { name: 'Sluiten' }));
+
+    expect(await screen.findByText(/Niet opgeslagen/)).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'WhatsApp-bericht' })).toBeDefined();
+    expect(screen.getByDisplayValue('mijn aantekening')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Opnieuw proberen' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Herstel origineel' })).toBeDefined();
+  });
+
+  it('closes once the save succeeds', async () => {
+    renderWith(withWhatsapp());
+    await openPanel();
+
+    const box = await screen.findByLabelText('Berichttekst');
+    await userEvent.type(box, '!');
+    await userEvent.click(screen.getByRole('button', { name: 'Sluiten' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'WhatsApp-bericht' })).toBeNull()
+    );
+  });
+
+  /**
+   * EVERY exit saves first. Routing only Sluiten and Escape through the guarded flush
+   * left three other ways out — an outside click, losing the iframe's focus, and
+   * pressing Sorteren — that hid a failed autosave and let the draft be overwritten.
+   */
+  describe('every way out', () => {
+    const typeInto = async (): Promise<void> => {
+      const box = await screen.findByLabelText('Berichttekst');
+      await userEvent.clear(box);
+      await userEvent.type(box, 'mijn aantekening');
+    };
+
+    it('saves a draft on a click outside', async () => {
+      const api = withWhatsapp();
+      renderWith(api);
+      await openPanel();
+      await typeInto();
+
+      await userEvent.click(document.body);
+
+      await waitFor(() => expect(api.calls.saves).toBeGreaterThan(0));
+    });
+
+    it('stays open on a click outside when the save fails', async () => {
+      renderWith(withWhatsapp({ failSave: true }));
+      await openPanel();
+      await typeInto();
+
+      await userEvent.click(document.body);
+
+      expect(await screen.findByText(/Niet opgeslagen/)).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'WhatsApp-bericht' })).toBeDefined();
+      expect(screen.getByDisplayValue('mijn aantekening')).toBeDefined();
+    });
+
+    it('stays open when the iframe loses focus and the save fails', async () => {
+      renderWith(withWhatsapp({ failSave: true }));
+      await openPanel();
+      await typeInto();
+
+      await act(async () => {
+        window.dispatchEvent(new Event('blur'));
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(screen.getByText(/Niet opgeslagen/)).toBeDefined());
+      expect(screen.getByRole('dialog', { name: 'WhatsApp-bericht' })).toBeDefined();
+    });
+
+    /** Sorteren replaces the panel, so it is a dismissal like any other. */
+    it('does not let Sorteren take over while a save is failing', async () => {
+      renderWith(withWhatsapp({ failSave: true }));
+      await openPanel();
+      await typeInto();
+
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+
+      expect(await screen.findByText(/Niet opgeslagen/)).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'WhatsApp-bericht' })).toBeDefined();
+      expect(screen.queryByRole('dialog', { name: 'Sorteren' })).toBeNull();
+    });
+
+    it('lets Sorteren through once the draft is saved', async () => {
+      renderWith(withWhatsapp());
+      await openPanel();
+      await typeInto();
+
+      await userEvent.click(screen.getByRole('button', { name: /Sorteren/ }));
+
+      await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sorteren' })).toBeDefined());
+      expect(screen.queryByRole('dialog', { name: 'WhatsApp-bericht' })).toBeNull();
+    });
   });
 });
