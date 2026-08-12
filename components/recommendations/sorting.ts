@@ -168,13 +168,28 @@ export function travelMarginCents(row: Row): number | null {
 }
 
 /**
- * Totals across a training's themes. Null when NO theme has the figure — so "we have no
- * evaluation data" stays distinct from a genuine zero, which is the distinction the whole
- * display layer is built around.
+ * The highest per-theme figure across a training's themes — deliberately NOT the total.
+ *
+ * The statistics board stores one row per (trainer, thema), which is legacy's shape and
+ * the only one the parity corpora can check. A training covering two themes therefore
+ * incremented BOTH rows, so adding them up counts that training twice: `sum` is an upper
+ * bound that always may overstate, `max` a lower bound that never does. For the 98% of
+ * trainings with a single theme the two are identical.
+ *
+ * This replaces `sumThemes` rather than narrowing it. Leaving a summing helper in the
+ * file is how one of the two columns quietly goes back to summing — and because the cell
+ * and the sort key both route through here, a column that displayed one figure while
+ * sorting on another could not be spotted by looking at the screen.
+ *
+ * Null when NO theme carries the figure, so "we have no evaluation data" stays distinct
+ * from a genuine zero — the distinction this whole display layer is built around.
  */
-export function sumThemes(row: Row, field: 'evaluationCount' | 'timesTaught'): number | null {
-  const values = (row.themes ?? []).map((theme) => theme[field]).filter((v) => v !== null);
-  return values.length === 0 ? null : values.reduce((total, v) => total + (v ?? 0), 0);
+export function maxTheme(row: Row, field: 'evaluationCount' | 'timesTaught'): number | null {
+  const values = (row.themes ?? []).flatMap((theme) => {
+    const value = theme[field];
+    return value === null ? [] : [value];
+  });
+  return values.length === 0 ? null : Math.max(...values);
 }
 
 /**
@@ -189,11 +204,11 @@ function valueOf(row: Row, key: SortKey): number | string | null {
     case 'grade':
       return row.overallAverageDisplay ?? null;
     case 'themeEvalCount':
-      return sumThemes(row, 'evaluationCount');
+      return maxTheme(row, 'evaluationCount');
     case 'totalEvalCount':
       return row.overallEvaluationCount ?? null;
     case 'timesTaught':
-      return sumThemes(row, 'timesTaught');
+      return maxTheme(row, 'timesTaught');
     case 'travelMarginCents':
       return travelMarginCents(row);
     case 'assignmentsThisMonth':
@@ -267,4 +282,31 @@ export function sortRows(rows: readonly Row[], levels: readonly SortLevel[]): Ro
     // renders of the same data.
     return a.rank - b.rank;
   });
+}
+
+/**
+ * The per-theme figures behind {@link maxTheme}, for a tooltip.
+ *
+ * `max` is honest but lossy: on a multi-theme training the cell shows one number and
+ * hides the others, so a planner cannot tell whether "5" is five on this theme or five
+ * on the other one. This puts both on screen.
+ *
+ * Values only, in the training's theme order — the row payload carries theme IDs and no
+ * names, and "5072549437: 5" would be worse than nothing. Naming them means plumbing
+ * theme titles through `StoredRow` and the view DTO, which is a schema change worth
+ * making when someone asks for it rather than smuggling in here.
+ *
+ * Every theme keeps its POSITION, and a missing figure renders as `—` rather than being
+ * dropped. Filtering nulls out both hides the tooltip on `[null, 5]` — two themes, one
+ * value — and, with more themes, breaks the correspondence between the list and the
+ * training's theme order, so the reader cannot tell which figure belongs where.
+ *
+ * Null below two themes: a tooltip that merely repeats the cell is noise.
+ */
+export function themeBreakdown(row: Row, field: 'evaluationCount' | 'timesTaught'): string | null {
+  const themes = row.themes ?? [];
+  if (themes.length < 2) {
+    return null;
+  }
+  return `per thema: ${themes.map((theme) => theme[field] ?? '—').join(' · ')}`;
 }

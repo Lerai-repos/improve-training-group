@@ -22,7 +22,7 @@ import type {
   CandidateTrainer,
   QualObservation,
   RankedRecommendation,
-  TrainerThemeEval,
+  TrainerThemeStat,
   TrainerTravel,
 } from './types';
 
@@ -63,6 +63,26 @@ export interface ServiceDeps {
    * happens below, not in the roster adapter — see `lib/recommend/roster.ts`.
    */
   roster: readonly CandidateTrainer[];
+  /**
+   * Every (trainer × thema) statistic, read ONCE per execution and injected — the same
+   * discipline as `roster`.
+   *
+   * A VALUE, not a port, and that IS the failure contract expressed in the type: the
+   * read happens in the composition root before this function is entered, so no code
+   * path in here can observe a failed read and continue with an empty list. Empty is
+   * indistinguishable from "nobody has ever been evaluated", which would silently
+   * rerank every list and report an evaluated trainer as inexperienced.
+   *
+   * Required rather than optional-with-a-default, so the compiler enumerates every
+   * caller instead of one of them quietly defaulting to `[]`.
+   *
+   * `null` means NOT CONSULTED — the release gate is off — and is different from `[]`,
+   * which would mean "we looked and nobody has ever been evaluated". The difference
+   * reaches the screen: with a set present an absent pair is a fact and renders `0`,
+   * while `null` renders `—`. Conflating them would tell a planner that every trainer
+   * has zero evaluations on the day the flag is off.
+   */
+  evaluations: readonly TrainerThemeStat[] | null;
   addressFormatter: AddressFormatter;
   travelProvider: TravelProvider;
   travelCache: TravelCache;
@@ -195,14 +215,6 @@ export type RecommendationResult =
       failure: { stage: Stage; message: string | null; retryable: boolean };
       partial: Partial<Provenance>;
     };
-
-/**
- * Evaluation aggregates are INERT until M3 (see scores.ts): every input row is
- * absent today, so scores are (null, 0) and ranking falls back to cost then travel.
- * They were the one input with no live-Monday equivalent — derived history, not a
- * column — so they are dropped here and will return from the Trainer x Thema board.
- */
-const NO_EVALS: readonly TrainerThemeEval[] = [];
 
 function addressReason(addr: AddressDecision): string | null {
   if (addr.kind === 'no_travel_confirmed') {
@@ -393,7 +405,8 @@ export async function runRecommendation(
       priceTrainer(
         t,
         travelByTrainer.get(t.externalItemId) ?? null,
-        computeScores(t.externalItemId, live.themeExternalIds, NO_EVALS),
+        // Ranking is inert without statistics, which is the pre-gate behaviour.
+        computeScores(t.externalItemId, live.themeExternalIds, deps.evaluations ?? []),
         ctx
       )
     );
@@ -456,7 +469,7 @@ export async function runRecommendation(
       ok: true,
       resultStatus: ranked.length > 0 ? 'GEREED' : 'GEEN MATCH',
       recommendations: ranked,
-      rows: toStoredRows(ranked, effective, live.themeExternalIds),
+      rows: toStoredRows(ranked, effective, live.themeExternalIds, deps.evaluations),
       /**
        * The training's own month, stored ONCE for the whole list rather than per row.
        *

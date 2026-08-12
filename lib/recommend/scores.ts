@@ -1,4 +1,10 @@
-import { trainerOverallAvg, weightedThemeAvg, type ThemeStat, type TrainingEval } from '@lib/calc';
+import {
+  contributingEvaluations,
+  trainerOverallAvg,
+  weightedThemeAvg,
+  type ThemeStat,
+  type TrainingEval,
+} from '@lib/calc';
 
 import type { TrainerScores, TrainerThemeEval } from './types';
 
@@ -33,9 +39,13 @@ export function computeScores(
     list.push({ avgOverallGrade: e.avgOverallGrade, evaluationCount: e.evaluationCount });
     byTheme.set(e.themaExternalId, list);
   }
+  // `contributingEvaluations`, not a raw sum: the weight a theme carries here must be
+  // the evaluations that actually produced its average. Summing every row lets a theme
+  // with one graded and one ungraded training claim the ungraded one's responses as
+  // backing for a score they never fed.
   const stats: ThemeStat[] = [...byTheme.values()].map((themeEvalsForTheme) => ({
     weightedAvg: weightedThemeAvg(themeEvalsForTheme),
-    totalEvaluations: themeEvalsForTheme.reduce((sum, ev) => sum + ev.evaluationCount, 0),
+    totalEvaluations: contributingEvaluations(themeEvalsForTheme),
   }));
 
   return {

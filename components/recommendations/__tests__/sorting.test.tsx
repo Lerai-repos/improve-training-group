@@ -5,11 +5,13 @@ import {
   defaultDirection,
   labelOf,
   levelOf,
+  maxTheme,
   moveLevel,
   removeLevel,
   setDirection,
   sortColumnsFor,
   sortRows,
+  themeBreakdown,
   travelMarginCents,
 } from '../sorting';
 import { row } from './fakes';
@@ -193,6 +195,133 @@ describe('sortRows', () => {
     for (const key of ['themeAvgScore', 'themeEvalCount', 'totalEvalCount', 'timesTaught'] as const) {
       expect(order([{ key, direction: 'desc' }])).toEqual(['b', 'c', 'a']);
     }
+  });
+
+  /**
+   * A training can cover several themes, and the board deliberately stores one row per
+   * (trainer, thema) — legacy's shape, and the only one both parity corpora can check.
+   * The consequence is that a training covering two themes incremented BOTH rows, so
+   * summing across them double-counts it.
+   *
+   * `max` is a lower bound and never overstates; `sum` is an upper bound and always may.
+   * For the 98% of trainings with a single theme the two agree exactly.
+   */
+  describe('per-training counts across a multi-theme training', () => {
+    const twoThemes = row({
+      themes: [
+        { themeItemId: 'a', qualification: 'green', average: 8, evaluationCount: 10, timesTaught: 5 },
+        { themeItemId: 'b', qualification: 'green', average: 7, evaluationCount: 4, timesTaught: 2 },
+      ],
+    });
+
+    it('shows the highest per-theme figure, not the total', () => {
+      expect(maxTheme(twoThemes, 'timesTaught')).toBe(5);
+      expect(maxTheme(twoThemes, 'evaluationCount')).toBe(10);
+    });
+
+    it('agrees with the single-theme case, where there is nothing to double-count', () => {
+      const oneTheme = row({
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: 8, evaluationCount: 10, timesTaught: 5 },
+        ],
+      });
+
+      expect(maxTheme(oneTheme, 'timesTaught')).toBe(5);
+    });
+
+    /** "No data" and "zero" stay different facts, exactly as before. */
+    it('is null when no theme carries the figure at all', () => {
+      const unknown = row({
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: null, evaluationCount: null, timesTaught: null },
+        ],
+      });
+
+      expect(maxTheme(unknown, 'timesTaught')).toBeNull();
+      expect(maxTheme(row({ themes: [] }), 'timesTaught')).toBeNull();
+      expect(maxTheme(row({ themes: undefined }), 'timesTaught')).toBeNull();
+    });
+
+    it('ignores a theme with no figure rather than treating it as zero', () => {
+      const mixed = row({
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: null, evaluationCount: null, timesTaught: null },
+          { themeItemId: 'b', qualification: 'green', average: 7, evaluationCount: 4, timesTaught: 2 },
+        ],
+      });
+
+      expect(maxTheme(mixed, 'timesTaught')).toBe(2);
+    });
+
+    it('keeps a genuine zero, which is not the same as no data', () => {
+      const neverTaught = row({
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: null, evaluationCount: 0, timesTaught: 0 },
+        ],
+      });
+
+      expect(maxTheme(neverTaught, 'timesTaught')).toBe(0);
+    });
+
+    it('offers the per-theme figures behind the maximum', () => {
+      expect(themeBreakdown(twoThemes, 'timesTaught')).toBe('per thema: 5 · 2');
+      expect(themeBreakdown(twoThemes, 'evaluationCount')).toBe('per thema: 10 · 4');
+    });
+
+    /**
+     * Dropping nulls hides the tooltip on `[null, 5]` — two themes, one value — and with
+     * more themes breaks the correspondence between the list and the theme order, so the
+     * reader cannot tell which figure belongs where.
+     */
+    it('keeps a missing theme in place rather than dropping it', () => {
+      const mixed = row({
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: null, evaluationCount: null, timesTaught: null },
+          { themeItemId: 'b', qualification: 'green', average: 7, evaluationCount: 4, timesTaught: 5 },
+        ],
+      });
+
+      expect(themeBreakdown(mixed, 'timesTaught')).toBe('per thema: — · 5');
+      expect(maxTheme(mixed, 'timesTaught')).toBe(5);
+    });
+
+    /** A tooltip that merely repeats the cell is noise. */
+    it('has nothing to add for a single theme, or for no data', () => {
+      const one = row({
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: 8, evaluationCount: 10, timesTaught: 5 },
+        ],
+      });
+
+      expect(themeBreakdown(one, 'timesTaught')).toBeNull();
+      expect(themeBreakdown(row({ themes: [] }), 'timesTaught')).toBeNull();
+      expect(themeBreakdown(row({ themes: undefined }), 'timesTaught')).toBeNull();
+    });
+
+    /**
+     * The cell and the sort key MUST agree. A column showing `max` while the sort
+     * compares `sum` is a bug nobody would ever find by looking at the screen.
+     */
+    it('sorts by the same figure the cell shows', () => {
+      const high = row({
+        trainerItemId: 'high',
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: 8, evaluationCount: 3, timesTaught: 9 },
+        ],
+      });
+      const spread = row({
+        trainerItemId: 'spread',
+        themes: [
+          { themeItemId: 'a', qualification: 'green', average: 8, evaluationCount: 3, timesTaught: 5 },
+          { themeItemId: 'b', qualification: 'green', average: 8, evaluationCount: 3, timesTaught: 5 },
+        ],
+      });
+
+      // Summing would put `spread` (10) above `high` (9); max keeps `high` on top.
+      const sorted = sortRows([spread, high], [{ key: 'timesTaught', direction: 'desc' }]);
+      expect(sorted.map((r) => r.trainerItemId)).toEqual(['high', 'spread']);
+      expect(maxTheme(sorted[0], 'timesTaught')).toBe(9);
+    });
   });
 
   /**

@@ -50,6 +50,20 @@ export interface TrainerThemeEval {
   evaluationCount: number;
 }
 
+/**
+ * One (trainer × thema) statistic as the engine consumes it.
+ *
+ * Extends {@link TrainerThemeEval} so `computeScores` takes it unchanged: the ranking
+ * inputs and the display inputs are the SAME rows, read once. `timesTaught` is NOT added
+ * to `TrainerThemeEval` itself — ranking never uses it (`lib/calc/rank.ts` sorts on cost,
+ * theme average, overall average, travel), and putting it on the ranking input would
+ * invite a future sort key to reach for it.
+ */
+export interface TrainerThemeStat extends TrainerThemeEval {
+  /** Distinct completed trainings in which this trainer taught this theme. */
+  timesTaught: number;
+}
+
 /** Trainer scores for a training (both inert until M3 populates snapshots). */
 export interface TrainerScores {
   themeAvgScore: number | null;

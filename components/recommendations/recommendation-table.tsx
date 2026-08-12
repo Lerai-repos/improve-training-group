@@ -15,7 +15,15 @@ import {
 import { cn } from '@lib/utils';
 
 import { duration, euros, grade } from './format';
-import { levelOf, sortRows, sumThemes, travelMarginCents, type SortKey, type SortLevel } from './sorting';
+import {
+  levelOf,
+  maxTheme,
+  sortRows,
+  themeBreakdown,
+  travelMarginCents,
+  type SortKey,
+  type SortLevel,
+} from './sorting';
 
 import type { Row } from './types';
 
@@ -256,9 +264,17 @@ const ScoreCell = ({ value }: { value: number | null }) => (
   </TableCell>
 );
 
-/** A count, or an em dash. "None recorded" and "zero" are different facts. */
-const CountCell = ({ value }: { value: number | null }) => (
-  <TableCell className={cn('text-right', value === null && 'text-muted-foreground')}>
+/**
+ * A count, or an em dash. "None recorded" and "zero" are different facts.
+ *
+ * `title` carries the per-theme breakdown on a multi-theme training: the cell shows the
+ * highest figure, which never overstates but does hide the others.
+ */
+const CountCell = ({ value, title }: { value: number | null; title?: string | null }) => (
+  <TableCell
+    className={cn('text-right', value === null && 'text-muted-foreground')}
+    title={title ?? undefined}
+  >
     {value ?? '—'}
   </TableCell>
 );
@@ -326,9 +342,12 @@ const TrainerRow = ({
         <>
           <ScoreCell value={row.themeAvgScore ?? null} />
           <ScoreCell value={row.overallAverageDisplay ?? null} />
-          <CountCell value={sumThemes(row, 'evaluationCount')} />
+          <CountCell
+            value={maxTheme(row, 'evaluationCount')}
+            title={themeBreakdown(row, 'evaluationCount')}
+          />
           <CountCell value={row.overallEvaluationCount ?? null} />
-          <CountCell value={sumThemes(row, 'timesTaught')} />
+          <CountCell value={maxTheme(row, 'timesTaught')} title={themeBreakdown(row, 'timesTaught')} />
         </>
       )}
       <TableCell>{duration(row.roundTripDurationMinutes)}</TableCell>

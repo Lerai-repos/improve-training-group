@@ -54,3 +54,4 @@ export * from './session-token';
 export * from './view-auth';
 export * from './view-dto';
 export * from './deps';
+export * from './eval-stats';

@@ -10,6 +10,7 @@ export { billableHours } from './billable-hours';
 export { countsForEvaluation } from './eligibility';
 export {
   weightedThemeAvg,
+  contributingEvaluations,
   trainerOverallAvg,
   type TrainingEval,
   type ThemeStat,

@@ -36,4 +36,28 @@ describe('computeScores', () => {
     const s = computeScores('t1', ['th1'], [ev('t2', 'th1', 9, 5)]);
     expect(s).toEqual({ themeAvgScore: null, overallAvgScore: 0 });
   });
+
+  /**
+   * The numerator and the denominator have to agree about which rows counted.
+   *
+   * A theme with BOTH a graded and an ungraded training is the case that bites:
+   * `weightedThemeAvg` skips the ungraded row, so the average is 8 — but a
+   * `totalEvaluations` summed over every row says that 8 is backed by 100 evaluations
+   * instead of 4, and the theme then dominates the trainer's overall average. (A theme
+   * that is ungraded *throughout* is harmless: `trainerOverallAvg` drops a null-average
+   * stat outright, which is why this went unnoticed.)
+   */
+  it('weights a theme by the evaluations that produced its average, not by all of them', () => {
+    const evals = [
+      ev('t1', 'th1', 8, 4),
+      ev('t1', 'th1', null, 96), // responses, no parseable grade — no score, no weight
+      ev('t1', 'th2', 6, 4),
+    ];
+
+    const s = computeScores('t1', ['th1'], evals);
+
+    expect(s.themeAvgScore).toBe(8);
+    // (8×4 + 6×4) / 8 = 7. Counting the 96 ungraded responses gives 7.92.
+    expect(s.overallAvgScore).toBe(7);
+  });
 });

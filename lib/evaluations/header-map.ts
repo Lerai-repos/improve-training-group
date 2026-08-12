@@ -1,0 +1,160 @@
+/**
+ * Which column holds the IE-code, and which holds the eindcijfer.
+ *
+ * Three header shapes exist for the same tab: `Code` on the live sheet (what every n8n
+ * node matches on), `IE-code` on the older documents, and the full question text in a
+ * CSV export. So the column cannot be hardcoded — but nor can it be guessed.
+ *
+ * The resolution is a ladder with an ambiguity guard and **no positional fallback**.
+ * That last part is the load-bearing decision: ITG edits these sheets, the NL export
+ * already carries six operator-added `Kolom N` columns, and a column inserted before
+ * the code column would make every response carry a grade as its code, match nothing,
+ * and produce a perfectly green run that has silently lost every response. Failing
+ * loudly is the only safe answer, so an unresolved required column is an error rather
+ * than a default.
+ */
+
+export interface ResolvedColumns {
+  readonly code: number;
+  readonly grade: number;
+  /** Carried for the report; nothing parses it. Absent is fine. */
+  readonly timestamp: number | null;
+}
+
+export type HeaderResolution =
+  | { readonly ok: true; readonly columns: ResolvedColumns }
+  | { readonly ok: false; readonly reason: string; readonly headers: readonly string[] };
+
+/**
+ * NFKD → drop combining marks → lowercase → every non-alphanumeric run becomes one
+ * space → trim.
+ *
+ * This is what makes a two-word marker like `final grade` safe: it collapses the EN
+ * code header's embedded newline and the EN program question's accidental double
+ * space, both of which are really in the live data.
+ */
+export function normalizeHeader(raw: string): string {
+  return raw
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+interface ColumnSpec {
+  readonly field: 'code' | 'grade' | 'timestamp';
+  /** Exact normalized names, tried first, in order. */
+  readonly aliases: readonly string[];
+  /** Substrings, tried only when no alias hit. Each must match EXACTLY one header. */
+  readonly markers: readonly string[];
+  readonly required: boolean;
+}
+
+const COLUMN_SPECS: readonly ColumnSpec[] = [
+  {
+    field: 'code',
+    aliases: ['code', 'ie code', 'iecode'],
+    markers: ['ie code', 'code'],
+    required: true,
+  },
+  {
+    field: 'grade',
+    aliases: ['eindcijfer', 'final grade'],
+    markers: ['eindcijfer', 'final grade', 'cijfer', 'grade'],
+    required: true,
+  },
+  {
+    field: 'timestamp',
+    aliases: ['tijdstempel', 'timestamp'],
+    markers: ['tijdstempel', 'timestamp'],
+    required: false,
+  },
+];
+
+/** Indexes whose normalized header equals `needle`. */
+function exactHits(headers: readonly string[], needle: string): number[] {
+  return headers.flatMap((header, index) => (header === needle ? [index] : []));
+}
+
+/** Indexes whose normalized header contains `needle`. */
+function substringHits(headers: readonly string[], needle: string): number[] {
+  return headers.flatMap((header, index) => (header.includes(needle) ? [index] : []));
+}
+
+type FieldResolution =
+  | { readonly kind: 'found'; readonly index: number }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'ambiguous'; readonly needle: string; readonly indexes: readonly number[] };
+
+/**
+ * Resolve one field.
+ *
+ * An alias matching two columns is fatal immediately — two columns literally named
+ * `Code` is drift, and picking one attributes every response through a coin flip. A
+ * *marker* matching two is not fatal on its own: the next, more specific marker gets a
+ * turn. Only when every marker is exhausted does ambiguity surface.
+ */
+function resolveField(headers: readonly string[], spec: ColumnSpec): FieldResolution {
+  for (const alias of spec.aliases) {
+    const hits = exactHits(headers, alias);
+    if (hits.length === 1) {
+      return { kind: 'found', index: hits[0] };
+    }
+    if (hits.length > 1) {
+      return { kind: 'ambiguous', needle: alias, indexes: hits };
+    }
+  }
+
+  let ambiguous: FieldResolution | null = null;
+  for (const marker of spec.markers) {
+    const hits = substringHits(headers, marker);
+    if (hits.length === 1) {
+      return { kind: 'found', index: hits[0] };
+    }
+    if (hits.length > 1 && ambiguous === null) {
+      ambiguous = { kind: 'ambiguous', needle: marker, indexes: hits };
+    }
+  }
+
+  return ambiguous ?? { kind: 'absent' };
+}
+
+export function resolveColumns(header: readonly string[]): HeaderResolution {
+  const headers = header.map(normalizeHeader);
+  const found = new Map<ColumnSpec['field'], number>();
+
+  for (const spec of COLUMN_SPECS) {
+    const resolution = resolveField(headers, spec);
+
+    if (resolution.kind === 'ambiguous') {
+      return {
+        ok: false,
+        reason:
+          `column "${spec.field}": "${resolution.needle}" matches ` +
+          `${resolution.indexes.length} columns (${resolution.indexes.join(', ')}) — refusing to guess`,
+        headers,
+      };
+    }
+    if (resolution.kind === 'absent') {
+      if (spec.required) {
+        return {
+          ok: false,
+          reason: `column "${spec.field}": no header matched — refusing to fall back to a position`,
+          headers,
+        };
+      }
+      continue;
+    }
+    found.set(spec.field, resolution.index);
+  }
+
+  const code = found.get('code');
+  const grade = found.get('grade');
+  if (code === undefined || grade === undefined) {
+    // Unreachable: both are required and a missing required field returned above.
+    return { ok: false, reason: 'required columns unresolved', headers };
+  }
+
+  return { ok: true, columns: { code, grade, timestamp: found.get('timestamp') ?? null } };
+}

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { EffectiveQualification } from '@lib/monday/qualification';
 
-import type { EffectiveQual, RankedRecommendation } from './types';
+import type { EffectiveQual, RankedRecommendation, TrainerThemeStat } from './types';
 
 /**
  * The recommendation list as it is persisted for the item view.
@@ -110,7 +110,8 @@ export type StoredRow = z.infer<typeof storedRowSchema>;
 export function toStoredRows(
   ranked: readonly RankedRecommendation[],
   effective: readonly EffectiveQual[],
-  themeExternalIds: readonly string[]
+  themeExternalIds: readonly string[],
+  evaluations: readonly TrainerThemeStat[] | null
 ): StoredRow[] {
   const byTrainer = new Map<string, Map<string, EffectiveQual>>();
   for (const q of effective) {
@@ -119,8 +120,20 @@ export function toStoredRows(
     byTrainer.set(q.trainerExternalId, themes);
   }
 
+  /** `null` = the statistics were not consulted; see `ServiceDeps.evaluations`. */
+  const consulted = evaluations !== null;
+  const statsByTrainer = new Map<string, Map<string, TrainerThemeStat>>();
+  for (const stat of evaluations ?? []) {
+    const themes = statsByTrainer.get(stat.trainerExternalId) ?? new Map<string, TrainerThemeStat>();
+    themes.set(stat.themaExternalId, stat);
+    statsByTrainer.set(stat.trainerExternalId, themes);
+  }
+
   return ranked.map((r) => {
     const themes = byTrainer.get(r.externalItemId);
+    const stats = statsByTrainer.get(r.externalItemId);
+    const mine = [...(stats?.values() ?? [])];
+    const overallCount = mine.reduce((sum, stat) => sum + stat.evaluationCount, 0);
     return {
       trainerItemId: r.externalItemId,
       rank: r.rank,
@@ -129,17 +142,30 @@ export function toStoredRows(
         // Absent from the matrix = never assessed for this theme, which reads as
         // "geen oordeel" rather than a negative one.
         qualification: themes?.get(themeItemId)?.effective ?? null,
-        // Evaluations are inert until M3; null keeps "no data" distinct from a zero.
-        average: null,
-        evaluationCount: null,
-        timesTaught: null,
+        average: stats?.get(themeItemId)?.avgOverallGrade ?? null,
+        /**
+         * `0`, not `null`, for an absent pair — and that is the whole feature.
+         *
+         * With a successful read, absence is a FACT: this trainer has never taught this
+         * theme and has never been evaluated on it. `null` means "the source could not
+         * tell us", which the throwing read contract makes unreachable. Mapping absence
+         * to `null` here would render `—` and keep "groen maar nooit gegeven"
+         * indistinguishable from "no data" — the exact confusion this feature exists to
+         * end (`02-datamodel-monday.md:121`).
+         */
+        evaluationCount: stats?.get(themeItemId)?.evaluationCount ?? (consulted ? 0 : null),
+        timesTaught: stats?.get(themeItemId)?.timesTaught ?? (consulted ? 0 : null),
       })),
       themeAvgScore: r.themeAvgScore,
       overallAvgScore: r.overallAvgScore,
-      // Both null while evaluations are inert. Once M3 lands, the display value stays
-      // null whenever the count is 0 — that is the case the scalar cannot express.
-      overallAverageDisplay: null,
-      overallEvaluationCount: null,
+      /**
+       * The display pair, distinct from `overallAvgScore` by exactly one asymmetry:
+       * `trainerOverallAvg` returns 0 for a trainer with no evaluations (legacy's rule,
+       * correct for sorting) where the screen must say "geen cijfers". Same number
+       * whenever the count is non-zero.
+       */
+      overallAverageDisplay: overallCount === 0 ? null : r.overallAvgScore,
+      overallEvaluationCount: consulted ? overallCount : null,
       hourlyRateCents: r.hourlyRateCents,
       billableHours: r.billableHours,
       trainingFeeCents: r.trainingFeeCents,

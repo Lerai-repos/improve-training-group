@@ -87,6 +87,8 @@ function deps(over: Partial<ServiceDeps> = {}): { deps: ServiceDeps; spies: Spie
   const base: ServiceDeps = {
     reader: reader(training(), [green('a')]),
     roster: [trainer('a')],
+    // null = not consulted, which is the pre-gate default these tests describe.
+    evaluations: null,
     addressFormatter: {
       format: () => {
         spies.addressCalls += 1;

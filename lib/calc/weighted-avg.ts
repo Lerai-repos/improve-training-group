@@ -13,6 +13,18 @@ export interface ThemeStat {
 }
 
 /**
+ * Whether a training contributes to a theme's average — the ONE predicate behind
+ * {@link weightedThemeAvg} and {@link contributingEvaluations}.
+ *
+ * It exists as a function rather than a repeated condition because the numerator and
+ * the denominator have to agree about which rows counted, and a disagreement there is
+ * invisible: the average looks right while the count beside it is inflated.
+ */
+function contributes(e: TrainingEval): boolean {
+  return e.avgOverallGrade !== null && !Number.isNaN(e.avgOverallGrade) && e.evaluationCount > 0;
+}
+
+/**
  * Weighted trainer×theme average: `Σ(avg × count) / Σ(count)`, to 2 decimals.
  *
  * Only trainings with a non-null grade AND `evaluationCount > 0` contribute.
@@ -24,19 +36,39 @@ export function weightedThemeAvg(evals: readonly TrainingEval[]): number | null 
   let totalEvals = 0;
 
   for (const e of evals) {
-    if (e.avgOverallGrade === null || Number.isNaN(e.avgOverallGrade)) {
+    if (!contributes(e)) {
       continue;
     }
-    if (e.evaluationCount > 0) {
-      totalWeighted += e.avgOverallGrade * e.evaluationCount;
-      totalEvals += e.evaluationCount;
-    }
+    // `contributes` proved the grade is a number; the non-null assertion is the
+    // compiler's, not a new claim.
+    totalWeighted += (e.avgOverallGrade ?? 0) * e.evaluationCount;
+    totalEvals += e.evaluationCount;
   }
 
   if (totalEvals === 0) {
     return null;
   }
   return round2(totalWeighted / totalEvals);
+}
+
+/**
+ * The denominator behind {@link weightedThemeAvg} — the SAME rows, counted.
+ *
+ * Exposed so no caller has to re-derive "which rows counted". A training with
+ * responses but no parseable grade (13 such rows exist in the live NL export)
+ * contributes to neither the average nor this count.
+ *
+ * Invariant, asserted in the tests: this is `0` exactly when `weightedThemeAvg` is
+ * `null`.
+ */
+export function contributingEvaluations(evals: readonly TrainingEval[]): number {
+  let total = 0;
+  for (const e of evals) {
+    if (contributes(e)) {
+      total += e.evaluationCount;
+    }
+  }
+  return total;
 }
 
 /**

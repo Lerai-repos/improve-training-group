@@ -18,6 +18,10 @@ import {
   createStubTravelProvider,
   createTravelCache,
   readRoster,
+  evalStatsEnabled,
+  readEvalStats,
+  createUpstashKvStore,
+  createRedisClient,
   runRecommendation,
   type ServiceDeps,
 } from '@lib/recommend';
@@ -61,11 +65,21 @@ async function main(): Promise<void> {
 
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
   const roster = await readRoster(client, ITEM_FIELDS);
+  const evaluations = evalStatsEnabled()
+    ? await readEvalStats(createUpstashKvStore(createRedisClient()))
+    : null;
+  console.log(
+    `Evaluaties: ${evaluations === null ? 'UIT (zet EVAL_STATS_ENABLED=1)' : `${evaluations.length} rijen`}`
+  );
   console.log(`Roster: ${roster.length} trainers (live, all groups)`);
 
   const deps: ServiceDeps = {
     reader: createMondayReader(client),
     roster,
+    // A release-gated input. `null` (flag off) means NOT CONSULTED and keeps the scores
+    // inert, which is the pre-gate behaviour; with the flag on this is the live record
+    // the nightly job wrote, so the two runs can be diffed to approve the ranking change.
+    evaluations,
     addressFormatter: hasLlm
       ? createAddressFormatter(createOpenRouterCompletion(process.env.OPENROUTER_API_KEY ?? ''))
       : createStubAddressFormatter({ kind: 'no_travel_confirmed', reason: 'online' }),

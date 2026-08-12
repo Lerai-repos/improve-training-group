@@ -51,11 +51,20 @@ function assertRelationPayloads(item: RawMondayItem): void {
   }
 }
 
-export async function readAllEffectiveQuals(
+/**
+ * The RAW colour observations across the whole Thema's board.
+ *
+ * Split out from {@link readAllEffectiveQuals}, which computes exactly this and then
+ * throws it away. The effective verdict collapses to green/red for ranking, so it
+ * cannot answer two questions the evaluation statistics need: which colour to show on
+ * the stats board, and whether a pair earns a row at all. `deriveEffective` returns
+ * `null` for an orange-only pair, a grey-only pair and an unobserved pair alike —
+ * anything keyed on it silently loses every orange pair.
+ */
+export async function readQualObservations(
   client: BoardReader,
-  ack: Acknowledgements,
   prefetched?: BoardMeta
-): Promise<EffectiveQual[]> {
+): Promise<QualObservation[]> {
   // Fail closed on board-level drift: a missing/retyped colour relation decodes to
   // an EMPTY array, so every trainer looks unqualified and the report reads as
   // "nobody is green" rather than "the board changed". `items_count` comes from the
@@ -66,7 +75,7 @@ export async function readAllEffectiveQuals(
     ITEM_FIELDS,
     board.items_count
   );
-  const observations: QualObservation[] = themas.flatMap((item) => {
+  return themas.flatMap((item) => {
     assertRelationPayloads(item);
     return decodeQualificationsFromThema(item, THEMA_QUAL_COLOURS).map((q) => ({
       trainerExternalId: q.trainerExternalId,
@@ -74,5 +83,12 @@ export async function readAllEffectiveQuals(
       colour: q.qualification,
     }));
   });
-  return computeEffectiveQuals(observations, ack);
+}
+
+export async function readAllEffectiveQuals(
+  client: BoardReader,
+  ack: Acknowledgements,
+  prefetched?: BoardMeta
+): Promise<EffectiveQual[]> {
+  return computeEffectiveQuals(await readQualObservations(client, prefetched), ack);
 }

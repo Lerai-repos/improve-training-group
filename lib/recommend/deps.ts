@@ -44,6 +44,18 @@ import { createQStashClient, createQStashPublisher, publicBaseUrl } from './qsta
 import { createRunQueue, type JobPublisher } from './queue';
 import { createUpstashQueueStore, type QueueStore } from './queue-store';
 import { readRoster } from './roster';
+import { readQualObservations } from './qualifications';
+import { evalStatsEnabled, readEvalStats } from './eval-stats';
+
+import {
+  createOAuthGoogleAuth,
+  createStatsStore,
+  evaluationDocuments,
+  googleSheetsSource,
+  oauthCredentialsFromEnv,
+  readAgendaHistory,
+  type NightlyDeps,
+} from '@lib/evaluations';
 import type { ServiceDeps } from './service';
 import type { RunQueue } from './webhook';
 
@@ -168,6 +180,37 @@ export function buildStatusWriter(): StatusWriter {
 }
 
 /** Assemble the full dependency graph from env. The roster is read ONCE here. */
+/**
+ * Everything the nightly evaluation job needs.
+ *
+ * Lives here rather than in `lib/evaluations` because it is the only place allowed to
+ * wire both sides together: `lib/evaluations` may not import `@lib/recommend` (the
+ * engine adapter imports it, so the reverse edge would close a cycle), and the
+ * qualification reader lives on the recommend side.
+ */
+export function buildEvalStatsDeps(): NightlyDeps {
+  const client = createMondayGraphQLClient({
+    token: requireEnv('MONDAY_API_TOKEN'),
+    apiVersion: MONDAY_API_VERSION,
+    deadlineMs: currentDeadlineMs,
+  });
+  return {
+    // The ambient run deadline reaches Google too: `runWithDeadline` only makes the
+    // budget available, so a fetch that never consults it would happily outlive the
+    // route and rob it of its controlled failure.
+    source: googleSheetsSource(
+      createOAuthGoogleAuth(oauthCredentialsFromEnv(), fetch, currentDeadlineMs),
+      evaluationDocuments(),
+      fetch,
+      currentDeadlineMs
+    ),
+    readHistory: () => readAgendaHistory(client),
+    readQualifications: () => readQualObservations(client),
+    store: createStatsStore(createUpstashKvStore(createRedisClient())),
+    now: () => new Date(),
+  };
+}
+
 export async function buildWorkerDeps(): Promise<EngineDeps> {
   assertAddressHashKey(); // fail fast on a missing/short secret, not mid-run at the travel stage
   const token = requireEnv('MONDAY_API_TOKEN');
@@ -178,9 +221,19 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
     apiVersion: MONDAY_API_VERSION,
     deadlineMs: currentDeadlineMs,
   });
+  /**
+   * Read once per execution, beside the roster, and only when the release gate is on.
+   * `[]` while it is off means the engine behaves exactly as before — scores stay
+   * (null, 0) and ranking falls back to cost then travel — so deploying this changes
+   * nothing until the ranking diff has been approved.
+   */
+  const evaluations = evalStatsEnabled()
+    ? await readEvalStats(createUpstashKvStore(createRedisClient()))
+    : null;
   return {
     reader: createMondayReader(client),
     roster: await readRoster(client, ITEM_FIELDS),
+    evaluations,
     addressFormatter: createAddressFormatter(
       createOpenRouterCompletion(requireEnv('OPENROUTER_API_KEY'))
     ),

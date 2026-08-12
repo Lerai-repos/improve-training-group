@@ -273,6 +273,14 @@ async function main(): Promise<void> {
     const deps: ServiceDeps = {
       reader,
       roster,
+    /**
+     * Empty, deliberately. The baselines were recorded when evaluations were inert, so
+     * `scores[]` and every ranked row hold `(null, 0)`; feeding live statistics here
+     * would make this check fail every night for a reason that is not a regression.
+     * The fixtures are NOT regenerated — that would hide a real engine change behind
+     * this one.
+     */
+    evaluations: null,
       addressFormatter: {
         format: () =>
           Promise.resolve(

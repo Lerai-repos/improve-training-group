@@ -17,6 +17,10 @@ import {
   createMemoryTravelCacheStore,
   createTravelCache,
   readRoster,
+  evalStatsEnabled,
+  readEvalStats,
+  createUpstashKvStore,
+  createRedisClient,
   runRecommendation,
   type ServiceDeps,
 } from '@lib/recommend';
@@ -158,10 +162,20 @@ async function main(): Promise<void> {
   // so re-reading it per sampled training would multiply that against a 25.000/day
   // budget for no benefit.
   const roster = await readRoster(client, ITEM_FIELDS);
+  const evaluations = evalStatsEnabled()
+    ? await readEvalStats(createUpstashKvStore(createRedisClient()))
+    : null;
+  console.log(
+    `Evaluaties: ${evaluations === null ? 'UIT (zet EVAL_STATS_ENABLED=1)' : `${evaluations.length} rijen`}`
+  );
   console.log(`Roster: ${roster.length} trainers (live, all groups)\n`);
 
   const deps: ServiceDeps = {
     roster,
+    // A release-gated input. `null` (flag off) means NOT CONSULTED and keeps the scores
+    // inert, which is the pre-gate behaviour; with the flag on this is the live record
+    // the nightly job wrote, so the two runs can be diffed to approve the ranking change.
+    evaluations,
     reader: createMondayReader(client),
     addressFormatter: createStubAddressFormatter({ kind: 'no_travel_confirmed', reason: 'online' }),
     travelProvider: createStubTravelProvider(() => ({
