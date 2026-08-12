@@ -7,7 +7,8 @@ import { Button } from '@components/ui/button';
 import { Skeleton } from '@components/ui/skeleton';
 import { cn } from '@lib/utils';
 
-import { failureMessage } from './format';
+import { failureMessage, hours } from './format';
+import { PickConfirmDialog, type PendingPick } from './pick-confirm-dialog';
 import { RecommendationTable } from './recommendation-table';
 import { SortButton, SortPanel } from './sort-panel';
 import { useDismissiblePanel } from './use-dismissible-panel';
@@ -17,6 +18,8 @@ import type { SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
 
 import type { MondayBridge } from './monday-client';
+import type { MessageState } from './whatsapp-link';
+import type { PickMode } from './pick-trainer';
 import type { RecommendationsApi } from './api';
 import type { UseRecommendationView } from './use-recommendation-view';
 
@@ -55,7 +58,54 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
   const sortOpen = panel === 'sort';
   const whatsappOpen = panel === 'whatsapp';
 
-  const whatsapp = useWhatsappMessage(api, view.itemId, whatsappOpen);
+  /**
+   * The current generation, used to re-read the message after a recalculate.
+   *
+   * That is the moment the training was last read from Monday, so it is also the moment a
+   * changed date, time or location reaches the text the row links will send.
+   */
+  const generation =
+    view.status.kind === 'loaded' && view.status.view.state.kind !== 'idle'
+      ? view.status.view.state.generation
+      : null;
+
+  /**
+   * `preload` is separate from `whatsappOpen`, not folded into it.
+   *
+   * Every row's WhatsApp link is built from this text, so it must be in hand before anyone
+   * clicks — an `<a href>` cannot await, and a window opened after one is popup-blocked.
+   * But the hook loads on the rising edge of its `open` argument, so holding that true
+   * would fire once per training and never again.
+   */
+  const whatsapp = useWhatsappMessage(api, view.itemId, whatsappOpen, {
+    preload: caps?.canPlan === true,
+    refreshToken: generation,
+  });
+
+  /**
+   * Whether the message is safe to send from a row, with no panel to explain itself.
+   *
+   * `error` covers the case that has no other way out: a refresh failed, so the text on
+   * hand is the PREVIOUS message, and nothing would re-read it until someone opened the
+   * panel. Left enabled, those links quietly send the old date to every trainer on a
+   * freshly recalculated list.
+   *
+   * `pending` is the same failure a beat earlier: a new generation renders immediately
+   * while its message GET is still in flight, so for that window the list is new and the
+   * text is not. It also covers a refresh deferred behind an unsaved draft.
+   */
+  const messageState: MessageState =
+    whatsapp.loadError !== null
+      ? 'error'
+      : whatsapp.save.kind === 'conflict'
+        ? 'conflict'
+        : whatsapp.unreadable
+        ? 'unreadable'
+        : whatsapp.stale
+          ? 'stale'
+          : whatsapp.refreshPending
+            ? 'pending'
+            : 'ok';
 
   /**
    * EVERY way out of the WhatsApp panel saves first, and a failed save cancels the
@@ -129,7 +179,55 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
     view.status.kind === 'loaded' && view.status.view.state.kind === 'ready'
       ? view.status.view.state.rows
       : [];
-  const names = useTrainerNames(monday, trainerIds);
+  const names = useTrainerNames(monday, trainerIds, { includePhones: caps?.canPlan === true });
+
+  /**
+   * A pick that needs an answer before it can be written — see `PickConfirmDialog`.
+   *
+   * Only a SECOND trainer raises the question. With an empty relation there is nothing to
+   * replace and nothing to add to, so Kies stays a single click; the already-linked row's
+   * own button is disabled, so the remaining case is always "a different trainer, on a
+   * training that already has one".
+   */
+  const [pendingPick, setPendingPick] = useState<PendingPick | null>(null);
+
+  // A different training invalidates a question asked about the previous one.
+  useEffect(() => {
+    setPendingPick(null);
+  }, [view.itemId]);
+
+  const requestPick = useCallback(
+    (trainerItemId: string): void => {
+      if (linkedIds.length === 0 || linkedIds.includes(trainerItemId)) {
+        /**
+         * `append`, not `replace`, even though the relation looks empty.
+         *
+         * This list is up to 20 seconds old, so "empty" may mean "a colleague linked
+         * someone since the last poll" — and replacing would delete them without asking.
+         * For a genuinely empty relation the two are identical; when it is not empty,
+         * append re-reads at write time and keeps them. `replace` is reachable only from
+         * the dialog, where a human said so.
+         */
+        void view.pick(trainerItemId, 'append');
+        return;
+      }
+      setPendingPick({ trainerItemId, name: names.byId.get(trainerItemId) ?? null });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- joined below, not by identity
+    [linkedIds.join(','), names.byId, view]
+  );
+
+  const decidePick = useCallback(
+    (trainerItemId: string, mode: PickMode): void => {
+      setPendingPick(null);
+      void view.pick(trainerItemId, mode);
+    },
+    [view]
+  );
+
+  const cancelPick = useCallback((): void => {
+    setPendingPick(null);
+  }, []);
 
   /**
    * Before the context arrives we know neither the theme nor the item, so anything
@@ -265,9 +363,35 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
             />
           )}
 
+          {/* The message's own quality warnings, shown ONCE and visibly.
+              They describe the training's message, so repeating them per row would say
+              the same thing 24 times — and a `title` tooltip never reaches a keyboard or
+              touch user, who would then send an incomplete message without ever being
+              told. Non-blocking, exactly as the panel treats them. */}
+          {caps?.canPlan === true && whatsapp.warnings.length > 0 && (
+            <Notice tone="warning">
+              WhatsApp-bericht: {whatsapp.warnings.join(' · ')}
+            </Notice>
+          )}
+
           <LinkedBanner view={view} names={names.byId} />
 
-          <Body view={view} sort={effectiveSort} names={names.byId} />
+          <Body
+            view={view}
+            sort={effectiveSort}
+            names={names.byId}
+            phones={names.phoneById}
+            message={whatsapp.text}
+            messageState={messageState}
+            onPick={requestPick}
+          />
+
+          <PickConfirmDialog
+            pending={pendingPick}
+            linkedLabels={linkedIds.map((id) => names.byId.get(id) ?? `#${id}`)}
+            onDecide={decidePick}
+            onCancel={cancelPick}
+          />
         </>
       )}
     </div>
@@ -314,6 +438,14 @@ interface BodyProps {
   view: UseRecommendationView;
   sort: readonly SortLevel[];
   names: ReadonlyMap<string, string>;
+  /** Only trainers who have one on the board — the rest get no WhatsApp link. */
+  phones: ReadonlyMap<string, string>;
+  /** The training's message, personalised per row when the link is built. */
+  message: string;
+  /** Whether the message is safe to send — see `MessageState`. */
+  messageState: MessageState;
+  /** Routed through the view so a second trainer can raise the replace/append question. */
+  onPick: (trainerItemId: string) => void;
 }
 
 /** The linked ids for the CURRENT item, or none while the relation is unknown. */
@@ -321,7 +453,15 @@ function linkedIdsOf(view: UseRecommendationView): readonly string[] {
   return view.linked.kind === 'ready' ? view.linked.trainerItemIds : [];
 }
 
-const Body = ({ view, sort, names }: BodyProps) => {
+const Body = ({
+  view,
+  sort,
+  names,
+  phones,
+  message,
+  messageState,
+  onPick,
+}: BodyProps) => {
   if (view.status.kind === 'loading') {
     return <Skeleton className="h-40 w-full" />;
   }
@@ -372,30 +512,96 @@ const Body = ({ view, sort, names }: BodyProps) => {
 
     case 'ready':
       return (
-        <RecommendationTable
+        <>
+          <TrainingHours
+            duurTraining={state.duurTraining ?? null}
+            // Constant across the list — it derives from the training's duration, not
+            // from the trainer — so one row is as good as any, and repeating it down 24
+            // rows as a column would say the same thing 24 times.
+            billableHours={state.rows[0]?.billableHours ?? null}
+            canViewFull={caps.canViewFull}
+          />
+          <RecommendationTable
           rows={state.rows}
           names={names}
+          phones={phones}
+          message={message}
+          messageState={messageState}
           canViewFull={caps.canViewFull}
           canPlan={caps.canPlan}
           sort={sort}
           onApproachedChange={(trainerItemId, approached) => {
             void view.setApproached(trainerItemId, approached);
           }}
-          onPick={(trainerItemId) => {
-            void view.pick(trainerItemId);
-          }}
+          onPick={onPick}
           picking={view.picking}
           linkedTrainerIds={linkedIdsOf(view)}
           canPick={view.linked.kind === 'ready'}
           busy={view.busy}
           stale={view.stale}
-        />
+          />
+        </>
       );
   }
 };
 
-const Notice = ({ children, tone }: { children: React.ReactNode; tone?: 'error' }) => (
-  <p className={tone === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
+interface TrainingHoursProps {
+  duurTraining: number | null;
+  billableHours: number | null;
+  canViewFull: boolean;
+}
+
+/**
+ * "Duur training 2,00 · Duur facturatie 3,00" — the training's own hours, above the list.
+ *
+ * A session under four hours bills more than it runs (`((4 − duur) / 2) + duur`, so 2h
+ * bills 3), which is why Totale kosten looks too high until you know the rule. Airtable
+ * puts both figures on the training record; the popup showed neither, so the planner had
+ * to leave to reconcile a number in front of them.
+ *
+ * Not a table column: both are properties of the TRAINING and identical on every row.
+ *
+ * Facturatie is `canViewFull` only — it is a billing figure, and the restricted shape
+ * carries no money. Duur training is just how long the session is, so everyone sees it.
+ */
+const TrainingHours = ({ duurTraining, billableHours, canViewFull }: TrainingHoursProps) => {
+  // Nothing known, nothing to say — never a misleading `0,00`.
+  if (duurTraining === null && !(canViewFull && billableHours !== null)) {
+    return null;
+  }
+
+  return (
+    <p className="flex gap-4 text-sm text-muted-foreground">
+      <span>
+        Duur training <span className="font-medium text-foreground">{hours(duurTraining)}</span>
+      </span>
+      {canViewFull && billableHours !== null && (
+        <span>
+          Duur facturatie <span className="font-medium text-foreground">{hours(billableHours)}</span>
+        </span>
+      )}
+    </p>
+  );
+};
+
+const Notice = ({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone?: 'error' | 'warning';
+}) => (
+  <p
+    className={cn(
+      'text-sm',
+      tone === 'error'
+        ? 'text-destructive'
+        : tone === 'warning'
+          ? 'flex items-start gap-2 text-foreground'
+          : 'text-muted-foreground'
+    )}
+  >
+    {tone === 'warning' && <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />}
     {children}
   </p>
 );

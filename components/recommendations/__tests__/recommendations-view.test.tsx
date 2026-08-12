@@ -1,6 +1,8 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+
+import { TRAINER_COLUMNS } from '@lib/monday/board-config';
 
 import { RecommendationsView } from '../recommendations-view';
 import { fakeApi, fakeMonday, fakeWhatsapp, readyView, row } from './fakes';
@@ -155,6 +157,249 @@ describe('RecommendationsView', () => {
     });
   });
 
+  /**
+   * The relation write replaces the column's whole list, and 80 of the 756 trainings on
+   * Agenda 2026 carry two or more trainers — so "Kies" on a second row used to remove the
+   * first silently. Both intentions are legitimate; nothing on screen distinguishes them.
+   */
+  describe('picking a SECOND trainer', () => {
+    const twoRows = readyView([row({ trainerItemId: '900' }), row({ trainerItemId: '901' })]);
+
+    const withSecond = (pick: UseRecommendationView['pick']) =>
+      renderView({
+        pick,
+        status: { kind: 'loaded', view: twoRows },
+        linked: { kind: 'ready', trainerItemIds: ['900'] },
+      });
+
+    it('asks before writing anything', async () => {
+      const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
+      withSecond(pick);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
+
+      expect(screen.getByRole('alertdialog')).toBeDefined();
+      expect(pick).not.toHaveBeenCalled();
+    });
+
+    it('appends when the planner chooses Toevoegen', async () => {
+      const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
+      withSecond(pick);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Toevoegen' }));
+
+      expect(pick).toHaveBeenCalledWith('901', 'append');
+    });
+
+    it('replaces when the planner chooses Vervangen', async () => {
+      const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
+      withSecond(pick);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Vervangen' }));
+
+      expect(pick).toHaveBeenCalledWith('901', 'replace');
+    });
+
+    /** Dismissing the question must not fall through to either write. */
+    it('writes nothing when the planner cancels', async () => {
+      const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
+      withSecond(pick);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Annuleren' }));
+
+      expect(pick).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    /**
+     * The question is only worth asking when there is something to lose. An empty
+     * relation has nothing to replace and nothing to add to, so Kies stays one click.
+     */
+    /**
+     * `append`, not `replace` — and the distinction is not cosmetic. This list is up to 20
+     * seconds old, so "nobody is linked" may mean "a colleague linked someone since the
+     * last poll". Append re-reads at write time and keeps them; replace would delete a
+     * trainer nobody was asked about.
+     */
+    it('does not ask when nobody is linked yet, and appends rather than replaces', async () => {
+      const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
+      renderView({
+        pick,
+        status: { kind: 'loaded', view: twoRows },
+        linked: { kind: 'ready', trainerItemIds: [] },
+      });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(pick).toHaveBeenCalledWith('901', 'append');
+    });
+
+    /** `replace` is reachable ONLY from the dialog, where a human chose it. */
+    it('never replaces without being asked', async () => {
+      const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
+      renderView({
+        pick,
+        status: { kind: 'loaded', view: twoRows },
+        linked: { kind: 'ready', trainerItemIds: [] },
+      });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
+
+      expect(pick.mock.calls.every(([, mode]) => mode !== 'replace')).toBe(true);
+    });
+  });
+
+  /**
+   * A session under four hours bills more than it runs — 2h bills 3 — which is why Totale
+   * kosten reads as too high until you know the rule. Both figures are properties of the
+   * TRAINING, identical on every row, so they go above the list rather than in it.
+   */
+  describe('the training’s hours', () => {
+    const ready = (duurTraining: number | null, billableHours: number) => ({
+      kind: 'loaded' as const,
+      view: {
+        state: {
+          kind: 'ready' as const,
+          generation: 1,
+          rows: [row({ billableHours }), row({ trainerItemId: '901', billableHours })],
+          duurTraining,
+        },
+        caps: { canPlan: true, canViewFull: true },
+      },
+    });
+
+    it('shows both, once, above the list', () => {
+      renderView({ status: ready(2, 3) });
+
+      expect(screen.getByText(/Duur training/)).toBeDefined();
+      expect(screen.getByText('2,00')).toBeDefined();
+      // Once for the whole list, not once per row — that is the reason it is not a column.
+      expect(screen.getAllByText('3,00')).toHaveLength(1);
+    });
+
+    /** A restricted caller gets no money, and billable hours is a billing figure. */
+    it('hides the billing figure from a restricted caller', () => {
+      renderView({
+        status: {
+          kind: 'loaded',
+          view: {
+            state: { kind: 'ready', generation: 1, rows: [row()], duurTraining: 2 },
+            caps: { canPlan: true, canViewFull: false },
+          },
+        },
+      });
+
+      expect(screen.getByText(/Duur training/)).toBeDefined();
+      expect(screen.queryByText(/Duur facturatie/)).toBeNull();
+    });
+
+    /**
+     * The board's `duur` column can be empty. Rendering that as `0,00` would state a
+     * falsehood about the training rather than admit we do not know.
+     */
+    it('renders a dash rather than a zero when the duration is unknown', () => {
+      renderView({ status: ready(null, 3) });
+
+      // Scoped to the header: the table renders its own em dashes for absent counts.
+      expect(screen.getByText(/Duur training/).textContent).toContain('—');
+      expect(screen.queryByText('0,00')).toBeNull();
+    });
+  });
+
+  /**
+   * A view-only caller renders no WhatsApp control, so pulling their trainers' phone
+   * numbers into the browser would put personal data where the feature has no use for it.
+   */
+  describe('phone numbers', () => {
+    /**
+     * Keyed on the column id, not on `column_values` — several queries use that fragment,
+     * and a looser assertion would go green for the wrong reason.
+     */
+    const askedForPhone = (spy: MockInstance<typeof monday.api>): boolean =>
+      spy.mock.calls.some(([, variables]) =>
+        JSON.stringify(variables ?? {}).includes(TRAINER_COLUMNS.telefoon)
+      );
+
+    it('are not requested for a caller who cannot plan', async () => {
+      const spy = vi.spyOn(monday, 'api');
+      spy.mockClear();
+
+      renderView({
+        status: {
+          kind: 'loaded',
+          view: { state: { kind: 'ready', generation: 1, rows: [row()] }, caps: { canPlan: false, canViewFull: true } },
+        },
+      });
+
+      await waitFor(() => {
+        expect(spy).toHaveBeenCalled();
+      });
+      expect(askedForPhone(spy)).toBe(false);
+      spy.mockRestore();
+    });
+
+    it('are requested for a planner, who needs them for the link', async () => {
+      const spy = vi.spyOn(monday, 'api');
+      spy.mockClear();
+
+      renderView();
+
+      await waitFor(() => {
+        expect(askedForPhone(spy)).toBe(true);
+      });
+      spy.mockRestore();
+    });
+  });
+
+  /**
+   * Shown ONCE and visibly, not as a per-row `title`: they describe the training's message
+   * rather than any single trainer, and a tooltip never reaches a keyboard or touch user —
+   * who would then send an incomplete message without being told.
+   */
+  describe('the message’s quality warnings', () => {
+    const withWarnings = (warnings: string[]) => ({
+      ...fakeApi([readyView([row()])]),
+      ...fakeWhatsapp(),
+      getWhatsapp: () =>
+        Promise.resolve({
+          generated: 'Ben jij beschikbaar?',
+          saved: null,
+          token: 'tok',
+          unreadable: false,
+          warnings,
+        }),
+    });
+
+    it('are rendered as visible text, once', async () => {
+      render(
+        <RecommendationsView monday={monday} api={withWarnings(['Locatie ontbreekt'])} view={view()} />
+      );
+
+      expect(await screen.findByText(/Locatie ontbreekt/)).toBeDefined();
+      expect(screen.getAllByText(/Locatie ontbreekt/)).toHaveLength(1);
+    });
+
+    /** Non-blocking, exactly as the panel treats them. */
+    it('do not disable the links', async () => {
+      render(
+        <RecommendationsView monday={monday} api={withWarnings(['Locatie ontbreekt'])} view={view()} />
+      );
+
+      expect(await screen.findByRole('link', { name: /Stuur WhatsApp/ })).toBeDefined();
+    });
+
+    it('say nothing when there are none', async () => {
+      render(<RecommendationsView monday={monday} api={withWarnings([])} view={view()} />);
+
+      await screen.findByRole('table');
+      expect(screen.queryByText(/WhatsApp-bericht:/)).toBeNull();
+    });
+  });
+
   describe('a superseded list', () => {
     /**
      * The warning tells the planner to refresh, so something on screen has to be able
@@ -259,6 +504,30 @@ describe('the WhatsApp panel', () => {
     await openPanel();
 
     expect(await screen.findByDisplayValue(/Ben jij beschikbaar\?/)).toBeDefined();
+  });
+
+  /**
+   * Opening still re-reads, even though planners now preload the message for the row links.
+   *
+   * `preload` is a separate argument rather than being folded into `open` precisely so
+   * this keeps working: the hook loads on the rising edge of its condition, so a
+   * permanently-true `open` would fire once per training and never again — and the only
+   * way back would be `reload`, which discards a failed draft.
+   */
+  it('re-reads when the panel is opened, not only on the eager preload', async () => {
+    const api = withWhatsapp();
+    renderWith(api);
+
+    await waitFor(() => {
+      expect(api.calls.gets).toBeGreaterThan(0);
+    });
+    const preloaded = api.calls.gets;
+
+    await openPanel();
+
+    await waitFor(() => {
+      expect(api.calls.gets).toBeGreaterThan(preloaded);
+    });
   });
 
   /** Same corner, so two open popovers would overlap. */

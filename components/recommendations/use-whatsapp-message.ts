@@ -43,6 +43,18 @@ export interface WhatsappMessage {
   unreadable: boolean;
   /** The training changed since this edit was saved. */
   stale: boolean;
+  /**
+   * The text in hand is not known to be current.
+   *
+   * True while ANY read is in flight, not only after a `refreshToken` change: the clock
+   * refresh and the panel-open re-read do not move the token, so a check against the token
+   * alone would leave the links enabled with the previous message for the length of every
+   * GET. Also true while a refresh is deferred behind an unsaved draft.
+   *
+   * Exposed because the row WhatsApp links have no panel to warn in — the panel can say
+   * "bezig" beside the text it is replacing; a link can only refuse.
+   */
+  refreshPending: boolean;
   dirty: boolean;
   save: SaveState;
   /** Flush any pending draft; resolves false when the save failed. */
@@ -54,6 +66,23 @@ export interface WhatsappMessage {
 }
 
 const DEBOUNCE_MS = 1000;
+
+/**
+ * How long a preloaded message is trusted before it is re-read.
+ *
+ * The row links are built from text fetched once, and the recommendation generation is NOT
+ * a signal that it changed: editing a training's date, time or location does not advance it
+ * — the webhook ignores non-status column edits on purpose. So without a clock, a link can
+ * carry a superseded date for as long as the view stays open.
+ *
+ * This does reverse the spec's "never polled" for this endpoint, deliberately and in the
+ * smallest way that closes the hole: one GET per open view per five minutes (~96 a day per
+ * planner, against a 25.000-call budget), only while a planner has the view open, skipped
+ * while a draft is unsaved. The alternative considered was expiring the links instead of
+ * refreshing them, which is cheaper still and much worse: planners would meet a dead button
+ * whose only remedy is opening a panel to copy the message it just refused to send.
+ */
+export const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * Bounds on the possibly-committed attempts kept per training.
@@ -235,8 +264,34 @@ function rememberUncertain(queue: Queue, attempt: { draft: string; base: string 
 export function useWhatsappMessage(
   api: WhatsappApi,
   itemId: string | null,
-  open: boolean
+  open: boolean,
+  /**
+   * `preload` loads the message without the panel being open — the row WhatsApp links
+   * need the text in hand, because an `<a href>` cannot await and a window opened after
+   * one is popup-blocked.
+   *
+   * It is a SEPARATE argument rather than being folded into `open` on purpose. The loader
+   * below fires on the rising edge of its condition, so a permanently-true `open` would
+   * fire once per training and never again: opening the panel would stop re-reading, a
+   * failed first GET would never be retried, and the only way back would be `reload`,
+   * which is the destructive "theirs wins" path that discards a failed draft.
+   *
+   * `refreshToken` re-reads whenever it changes. The view passes the recommendation
+   * generation, so a recalculate — which is when the training was last re-read — also
+   * refreshes the message the row links will send.
+   */
+  options: {
+    preload?: boolean;
+    refreshToken?: string | number | null;
+    /** Injected only by tests, which cannot wait five minutes. */
+    refreshIntervalMs?: number;
+  } = {}
 ): WhatsappMessage {
+  const {
+    preload = false,
+    refreshToken = null,
+    refreshIntervalMs = REFRESH_INTERVAL_MS,
+  } = options;
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [payload, setPayload] = useState<WhatsappPayload | null>(null);
@@ -249,6 +304,11 @@ export function useWhatsappMessage(
    */
   const payloadRef = useRef<WhatsappPayload | null>(null);
   const [text, setTextState] = useState('');
+  /** The `refreshToken` a successful load last read. Drives {@link WhatsappMessage.refreshPending}. */
+  const [loadedToken, setLoadedToken] = useState<string | number | null>(refreshToken);
+  /** Read inside `load`, which cannot take the token as an argument without re-identifying. */
+  const tokenRef = useRef(refreshToken);
+  tokenRef.current = refreshToken;
   const [dirty, setDirty] = useState(false);
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
 
@@ -367,6 +427,15 @@ export function useWhatsappMessage(
     const seq = loadSeq.current + 1;
     loadSeq.current = seq;
     const epoch = visit.current;
+    /**
+     * Captured HERE, not read on resolve.
+     *
+     * A token can change without starting a new load — a refresh deferred behind an unsaved
+     * draft does exactly that — so an earlier GET can resolve while the current token is
+     * already the newer one. Crediting `tokenRef` at that moment would mark the new token
+     * as read from old text, briefly re-enabling every row link with the previous message.
+     */
+    const startedAtToken = tokenRef.current;
     setLoading(true);
     setLoadError(null);
     const queue = queueFor(item);
@@ -389,6 +458,7 @@ export function useWhatsappMessage(
       }
       setPayload(data);
       payloadRef.current = data;
+      setLoadedToken(startedAtToken);
       const pending = queue.failed;
       /**
        * If this read is showing us our OWN uncertain write, the last acknowledged value
@@ -406,6 +476,15 @@ export function useWhatsappMessage(
        * would adopt D1 as the last acknowledged value, and Herstel origineel would then
        * restore D1 rather than the message that preceded it.
        */
+      /**
+       * The revision the DRAFT was written against, captured before the read overwrites it.
+       *
+       * Rule 1 of this file: the base travels with the text in the box. Preserving a dirty
+       * draft while adopting the response's token and base breaks that in two ways — the
+       * fresh token makes a later save overwrite a colleague with no 409 to notice, and the
+       * fresh base rebases the edit so its staleness warning quietly disappears.
+       */
+      const draftRevision = queue.dirty ? { token: queue.token, base: queue.base } : null;
       const readValue = data.saved;
       const readIsOurAttempt =
         readValue !== null &&
@@ -453,6 +532,22 @@ export function useWhatsappMessage(
             ? { kind: 'conflict' }
             : { kind: 'error', message: unsaved.message }
         );
+      } else if (draftRevision !== null) {
+        /**
+         * A draft with no failure behind it still outranks the server's value.
+         *
+         * The deferral in the loader below skips a refresh that has not started yet, but a
+         * load ALREADY IN FLIGHT when the planner begins typing lands here — and adopting
+         * the read would replace their sentence mid-word and mark it clean, so the next
+         * autosave would never send it.
+         *
+         * Its OWN revision is restored with it: `generated` moves on (which is what makes
+         * the staleness warning appear), but the token and base stay the ones this text was
+         * written against.
+         */
+        queue.token = draftRevision.token;
+        queue.base = draftRevision.base;
+        setDraft(item, queue.draft, true);
       } else {
         setDraft(item, data.saved?.edited ?? data.generated, false);
         setSave({ kind: 'idle' });
@@ -743,12 +838,82 @@ export function useWhatsappMessage(
     };
   }, [itemId, queueFor]);
 
+  /** The token this effect last acted on, so a refresh can be told from a first load. */
+  const seenToken = useRef<string | number | null>(refreshToken);
+  /** A refresh skipped because the draft was unsaved, waiting for the queue to settle. */
+  const deferredToken = useRef<string | number | null>(null);
+
+  // `load`, never `reload`: this restores a failed draft rather than discarding it.
   useEffect(() => {
-    if (!open || itemId === null) {
+    if ((!open && !preload) || itemId === null) {
       return;
     }
+    const tokenChanged = seenToken.current !== refreshToken;
+    seenToken.current = refreshToken;
+    /**
+     * A token-driven refresh must never land on unsaved work.
+     *
+     * `load` restores a RETAINED FAILURE, but a draft that is merely dirty — typed inside
+     * the debounce window, or with its save still in flight — has no such protection, and
+     * the normal branch would replace it with the server's text mid-sentence. Before the
+     * token existed this was unreachable (a load needed a new training or a panel that was
+     * just opened), so the guard is scoped to exactly the trigger that made it reachable.
+     *
+     * Nothing is lost by skipping: the draft IS what the row links send, and the next
+     * panel open or training change reloads.
+     */
+    const queue = queueFor(itemId);
+    if (tokenChanged && (queue.dirty || queue.inFlight !== null)) {
+      // Recorded, not dropped: the effect's dependencies do not change when the save
+      // settles, so without this the refresh would never resume and the links would stay
+      // disabled until the panel was reopened.
+      deferredToken.current = refreshToken;
+      return;
+    }
+    deferredToken.current = null;
     void load();
-  }, [open, itemId, load]);
+  }, [open, preload, refreshToken, itemId, load, queueFor]);
+
+  /**
+   * The clock-driven refresh — see {@link REFRESH_INTERVAL_MS}.
+   *
+   * Runs through the same deferral as the token, so it can never land on unsaved work, and
+   * only while the message is actually being used (`open` or `preload`).
+   */
+  useEffect(() => {
+    if ((!open && !preload) || itemId === null) {
+      return;
+    }
+    const timer = setInterval(() => {
+      const queue = queueFor(itemId);
+      if (queue.dirty || queue.inFlight !== null) {
+        return;
+      }
+      void load();
+    }, refreshIntervalMs);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [open, preload, itemId, load, queueFor, refreshIntervalMs]);
+
+  /**
+   * Resume a refresh that was deferred by an unsaved draft, once the draft settles.
+   *
+   * Keyed on `dirty` rather than on the effect above, whose dependencies do not change
+   * when a save completes. Without it the skipped refresh never runs while the panel stays
+   * open: the editor keeps a base from the previous generation and the row links stay
+   * disabled with nothing able to re-enable them.
+   */
+  useEffect(() => {
+    if (dirty || itemId === null || deferredToken.current === null) {
+      return;
+    }
+    if (!open && !preload) {
+      return;
+    }
+    deferredToken.current = null;
+    void load();
+  }, [dirty, itemId, open, preload, load]);
 
   /**
    * A different training is a different message. Drop the visible state — the draft
@@ -756,6 +921,9 @@ export function useWhatsappMessage(
    */
   useEffect(() => {
     setPayload(null);
+    // A different training has not been read at this token either.
+    setLoadedToken(null);
+    deferredToken.current = null;
     const queue = itemId === null ? null : queueFor(itemId);
     setTextState(queue?.draft ?? '');
     setDirty(queue?.dirty ?? false);
@@ -1091,6 +1259,13 @@ export function useWhatsappMessage(
       displayedBase !== '' &&
       generated !== '' &&
       displayedBase !== generated,
+    /**
+     * Whether the text in hand was read at the CURRENT token.
+     *
+     * Covers both windows the row links would otherwise send the previous message in: a
+     * refresh still in flight, and one deferred behind an unsaved draft.
+     */
+    refreshPending: loading || loadedToken !== refreshToken,
     dirty,
     save,
     flush,

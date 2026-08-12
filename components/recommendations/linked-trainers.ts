@@ -30,43 +30,77 @@ query ($ids: [ID!], $columnIds: [String!]) {
 }`;
 
 /**
- * Walk the reply rather than trust it.
+ * Walk the reply rather than trust it — and THROW rather than answer "nobody" when the
+ * shape is not what we asked for.
  *
- * A board relation is the one Monday shape with a documented history of returning
- * `value: null` while the fragment still carries the ids (see `board-config.ts`), so
- * anything but the fragment path is treated as "no link".
+ * This is the reader an append builds its union from, so a fail-open `[]` is data loss:
+ * a partial response, a renamed column or any shape drift would read as "no trainers are
+ * linked", and the write that follows would replace every real link with the one being
+ * picked. The same rule serves the display path, where a throw becomes
+ * `linked: {kind: 'error'}` and disables picking — also the safe direction.
+ *
+ * An EMPTY relation is not an error and must not be confused with a missing one: the
+ * column is present with no ids, and Monday has a documented habit of sending `value:
+ * null` on relations while the fragment carries the ids (see `board-config.ts`), so an
+ * absent or null `linked_item_ids` on a column that IS present reads as empty.
  */
-function readLinkedIds(data: unknown): string[] {
+function readLinkedIds(data: unknown, columnId: string): string[] {
   if (typeof data !== 'object' || data === null || !('items' in data)) {
-    return [];
+    throw new Error('Monday relation read: no items in the reply');
   }
   const { items } = data;
   if (!Array.isArray(items) || items.length === 0) {
-    return [];
+    throw new Error('Monday relation read: the training was not returned');
   }
   const [item] = items;
   if (typeof item !== 'object' || item === null || !('column_values' in item)) {
-    return [];
+    throw new Error('Monday relation read: the item carries no column_values');
   }
   const columns = item.column_values;
   if (!Array.isArray(columns)) {
+    throw new Error('Monday relation read: column_values is not a list');
+  }
+
+  const column = columns.find(
+    (c) => typeof c === 'object' && c !== null && 'id' in c && c.id === columnId
+  );
+  if (column === undefined) {
+    // The trainer relation itself is missing from the reply. Answering "nobody is linked"
+    // here is precisely how an append turns into a replace.
+    throw new Error(`Monday relation read: column ${columnId} is missing from the reply`);
+  }
+
+  /**
+   * The key must be PRESENT. Its absence is the one signal of column-type drift.
+   *
+   * `... on BoardRelationValue` simply does not match if the column stops being a board
+   * relation, and GraphQL then omits the field rather than erroring — so a text column read
+   * through this query returns `{id}` and nothing else. Treating that as an empty relation
+   * is how an append would wipe every existing link on a perfectly successful 200.
+   *
+   * Measured against the live board: an EMPTY relation sends `linked_item_ids: []` and a
+   * filled one sends the ids, both with the key present; a text column omits it entirely.
+   * So requiring presence separates "nobody is linked" from "this is not a relation".
+   */
+  if (!('linked_item_ids' in column)) {
+    throw new Error(
+      `Monday relation read: ${columnId} returned no linked_item_ids — is it still a board relation?`
+    );
+  }
+  const raw = column.linked_item_ids;
+  if (raw === null || raw === undefined) {
     return [];
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error(`Monday relation read: ${columnId} did not return a list of ids`);
   }
 
   const linked: string[] = [];
-  for (const column of columns) {
-    if (typeof column !== 'object' || column === null || !('linked_item_ids' in column)) {
-      continue;
+  for (const id of raw) {
+    if (typeof id !== 'string' && typeof id !== 'number') {
+      throw new Error(`Monday relation read: ${columnId} returned a non-id entry`);
     }
-    const ids = column.linked_item_ids;
-    if (!Array.isArray(ids)) {
-      continue;
-    }
-    for (const id of ids) {
-      if (typeof id === 'string' || typeof id === 'number') {
-        linked.push(String(id));
-      }
-    }
+    linked.push(String(id));
   }
   return linked;
 }
@@ -79,5 +113,5 @@ export async function readLinkedTrainers(
     ids: [mondayItemId],
     columnIds: [AGENDA_2026_COLUMNS.trainerRelation],
   });
-  return readLinkedIds(data);
+  return readLinkedIds(data, AGENDA_2026_COLUMNS.trainerRelation);
 }

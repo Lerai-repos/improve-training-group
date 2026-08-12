@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../api';
-import { useRecommendationView } from '../use-recommendation-view';
+import { optimisticLinked, useRecommendationView } from '../use-recommendation-view';
 import { fakeApi, fakeMonday, readyView, row } from './fakes';
 
 import type { RecommendationView } from '../types';
@@ -280,11 +280,35 @@ describe('useRecommendationView', () => {
     });
 
     await act(async () => {
-      await result.current.pick('900');
+      await result.current.pick('900', 'replace');
     });
 
     // Only the failed relation reads — never a mutation.
     expect(apiSpy.mock.calls.every(([query]) => !query.includes('mutation'))).toBe(true);
+  });
+
+  /**
+   * The optimistic relation has to be what was actually WRITTEN.
+   *
+   * Tested as a pure function because it is unobservable from outside otherwise: the
+   * re-read of Monday that follows overwrites it inside the same call.
+   */
+  describe('optimisticLinked', () => {
+    /**
+     * Carrying the others through a replace would keep "Gekoppeld" on a trainer who is no
+     * longer linked and leave their Kies disabled — briefly, but long enough to act on.
+     */
+    it('keeps only the written trainer on a replace', () => {
+      expect(optimisticLinked(['700', '800'], '900', 'replace')).toEqual(['900']);
+    });
+
+    it('adds to the existing trainers on an append', () => {
+      expect(optimisticLinked(['700'], '900', 'append')).toEqual(['700', '900']);
+    });
+
+    it('does not duplicate a trainer who is already linked', () => {
+      expect(optimisticLinked(['700', '900'], '900', 'append')).toEqual(['700', '900']);
+    });
   });
 
   it('reports the linked trainer once Monday answers', async () => {

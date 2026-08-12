@@ -16,6 +16,8 @@ const EUR = new Intl.NumberFormat('nl-NL', {
 
 const GRADE = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
+const HOURS = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const CENTS_PER_EURO = 100;
 const MINUTES_PER_HOUR = 60;
 
@@ -26,6 +28,17 @@ export function euros(cents: number | undefined): string {
 
 export function grade(value: number | null | undefined): string {
   return value === null || value === undefined ? 'geen cijfers' : GRADE.format(value);
+}
+
+/**
+ * Session length in hours, as Airtable's "Duur training" / "Duur facturatie" show it.
+ *
+ * Two decimals rather than the `1 u 25 m` shape below, because these are the board's own
+ * numbers and planners reconcile them against Monday and the invoice by eye. Half-hours
+ * are routine (3,5), so trailing precision is kept rather than rounded away.
+ */
+export function hours(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : HOURS.format(value);
 }
 
 /** Round-trip minutes as `1 u 25 m`; the raw number is rarely what a planner wants. */

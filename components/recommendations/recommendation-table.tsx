@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDown, ArrowUp, Check, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Loader2, MessageCircle } from 'lucide-react';
 
 import { Button } from '@components/ui/button';
 import { Checkbox } from '@components/ui/checkbox';
@@ -24,6 +24,8 @@ import {
   type SortKey,
   type SortLevel,
 } from './sorting';
+
+import { whatsappHref, type MessageState } from './whatsapp-link';
 
 import type { Row } from './types';
 
@@ -50,6 +52,12 @@ import type { Row } from './types';
 interface RecommendationTableProps {
   rows: Row[];
   names: ReadonlyMap<string, string>;
+  /** Only trainers who have one on the board; the rest get no WhatsApp link. */
+  phones: ReadonlyMap<string, string>;
+  /** The training's message. Personalised per row — see `whatsapp-link.ts`. */
+  message: string;
+  /** Whether the message is safe to send from a row — see {@link MessageState}. */
+  messageState: MessageState;
   canViewFull: boolean;
   canPlan: boolean;
   /** The sort chain, primary first. Clicking a header rebuilds it. */
@@ -78,6 +86,9 @@ interface RecommendationTableProps {
 export const RecommendationTable = ({
   rows,
   names,
+  phones,
+  message,
+  messageState,
   canViewFull,
   canPlan,
   sort,
@@ -159,6 +170,7 @@ export const RecommendationTable = ({
           )}
           <TableHead className="text-center">Benaderd</TableHead>
           {canPlan && <TableHead />}
+          {canPlan && <TableHead>WhatsApp</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -167,6 +179,9 @@ export const RecommendationTable = ({
             key={row.trainerItemId}
             row={row}
             name={names.get(row.trainerItemId) ?? null}
+            phone={phones.get(row.trainerItemId) ?? null}
+            message={message}
+            messageState={messageState}
             canViewFull={canViewFull}
             canPlan={canPlan}
             onApproachedChange={onApproachedChange}
@@ -282,6 +297,9 @@ const CountCell = ({ value, title }: { value: number | null; title?: string | nu
 interface TrainerRowProps {
   row: Row;
   name: string | null;
+  phone: string | null;
+  message: string;
+  messageState: MessageState;
   canViewFull: boolean;
   canPlan: boolean;
   onApproachedChange: (trainerItemId: string, approached: boolean) => void;
@@ -296,6 +314,9 @@ interface TrainerRowProps {
 const TrainerRow = ({
   row,
   name,
+  phone,
+  message,
+  messageState,
   canViewFull,
   canPlan,
   onApproachedChange,
@@ -391,6 +412,98 @@ const TrainerRow = ({
           </Button>
         </TableCell>
       )}
+      {canPlan && (
+        <TableCell>
+          {/* Frozen alongside Kies and Benaderd: a superseded list may no longer
+              recommend this trainer, and messaging one is not undoable. */}
+          <WhatsappCell
+            name={name}
+            phone={phone}
+            message={message}
+            frozen={stale || busy}
+            messageState={messageState}
+          />
+        </TableCell>
+      )}
     </TableRow>
+  );
+};
+
+/**
+ * "Stuur WhatsApp" — the per-trainer deep link legacy Airtable had on every row.
+ *
+ * A real `<a href>` rather than a click handler, because a window opened after an `await`
+ * is treated as a popup and blocked. That is why the message is loaded with the view
+ * rather than on demand.
+ *
+ * Disabled — never hidden — when there is no number or no message yet: a missing button
+ * reads as "this trainer cannot be messaged", where the truth is usually that nobody has
+ * filled in their phone number on the Trainers board.
+ */
+/** Why a link is refused, in the planner's language. Keyed by state so none is forgotten. */
+const MESSAGE_STATE_REASON: Record<Exclude<MessageState, 'ok'>, string> = {
+  stale: 'De training is gewijzigd na dit bericht — open het WhatsApp-paneel en herlaad',
+  error: 'Het bericht kon niet worden ververst — open het WhatsApp-paneel',
+  pending: 'Het bericht wordt bijgewerkt — probeer het zo opnieuw',
+  unreadable: 'Er staat een opgeslagen bericht dat niet gelezen kon worden — open het paneel',
+  conflict: 'Een collega heeft dit bericht gewijzigd — open het paneel en kies welke versie geldt',
+};
+
+const WhatsappCell = ({
+  name,
+  phone,
+  message,
+  frozen,
+  messageState,
+}: {
+  name: string | null;
+  phone: string | null;
+  message: string;
+  /** The list is superseded or an action is in flight — see the call site. */
+  frozen: boolean;
+  /**
+   * The panel shows these as a warning with a Herladen button; a row link has nowhere to
+   * put a warning, and the text it would send is the old one. So here they disable.
+   */
+  messageState: MessageState;
+}) => {
+  const href = whatsappHref(phone, message, name);
+
+  if (frozen || messageState !== 'ok' || href === null) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled
+        title={
+          frozen
+            ? 'De lijst is verouderd — ververs hem voordat je iemand benadert'
+            : messageState !== 'ok'
+              ? MESSAGE_STATE_REASON[messageState]
+              : phone === null
+                ? 'Geen telefoonnummer op het trainersbord'
+                : 'Het bericht is nog niet geladen'
+        }
+      >
+        <MessageCircle className="mr-2 size-4" />
+        WhatsApp
+      </Button>
+    );
+  }
+
+  return (
+    <Button size="sm" variant="outline" asChild>
+      {/* `noreferrer` alongside `_blank`: without it the opened tab gets a handle back to
+          this one via `window.opener`. */}
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Stuur WhatsApp naar ${name ?? 'deze trainer'}`}
+      >
+        <MessageCircle className="mr-2 size-4" />
+        WhatsApp
+      </a>
+    </Button>
   );
 };

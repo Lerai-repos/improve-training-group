@@ -73,6 +73,15 @@ const storedRowsSchema = z.discriminatedUnion('kind', [
     kind: z.literal('ready'),
     /** The training's own month, for read-time workload counts. Absent on older rows. */
     trainingMonth: z.string().nullable().default(null),
+    /**
+     * The training's duration in hours, shown above the list beside "Duur facturatie".
+     *
+     * A property of the TRAINING, so it belongs here rather than repeated down every
+     * row. Nullable for the same reason `trainingMonth` is: the board's `duur` column can
+     * be empty, and rows written before this field existed have no value for it — the
+     * header renders nothing rather than a misleading `0,00`.
+     */
+    duurTraining: z.number().finite().nonnegative().nullable().default(null),
     // At least one. `service.ts` emits GEREED exactly when `ranked.length > 0` and
     // GEEN MATCH otherwise, so a ready-but-empty artifact contradicts the label it was
     // stored beside, and the view would render it as a successful empty recommendation.
@@ -99,7 +108,12 @@ export type StoredDetail = z.infer<typeof storedRowsSchema>;
 
 /** What one execution wants to record. The label is derived, never passed separately. */
 export type OutcomeClaim =
-  | { kind: 'ready'; rows: StoredRow[]; trainingMonth: string | null }
+  | {
+      kind: 'ready';
+      rows: StoredRow[];
+      trainingMonth: string | null;
+      duurTraining: number | null;
+    }
   | { kind: 'no_match' }
   | { kind: 'failed'; stage: string; message: string | null };
 
@@ -138,6 +152,7 @@ function detailOf(claim: OutcomeClaim): StoredDetail {
       kind: 'ready',
       rows: claim.rows,
       trainingMonth: claim.trainingMonth,
+      duurTraining: claim.duurTraining,
       failure: null,
     };
   }

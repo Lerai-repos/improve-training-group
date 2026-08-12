@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiError, type RecommendationsApi } from './api';
 import { readLinkedTrainers } from './linked-trainers';
-import { pickTrainer } from './pick-trainer';
+import { pickTrainer, type PickMode } from './pick-trainer';
 import type { Appearance, MondayBridge, MondayContext } from './monday-client';
 import type { RecommendationView } from './types';
 
@@ -65,8 +65,13 @@ export interface UseRecommendationView {
   recalculating: boolean;
   recalculate: () => Promise<void>;
   setApproached: (trainerItemId: string, approached: boolean) => Promise<void>;
-  /** Link this trainer to the training, as the logged-in planner. */
-  pick: (trainerItemId: string) => Promise<void>;
+  /**
+   * Link this trainer to the training, as the logged-in planner.
+   *
+   * `mode` has no default: the relation write replaces the column's whole list, so
+   * "replace" and "append" are different enough that the caller must have decided.
+   */
+  pick: (trainerItemId: string, mode: PickMode) => Promise<void>;
   /** The trainer being linked right now, so only that row's button spins. */
   picking: string | null;
   /**
@@ -85,6 +90,25 @@ export interface UseRecommendationView {
   stale: boolean;
   warning: string | null;
   dismissWarning: () => void;
+}
+
+/**
+ * The relation as it stands immediately after a write, before Monday is re-read.
+ *
+ * Has to be what was actually WRITTEN, which is why it takes the mode: a replace removed
+ * the others, and carrying them would keep "Gekoppeld" on a trainer who is no longer
+ * linked and leave their Kies disabled — for the second or two until the re-read corrects
+ * it, which is long enough for a planner to act on.
+ *
+ * Pure and exported because it is only observable from inside the write otherwise: the
+ * re-read that follows overwrites it within the same call.
+ */
+export function optimisticLinked(
+  current: readonly string[],
+  trainerItemId: string,
+  mode: PickMode
+): readonly string[] {
+  return mode === 'replace' ? [trainerItemId] : [...new Set([...current, trainerItemId])];
 }
 
 export function useRecommendationView(
@@ -379,7 +403,7 @@ export function useRecommendationView(
   );
 
   const pick = useCallback(
-    async (trainerItemId: string) => {
+    async (trainerItemId: string, mode: PickMode) => {
       const state = status.kind === 'loaded' ? status.view.state : null;
       if (itemId === null || boardId === null || state === null || state.kind !== 'ready') {
         return;
@@ -399,7 +423,7 @@ export function useRecommendationView(
       try {
         const outcome = await pickTrainer(
           { monday, api, boardId },
-          { mondayItemId: owner, generation: state.generation, trainerItemId }
+          { mondayItemId: owner, generation: state.generation, trainerItemId, mode }
         );
 
         if (revision !== revisionRef.current) {
@@ -425,6 +449,17 @@ export function useRecommendationView(
                 'koppelen opnieuw berekend. Controleer of deze trainer nog de juiste keuze is.'
             );
             break;
+          case 'linked_but_lost':
+            // The write went out and the trainer is not there. Almost always a colleague
+            // appending at the same moment, whose write replaced ours — Monday offers no
+            // conditional relation mutation, so this is detected rather than prevented.
+            warn(
+              owner,
+              `Trainer #${outcome.trainerItemId} staat NIET op de training — vermoedelijk ` +
+                'heeft een collega tegelijk een trainer gekoppeld. Controleer de koppeling ' +
+                'en kies zo nodig opnieuw.'
+            );
+            break;
           case 'linked_unverified':
             warn(
               owner,
@@ -441,14 +476,23 @@ export function useRecommendationView(
 
         // Record the link BEFORE the lock is released, so there is no window in which
         // the buttons are live again while the relation still looks empty.
-        if (outcome.kind !== 'refused' && outcome.kind !== 'failed') {
+        if (
+          outcome.kind !== 'refused' &&
+          outcome.kind !== 'failed' &&
+          // Not linked, so claiming it would leave "Gekoppeld" on a trainer who is not.
+          outcome.kind !== 'linked_but_lost'
+        ) {
           setLinkedFor((held) =>
             held.itemId === owner && held.state.kind === 'ready'
               ? {
                   itemId: owner,
                   state: {
                     kind: 'ready',
-                    trainerItemIds: [...new Set([...held.state.trainerItemIds, trainerItemId])],
+                    trainerItemIds: optimisticLinked(
+                      held.state.trainerItemIds,
+                      trainerItemId,
+                      mode
+                    ),
                   },
                 }
               : held

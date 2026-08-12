@@ -1756,6 +1756,395 @@ describe('drafts are per training', () => {
     expect(result.current.dirty).toBe(true);
     expect(result.current.save).toMatchObject({ kind: 'error' });
   });
+
+  /**
+   * …and OPENING the panel must not throw that draft away.
+   *
+   * The row WhatsApp links need the message before the panel is ever opened, so planners
+   * preload it. The temptation is to fold that into `open` and call `reload()` on open to
+   * keep re-reading — but `reload` is the destructive "theirs wins" path: it clears
+   * `failed`, `blocked` and `dirty`. A planner whose departure save failed would return,
+   * see their work restored, open the panel, and watch it be replaced by the server text.
+   *
+   * So `preload` is its own argument and the rising-edge loader still runs `load`.
+   */
+  it('preloads without the panel, and opening it does not discard a failed draft', async () => {
+    let failSave = true;
+    const api = fakeApi({
+      getWhatsapp: () =>
+        Promise.resolve({
+          generated: 'BASIS A',
+          saved: null,
+          token: 'tok-1',
+          unreadable: false,
+          warnings: [],
+        }),
+      saveWhatsapp: (item, input) => {
+        api.saves.push(input);
+        api.saveItems.push(item);
+        return failSave
+          ? Promise.reject(new Error('netwerk weg'))
+          : Promise.resolve({ saved: { ...input }, token: 'tok-ok' });
+      },
+    });
+
+    // Panel CLOSED, preload on — exactly how a planner's view starts.
+    const { result, rerender } = renderHook(
+      ({ isOpen }: { isOpen: boolean }) =>
+        useWhatsappMessage(api, ITEM, isOpen, { preload: true }),
+      { initialProps: { isOpen: false } }
+    );
+
+    // The preload alone populated the text the row links will send.
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+
+    act(() => {
+      result.current.setText('werk dat verloren mocht gaan');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    await waitFor(() => expect(result.current.save).toMatchObject({ kind: 'error' }));
+
+    failSave = false;
+    rerender({ isOpen: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    // Still theirs, not the server's.
+    expect(result.current.text).toBe('werk dat verloren mocht gaan');
+    expect(result.current.dirty).toBe(true);
+  });
+
+  /**
+   * A `refreshToken` change must not land on unsaved work either.
+   *
+   * `load` restores a RETAINED FAILURE, but a draft that is merely dirty has no such
+   * protection: the normal branch replaces it with the server's text. Before the token
+   * existed a load needed a new training or a freshly opened panel, so this was
+   * unreachable — the token made it reachable mid-sentence, while the planner is typing.
+   */
+  it('defers a token refresh while the draft is unsaved', async () => {
+    const api = fakeApi({
+      getWhatsapp: () =>
+        Promise.resolve({
+          generated: 'BASIS A',
+          saved: null,
+          token: 'tok-1',
+          unreadable: false,
+          warnings: [],
+        }),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ token }: { token: number }) =>
+        useWhatsappMessage(api, ITEM, true, { refreshToken: token }),
+      { initialProps: { token: 1 } }
+    );
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+
+    // Typing, still inside the debounce window — dirty, nothing saved yet.
+    act(() => {
+      result.current.setText('half getypt bericht');
+    });
+    expect(result.current.dirty).toBe(true);
+
+    // A recalculate lands while they type.
+    rerender({ token: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    expect(result.current.text).toBe('half getypt bericht');
+  });
+
+  /**
+   * A deferred refresh must RESUME once the draft settles.
+   *
+   * The effect that defers it has no dependency that changes when a save completes, so
+   * without a resume the refresh never runs while the panel stays open: the editor keeps a
+   * base from the previous generation, and `refreshPending` — which disables every row
+   * link — would never clear.
+   */
+  it('resumes a deferred refresh once the draft is saved', async () => {
+    let generated = 'BASIS A';
+    const api = fakeApi({
+      getWhatsapp: () =>
+        Promise.resolve({
+          generated,
+          saved: null,
+          token: 'tok-1',
+          unreadable: false,
+          warnings: [],
+        }),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ token }: { token: number }) =>
+        useWhatsappMessage(api, ITEM, true, { refreshToken: token }),
+      { initialProps: { token: 1 } }
+    );
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+    expect(result.current.refreshPending).toBe(false);
+
+    act(() => {
+      result.current.setText('half getypt bericht');
+    });
+    generated = 'BASIS A, nieuwe datum';
+    rerender({ token: 2 });
+
+    // Deferred: the draft survives, and the links know the text is not current.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(result.current.text).toBe('half getypt bericht');
+    expect(result.current.refreshPending).toBe(true);
+
+    // The debounce fires, the save lands, and the deferred refresh follows it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    await waitFor(() => expect(result.current.refreshPending).toBe(false));
+  });
+
+  /**
+   * Rule 1: the base travels with the text in the box.
+   *
+   * Preserving a dirty draft through a refresh must preserve the revision it was written
+   * against too. Adopting the response's token would let the next save overwrite a colleague
+   * with no 409 to notice; adopting its base would rebase the edit and make its staleness
+   * warning vanish on its own.
+   */
+  it('keeps the draft’s own revision when a refresh lands mid-edit', async () => {
+    let calls = 0;
+    let releaseSecond: (() => void) | null = null;
+    const api = fakeApi({
+      getWhatsapp: () => {
+        calls += 1;
+        if (calls === 1) {
+          return Promise.resolve({
+            generated: 'BASIS A',
+            saved: null,
+            token: 'tok-1',
+            unreadable: false,
+            warnings: [],
+          });
+        }
+        // Held open, so the planner can start typing while it is in flight — the one path
+        // the loader's own deferral cannot cover.
+        return new Promise((resolve) => {
+          releaseSecond = () => {
+            resolve({
+              generated: 'BASIS A, nieuwe datum',
+              saved: null,
+              token: 'tok-2',
+              unreadable: false,
+              warnings: [],
+            });
+          };
+        });
+      },
+    });
+
+    // Driven by the panel's rising edge rather than the clock: exactly one extra load,
+    // where an interval keeps firing and supersedes the one being held.
+    const { result, rerender } = renderHook(
+      ({ isOpen }: { isOpen: boolean }) => useWhatsappMessage(api, ITEM, isOpen, { preload: true }),
+      { initialProps: { isOpen: false } }
+    );
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+
+    rerender({ isOpen: true });
+    await waitFor(() => expect(releaseSecond).not.toBeNull());
+
+    act(() => {
+      result.current.setText('mijn eigen tekst');
+    });
+
+    await act(async () => {
+      releaseSecond?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.generated).toBe('BASIS A, nieuwe datum'));
+
+    // The draft survived the read that landed on top of it…
+    expect(result.current.text).toBe('mijn eigen tekst');
+    // …and still reads as written against the OLD message, rather than silently rebasing
+    // onto the new one and losing its warning.
+    expect(result.current.stale).toBe(true);
+
+    // The save goes out against the revision the draft was written against, so a colleague
+    // who wrote in the meantime still produces a 409 instead of being overwritten.
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(api.saves.at(-1)).toMatchObject({ base: 'BASIS A' });
+  });
+
+  /**
+   * A refresh that does NOT move the token still has to mark the text as not-current.
+   *
+   * The clock refresh and the panel-open re-read both reload without a token change, so a
+   * check against the token alone leaves every row link enabled with the previous message
+   * for the length of the GET — which is the window in which a changed date is being
+   * fetched.
+   */
+  it('is pending during a refresh that does not change the token', async () => {
+    let calls = 0;
+    let releaseSecond: (() => void) | null = null;
+    const api = fakeApi({
+      getWhatsapp: () => {
+        calls += 1;
+        const payload = {
+          generated: 'BASIS A',
+          saved: null,
+          token: 'tok-1',
+          unreadable: false,
+          warnings: [],
+        };
+        if (calls === 1) {
+          return Promise.resolve(payload);
+        }
+        return new Promise((resolve) => {
+          releaseSecond = () => {
+            resolve(payload);
+          };
+        });
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      ({ isOpen }: { isOpen: boolean }) => useWhatsappMessage(api, ITEM, isOpen, { preload: true }),
+      { initialProps: { isOpen: false } }
+    );
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+    expect(result.current.refreshPending).toBe(false);
+
+    // Opening re-reads. The token never moves.
+    rerender({ isOpen: true });
+    await waitFor(() => expect(releaseSecond).not.toBeNull());
+    expect(result.current.refreshPending).toBe(true);
+
+    await act(async () => {
+      releaseSecond?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.refreshPending).toBe(false));
+  });
+
+  /**
+   * The clock-driven refresh, since the generation is not a signal that the message changed:
+   * editing a training's date or location does not advance it.
+   */
+  it('re-reads on its own clock, and skips a tick while the draft is unsaved', async () => {
+    let generated = 'BASIS A';
+    const api = fakeApi({
+      getWhatsapp: () =>
+        Promise.resolve({
+          generated,
+          saved: null,
+          token: 'tok-1',
+          unreadable: false,
+          warnings: [],
+        }),
+    });
+
+    const { result } = renderHook(() =>
+      useWhatsappMessage(api, ITEM, false, { preload: true, refreshIntervalMs: 50 })
+    );
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+
+    generated = 'BASIS A, nieuwe datum';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+    await waitFor(() => expect(result.current.text).toBe('BASIS A, nieuwe datum'));
+
+    // Now with unsaved work: the tick must not overwrite it.
+    act(() => {
+      result.current.setText('half getypt bericht');
+    });
+    generated = 'BASIS A, nog nieuwer';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+    expect(result.current.text).toBe('half getypt bericht');
+  });
+
+  /**
+   * A response must be credited to the token its request STARTED under.
+   *
+   * A token can change without starting a new load — a refresh deferred behind an unsaved
+   * draft does exactly that — so an earlier GET can resolve when the current token is
+   * already newer. Crediting the token at resolve time would mark the new one as read from
+   * the old text, briefly re-enabling every row link with the previous message.
+   */
+  it('credits a response to the token it started under', async () => {
+    let release: (() => void) | null = null;
+    const api = fakeApi({
+      getWhatsapp: () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve({
+              generated: 'BASIS A',
+              saved: null,
+              token: 'tok-1',
+              unreadable: false,
+              warnings: [],
+            });
+          };
+        }),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ token }: { token: number }) =>
+        useWhatsappMessage(api, ITEM, true, { refreshToken: token }),
+      { initialProps: { token: 1 } }
+    );
+    await waitFor(() => expect(release).not.toBeNull());
+
+    // The token moves on while that first GET is still in flight.
+    act(() => {
+      result.current.setText('iets getypt');
+    });
+    rerender({ token: 2 });
+
+    await act(async () => {
+      release?.();
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // The in-flight read answered for token 1, so token 2 is still unread.
+    expect(result.current.refreshPending).toBe(true);
+  });
+
+  /** …and with nothing unsaved, the same change DOES re-read. */
+  it('refreshes on a token change when there is no unsaved work', async () => {
+    let generated = 'BASIS A';
+    const api = fakeApi({
+      getWhatsapp: () =>
+        Promise.resolve({
+          generated,
+          saved: null,
+          token: 'tok-1',
+          unreadable: false,
+          warnings: [],
+        }),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ token }: { token: number }) =>
+        useWhatsappMessage(api, ITEM, true, { refreshToken: token }),
+      { initialProps: { token: 1 } }
+    );
+    await waitFor(() => expect(result.current.text).toBe('BASIS A'));
+
+    generated = 'BASIS A, nieuwe datum';
+    rerender({ token: 2 });
+
+    await waitFor(() => expect(result.current.text).toBe('BASIS A, nieuwe datum'));
+  });
 });
 
 /**

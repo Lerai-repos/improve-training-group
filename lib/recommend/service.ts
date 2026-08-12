@@ -194,6 +194,8 @@ export type RecommendationResult =
       resultStatus: 'GEREED' | 'GEEN MATCH';
       /** The training's own month (`YYYY-MM`), for read-time workload counts. */
       trainingMonth: string | null;
+      /** Hours, as the board holds them. Null when the `duur` column is empty. */
+      duurTraining: number | null;
       recommendations: RankedRecommendation[];
       /**
        * The same list as `recommendations`, shaped for persistence and the item view:
@@ -478,6 +480,12 @@ export async function runRecommendation(
        * the world around it, so it belongs in the immutable artifact.
        */
       trainingMonth: monthKeyOf(live.datum),
+      /**
+       * Likewise a property of the training, stored once: the view shows it above the
+       * list beside "Duur facturatie", which is what explains a short session billing
+       * more hours than it runs.
+       */
+      duurTraining: live.duurTraining,
       artifact,
       artifactHash: hashArtifact(artifact),
       counts: {

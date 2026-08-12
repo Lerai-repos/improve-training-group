@@ -50,7 +50,7 @@ export interface Row extends BaseRow {
 export type ViewState =
   | { kind: 'idle' }
   | { kind: 'computing'; generation: number }
-  | { kind: 'ready'; generation: number; rows: Row[] }
+  | { kind: 'ready'; generation: number; rows: Row[]; duurTraining?: number | null }
   | { kind: 'no_match'; generation: number }
   | { kind: 'failed'; generation: number; stage: string }
   | { kind: 'unavailable'; generation: number; label: string };

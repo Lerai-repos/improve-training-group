@@ -12,6 +12,11 @@ const NAMES = new Map([
   ['901', 'Joris Bakker'],
 ]);
 
+const PHONES = new Map([['900', '0611771540']]);
+
+/** The generated opening line, so the personalised greeting is exercised for real. */
+const MESSAGE = 'Ben jij beschikbaar?\n\n07-10-2026\nTimemanagement';
+
 const noop = (): void => undefined;
 
 function renderTable(props: Partial<Parameters<typeof RecommendationTable>[0]> = {}) {
@@ -19,6 +24,9 @@ function renderTable(props: Partial<Parameters<typeof RecommendationTable>[0]> =
     <RecommendationTable
       rows={[row()]}
       names={NAMES}
+      phones={PHONES}
+      message={MESSAGE}
+      messageState="ok"
       canViewFull
       canPlan
       sort={[]}
@@ -286,6 +294,133 @@ describe('RecommendationTable', () => {
     it('puts trainers without grades last, not first', () => {
       renderTable({ rows, sort: [{ key: 'grade', direction: 'desc' }] });
       expect(names()).toEqual(['Joris Bakker', 'Sanne de Vries']);
+    });
+  });
+
+  /**
+   * The per-row deep link legacy Airtable had, which Peter asked after by name. One shared
+   * message, one recipient per row.
+   */
+  describe('the WhatsApp link', () => {
+    const link = (name: string) =>
+      screen.getByRole('link', { name: `Stuur WhatsApp naar ${name}` });
+
+    it('addresses the message to that row’s trainer', () => {
+      renderTable();
+
+      expect(link('Sanne de Vries').getAttribute('href')).toBe(
+        'https://wa.me/31611771540?text=Hey%20Sanne%2C%20ben%20jij%20beschikbaar%3F%0A%0A07-10-2026%0ATimemanagement'
+      );
+    });
+
+    /** A real anchor, not a handler: a window opened after an await is blocked. */
+    it('opens in a new tab without handing it a window.opener', () => {
+      renderTable();
+
+      const anchor = link('Sanne de Vries');
+      expect(anchor.getAttribute('target')).toBe('_blank');
+      expect(anchor.getAttribute('rel')).toContain('noopener');
+    });
+
+    /**
+     * Disabled rather than absent. A missing button reads as "this trainer cannot be
+     * messaged"; the truth is that nobody filled in their number.
+     */
+    it('disables the button for a trainer with no phone number', () => {
+      renderTable({ rows: [row({ trainerItemId: '901' })] });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+      const button = screen.getByRole('button', { name: /WhatsApp/ });
+      expect(button.hasAttribute('disabled')).toBe(true);
+      expect(button.getAttribute('title')).toMatch(/telefoonnummer/i);
+    });
+
+    /** The message arrives with its own fetch; until then there is nothing to send. */
+    it('disables the button until the message has loaded', () => {
+      renderTable({ message: '' });
+
+      expect(screen.getByRole('button', { name: /WhatsApp/ }).hasAttribute('disabled')).toBe(true);
+    });
+
+    /** Same rule as every other planning control. */
+    it('is not offered to a caller who cannot plan', () => {
+      renderTable({ canPlan: false });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+    });
+
+    /**
+     * The panel warns and offers Herladen; a row link has nowhere to put a warning, and
+     * the text it would send still carries the old date or location.
+     */
+    it('is disabled when the saved message predates a change to the training', () => {
+      renderTable({ messageState: 'stale' });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /WhatsApp/ }).getAttribute('title')).toMatch(
+        /gewijzigd/i
+      );
+    });
+
+    /**
+     * A refresh that failed leaves the PREVIOUS message in hand, and nothing re-reads it
+     * until the panel is opened — so on a freshly recalculated list every link would send
+     * the old date.
+     */
+    it('is disabled when the last refresh failed', () => {
+      renderTable({ messageState: 'error' });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /WhatsApp/ }).getAttribute('title')).toMatch(
+        /ververst/i
+      );
+    });
+
+    /**
+     * A new generation renders immediately while its message GET is still in flight, so
+     * for that window the list is new and the text is not. Same for a refresh deferred
+     * behind an unsaved draft.
+     */
+    it('is disabled while a refresh has not been read yet', () => {
+      renderTable({ messageState: 'pending' });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /WhatsApp/ }).getAttribute('title')).toMatch(
+        /bijgewerkt/i
+      );
+    });
+
+    /** A colleague's edit is waiting to be resolved; this text is the losing version. */
+    it('is disabled while the message has a save conflict', () => {
+      renderTable({ messageState: 'conflict' });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /WhatsApp/ }).getAttribute('title')).toMatch(
+        /collega/i
+      );
+    });
+
+    /** The generated fallback would quietly discard whatever a colleague saved. */
+    it('is disabled when a saved edit could not be read', () => {
+      renderTable({ messageState: 'unreadable' });
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+    });
+
+    /**
+     * Frozen alongside Kies and Benaderd. A superseded list may no longer recommend this
+     * trainer, and unlike a pick, a sent message cannot be taken back.
+     */
+    it.each([
+      ['stale', { stale: true }],
+      ['busy', { busy: true }],
+    ])('is disabled while the list is %s', (_label, props) => {
+      renderTable(props);
+
+      expect(screen.queryByRole('link', { name: /Stuur WhatsApp/ })).toBeNull();
+      const button = screen.getByRole('button', { name: /WhatsApp/ });
+      expect(button.hasAttribute('disabled')).toBe(true);
+      expect(button.getAttribute('title')).toMatch(/verouderd/i);
     });
   });
 });

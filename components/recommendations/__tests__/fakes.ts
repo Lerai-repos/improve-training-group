@@ -1,3 +1,5 @@
+import { AGENDA_2026_COLUMNS, TRAINER_COLUMNS } from '@lib/monday/board-config';
+
 import type { RecommendationsApi } from '../api';
 import type { MondayBridge, MondayContext } from '../monday-client';
 import type { RecommendationView, Row } from '../types';
@@ -21,6 +23,8 @@ export function fakeMonday(
   const tokens: string[] = [];
   let issued = 0;
   let apiCalls = 0;
+  /** The trainer relation, as this fake Monday holds it. Mutations update it. */
+  let relation: string[] = [];
 
   const bridge = {
     context: () => Promise.resolve(initial),
@@ -39,9 +43,57 @@ export function fakeMonday(
       tokens.push(token);
       return Promise.resolve(token);
     },
-    api(): Promise<unknown> {
+    /**
+     * Document-aware, and STATEFUL for the relation.
+     *
+     * Answering every query with the names payload was fine while the relation reader
+     * failed open to `[]`; now that it fails closed, that shape is rejected outright — and
+     * rightly, since it is indistinguishable from the shape drift that turns an append into
+     * a replace. So the fake answers each query in its own shape, and a relation write is
+     * reflected in the next relation read, which is what lets the post-write "did our link
+     * survive" check mean anything.
+     */
+    api(document: string, variables?: Record<string, unknown>): Promise<unknown> {
       apiCalls += 1;
-      return Promise.resolve({ items: [{ id: '900', name: 'Sanne de Vries' }] });
+
+      if (document.includes('linked_item_ids')) {
+        return Promise.resolve({
+          items: [
+            {
+              id: '111',
+              column_values: [
+                { id: AGENDA_2026_COLUMNS.trainerRelation, linked_item_ids: [...relation] },
+              ],
+            },
+          ],
+        });
+      }
+
+      if (/\bmutation\b/.test(document)) {
+        const value: unknown = variables?.value;
+        if (typeof value === 'string') {
+          const parsed: unknown = JSON.parse(value);
+          if (
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            'item_ids' in parsed &&
+            Array.isArray(parsed.item_ids)
+          ) {
+            relation = parsed.item_ids.map(String);
+          }
+        }
+        return Promise.resolve({ change_column_value: { id: '111' } });
+      }
+
+      return Promise.resolve({
+        items: [
+          {
+            id: '900',
+            name: 'Sanne de Vries',
+            column_values: [{ id: TRAINER_COLUMNS.telefoon, text: '0611771540' }],
+          },
+        ],
+      });
     },
     changeContext(context: MondayContext) {
       for (const listener of [...listeners]) {
@@ -165,6 +217,8 @@ export function noWhatsapp(): Pick<
 export interface WhatsappCalls {
   saves: number;
   discards: number;
+  /** Loads. The panel must still re-read on open now that planners preload eagerly. */
+  gets: number;
 }
 
 export function fakeWhatsapp(
@@ -173,12 +227,20 @@ export function fakeWhatsapp(
   calls: WhatsappCalls;
 } {
   const { generated = 'Ben jij beschikbaar?\n\n23-03-2026\nRabobank', failSave = false } = options;
-  const calls: WhatsappCalls = { saves: 0, discards: 0 };
+  const calls: WhatsappCalls = { saves: 0, discards: 0, gets: 0 };
 
   return {
     calls,
-    getWhatsapp: () =>
-      Promise.resolve({ generated, saved: null, token: 'absent', unreadable: false, warnings: [] }),
+    getWhatsapp: () => {
+      calls.gets += 1;
+      return Promise.resolve({
+        generated,
+        saved: null,
+        token: 'absent',
+        unreadable: false,
+        warnings: [],
+      });
+    },
     saveWhatsapp: (_itemId, input) => {
       calls.saves += 1;
       return failSave

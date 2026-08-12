@@ -58,7 +58,7 @@ describe('resolveView', () => {
     await bump(h);
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
-      trainingMonth: null,
+      trainingMonth: null, duurTraining: null,
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
     });
 
@@ -109,7 +109,7 @@ describe('resolveView', () => {
       let now = 1_000;
       const h = harness(() => now);
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
 
       now += ROWS_TTL_MS + 1;
 
@@ -136,7 +136,7 @@ describe('resolveView', () => {
     it('does not report an older generation’s answer for a newer generation', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
       await bump(h); // a recalculate: generation 2, nothing stored yet
 
       expect((await resolveView(h.deps, ITEM, FULL)).state).toEqual({
@@ -169,7 +169,7 @@ describe('resolveView', () => {
 
     it('does not return the superseded generation as ready', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
 
       // Read generation 1, resolve its rows, then discover the current one is 2.
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 2]) };
@@ -182,10 +182,10 @@ describe('resolveView', () => {
 
     it('re-resolves against the new generation rather than giving up', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
       await h.outcomes.claim(ITEM, 2, {
         kind: 'ready',
-        trainingMonth: null,
+        trainingMonth: null, duurTraining: null,
         rows: [storedRow({ trainerItemId: 'newer' })],
       });
 
@@ -203,7 +203,7 @@ describe('resolveView', () => {
      */
     it('gives up after a few attempts and reports computing', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
 
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 3, 4, 5, 6, 7, 8, 9]) };
 
@@ -227,7 +227,7 @@ describe('resolveView', () => {
       await bump(h);
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
-        trainingMonth: '2026-09',
+        trainingMonth: '2026-09', duurTraining: null,
         rows: [storedRow({ trainerItemId: 't1' })],
       });
     }
@@ -385,7 +385,7 @@ describe('resolveView', () => {
       await bump(h);
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
-        trainingMonth: null,
+        trainingMonth: null, duurTraining: null,
         rows: [
           storedRow({ trainerItemId: 't1', rank: 1 }),
           storedRow({ trainerItemId: 't2', rank: 2 }),
@@ -412,7 +412,7 @@ describe('resolveView', () => {
     it('does not carry marks across a recalculate', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null });
       await h.approached.write({
         mondayItemId: ITEM,
         generation: 1,
@@ -422,7 +422,7 @@ describe('resolveView', () => {
       });
 
       await bump(h);
-      await h.outcomes.claim(ITEM, 2, { kind: 'ready', rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 2, { kind: 'ready', duurTraining: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null });
 
       const { state } = await resolveView(h.deps, ITEM, FULL);
 
@@ -434,7 +434,7 @@ describe('resolveView', () => {
     it('gives a full caller the money, and a restricted one none of it', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', rows: [storedRow()], trainingMonth: null });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
 
       const full = await resolveView(h.deps, ITEM, FULL);
       const restricted = await resolveView(h.deps, ITEM, RESTRICTED);

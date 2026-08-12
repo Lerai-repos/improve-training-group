@@ -33,7 +33,16 @@ import type { CachedAssignments } from './assignment-cache';
 export type ViewState =
   | { kind: 'idle' }
   | { kind: 'computing'; generation: number }
-  | { kind: 'ready'; generation: number; rows: PublicRow[] }
+  | {
+      kind: 'ready';
+      generation: number;
+      rows: PublicRow[];
+      /**
+       * The training's duration in hours, for the header above the list. Null when the
+       * board's `duur` column is empty or the rows predate the field.
+       */
+      duurTraining: number | null;
+    }
   | { kind: 'no_match'; generation: number }
   /** `stage` names where it broke — `travel`, `monday`, `dlq_exhausted`. */
   | { kind: 'failed'; generation: number; stage: string }
@@ -181,7 +190,12 @@ async function resolveState(
 
   const workload = await resolveWorkload(deps, mondayItemId, detail.trainingMonth, caps);
 
-  return { kind: 'ready', generation, rows: toPublicRows(detail.rows, marked, caps, workload) };
+  return {
+    kind: 'ready',
+    generation,
+    rows: toPublicRows(detail.rows, marked, caps, workload),
+    duurTraining: detail.duurTraining,
+  };
 }
 
 /**
