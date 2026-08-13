@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createMemoryKvStore } from '@lib/recommend/kv';
 
-import { createCachedSettings } from '../cache';
+import { createCachedSettings, SETTINGS_TTL_MS } from '../cache';
 
 import type { SettingsSnapshot } from '../snapshot';
 
@@ -142,11 +142,45 @@ describe('createCachedSettings', () => {
 
     await expect(cache.read()).rejects.toThrow('boom');
 
-    // 30s failure sentinel, NOT the 5-minute data TTL: a blip must not poison all three
-    // QStash attempts into a terminal FOUT.
+    // The failure sentinel is short on purpose — a blip must not poison all three QStash
+    // attempts into a terminal FOUT. It happens to equal the data TTL today; it is a
+    // separate constant so that stays true if the data TTL is ever raised.
     now += 31_000;
     await expect(cache.read()).resolves.toBeDefined();
     expect(attempts).toBe(2);
+  });
+
+  /**
+   * The property the TTL exists for, from the editor's side: change a value on the
+   * board, and a recalculation shortly after uses it. Pinned as behaviour rather than
+   * as a number, so the constant can move without silently changing what ITG experiences.
+   */
+  it('picks up an edited value once the short TTL has passed', async () => {
+    let now = 1_000_000;
+    const kv = createMemoryKvStore(() => now);
+    let rate = 23;
+    const cache = createCachedSettings({
+      kv,
+      boardId: '123',
+      env: {},
+      sleep: noSleep,
+      load: () => {
+        const s = snapshot('123');
+        return Promise.resolve({ ...s, app: { ...s.app, travelRateTrainerCentsPerKm: rate } });
+      },
+    });
+
+    expect((await cache.read()).app.travelRateTrainerCentsPerKm).toBe(23);
+
+    // Someone edits REISTARIEF TRAINERS on the board.
+    rate = 50;
+    // Still the cached value a moment later — that is the burst protection working.
+    now += 5_000;
+    expect((await cache.read()).app.travelRateTrainerCentsPerKm).toBe(23);
+
+    // And picked up shortly after, rather than minutes later.
+    now += SETTINGS_TTL_MS;
+    expect((await cache.read()).app.travelRateTrainerCentsPerKm).toBe(50);
   });
 
   it('treats an entry written by an older shape as a miss, not as config', async () => {

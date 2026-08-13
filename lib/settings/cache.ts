@@ -18,15 +18,31 @@ import type { SettingsSnapshot } from './snapshot';
  * one place where those subtleties are right.
  */
 
-/** Five minutes. A board edited a handful of times a year cannot go stale in that. */
-export const SETTINGS_TTL_MS = 5 * 60 * 1000;
+/**
+ * Thirty seconds — long enough to collapse a burst, short enough to feel immediate.
+ *
+ * The cache exists for ONE reason: a sweep fires many jobs at once and each execution
+ * is one training, so without it two dozen jobs would each read the same board. Thirty
+ * seconds absorbs that entirely, because a burst lands inside it.
+ *
+ * It was five minutes first, on the reasoning that a board edited a few times a year
+ * cannot go stale. True, but it optimised the wrong thing. A settings read is about
+ * three Monday calls, so even reading per job costs a few hundred a day against a
+ * 25.000/day budget — noise. What five minutes really cost was the person who edits a
+ * rate, recalculates, sees the old number, and cannot tell whether the board is wrong,
+ * the deploy is broken, or they simply have to wait. That doubt is worth far more than
+ * the calls it saved.
+ */
+export const SETTINGS_TTL_MS = 30_000;
 
 /**
- * Thirty seconds, and deliberately NOT the data TTL.
+ * How long a failed read is remembered.
  *
- * The engine gets three QStash attempts. Remember a failure for five minutes and one
- * three-second Monday blip poisons all three, manufacturing a terminal FOUT for a
- * source that recovered immediately.
+ * It now coincides with the data TTL, which it did not before — but for its own reason,
+ * so it stays its own constant rather than being folded into one. The engine gets three
+ * QStash attempts, and remembering a failure for minutes would let a three-second
+ * Monday blip poison all three and manufacture a terminal FOUT for a source that
+ * recovered immediately. If the data TTL is ever raised again, this must not follow it.
  */
 const FAILURE_TTL_MS = 30_000;
 
