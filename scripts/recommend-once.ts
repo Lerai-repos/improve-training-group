@@ -25,6 +25,7 @@ import {
   runRecommendation,
   type ServiceDeps,
 } from '@lib/recommend';
+import { loadSettingsOnce } from '@lib/settings';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -73,6 +74,13 @@ async function main(): Promise<void> {
   );
   console.log(`Roster: ${roster.length} trainers (live, all groups)`);
 
+  // Live, from the Instellingen board — a dry run that priced from stale env values
+  // would answer a question nobody asked.
+  const settings = await loadSettingsOnce(client);
+  console.log(
+    `Instellingen: board ${settings.boardId}, fingerprint ${settings.fingerprint.slice(0, 12)}`
+  );
+
   const deps: ServiceDeps = {
     reader: createMondayReader(client),
     roster,
@@ -91,7 +99,7 @@ async function main(): Promise<void> {
         })),
     travelCache: createTravelCache(createMemoryTravelCacheStore()),
     ack: loadAck(),
-    config: buildEngineConfig(),
+    config: buildEngineConfig({ settings }),
   };
 
   console.log(`Training item: ${itemId}  (read-only)\n`);

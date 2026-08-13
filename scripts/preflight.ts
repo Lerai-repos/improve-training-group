@@ -9,6 +9,7 @@ import {
   MONDAY_API_VERSION,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
+import { loadSettingsOnce } from '@lib/settings';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { createQStashClient } from '@lib/recommend/qstash';
 
@@ -55,6 +56,43 @@ async function checkMonday(): Promise<void> {
     record('Monday token', 'ok', `account ${pre.account.name ?? pre.account.id}`);
   } catch (error) {
     record('Monday token', 'fail', message(error));
+  }
+}
+
+/**
+ * The Instellingen board, read exactly as the engine reads it.
+ *
+ * This is deploy ①'s whole purpose: prove the board parses BEFORE the worker depends
+ * on it. Reported values are the effective ones, so they can be compared line by line
+ * against the env values they replace.
+ */
+async function checkInstellingen(): Promise<void> {
+  const token = process.env.MONDAY_API_TOKEN;
+  if (!token) {
+    record('Instellingen', 'skip', 'MONDAY_API_TOKEN not set');
+    return;
+  }
+  try {
+    const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+    const settings = await loadSettingsOnce(client);
+    const { app } = settings;
+    record('Instellingen', 'ok', `board ${settings.boardId}, fingerprint ${settings.fingerprint.slice(0, 12)}`);
+    record(
+      'Instellingen waarden',
+      'ok',
+      `HQ "${app.hqAddress}" · trainer ${app.travelRateTrainerCentsPerKm}c/km · ` +
+        `klant ${app.travelRateClientCentsPerKm}c/km · drempel ${app.travelTimeThresholdMinutes}min · ` +
+        `vergoeding ${app.travelTimeFeePerMinuteCents}c/min`
+    );
+    record(
+      'Instellingen tarieven',
+      'ok',
+      settings.rateCards.map((c) => `${c.rateKey}=${c.hourlyRateCents}c`).join(' · ')
+    );
+  } catch (error) {
+    // A refusal here is the point of the check, not an inconvenience: it is exactly
+    // what the worker would have done, surfaced before the worker depends on it.
+    record('Instellingen', 'fail', message(error));
   }
 }
 
@@ -187,6 +225,7 @@ async function main(): Promise<void> {
   await checkMonday();
   await checkStatusColumn();
   await checkRedis();
+  await checkInstellingen();
   await checkRedisZset();
   await checkQStash();
   checkPlainVars();

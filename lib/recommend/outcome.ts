@@ -6,6 +6,8 @@ import { isStatusLabel, type StatusLabel } from './delivery';
 import { ttlStateFromPttl, type KvStore, type TtlState } from './kv';
 import { storedRowSchema, type StoredRow } from './view-row';
 
+import type { SettingsProvenance } from '@lib/settings';
+
 /**
  * The immutable outcome of one (training, generation), in two keys.
  *
@@ -67,9 +69,75 @@ export const ROWS_TTL_MS = 365 * 24 * 60 * 60 * 1000;
  */
 const failureSchema = z.object({ stage: z.string().min(1), message: z.string().nullable() });
 
+/**
+ * Which settings produced this outcome.
+ *
+ * ## Why the record is VERSIONED rather than extended
+ *
+ * `ROWS_TTL_MS` is a year, so every detail written before today is still being read.
+ * Making these fields required would have failed Zod on **every existing record** the
+ * moment this deployed, and each one would show as unavailable. So `v: 2` is written
+ * going forward while `v: 1` keeps decoding, with `settings: null`.
+ *
+ * ## Why `failed` may carry null even at v2
+ *
+ * The settings read is one of the things that can fail — and when it does, no snapshot
+ * ever existed. Yet after QStash exhausts its retries `failure-callback.ts` still has to
+ * claim `dlq_exhausted`, or the board sits on `computing` for ever. Requiring provenance
+ * on every v2 outcome would make the terminal FOUT unrecordable for precisely the
+ * failure this design exists to surface.
+ *
+ * `ready` and `no_match` cannot be *constructed* without it — see {@link OutcomeClaim} —
+ * so the looseness here is only what reading old records requires.
+ */
+const provenanceSchema = z.object({
+  boardId: z.string().min(1),
+  readAt: z.number(),
+  fingerprint: z.string().min(1),
+});
+
+/** v1 has no provenance; v2 does. Both stay readable. */
+const versionSchema = z.union([z.literal(1), z.literal(2)]);
+const settingsField = provenanceSchema.nullable().default(null);
+
+/**
+ * v2 must MEAN something, or the version is decoration.
+ *
+ * A nullable field alone lets `{v: 2, kind: 'ready'}` with no settings decode happily
+ * as `settings: null` — which is indistinguishable from a v1 record and quietly hides a
+ * malformed write, on the very field the audit trail depends on.
+ *
+ * The exemption is narrower than "any failure". A `travel` or `load_training` failure
+ * happened INSIDE a run, which by definition had a snapshot, so omitting provenance
+ * there is a bug rather than a fact about the world. Only {@link PRE_COMPUTE_STAGE} can
+ * legitimately have none: it is claimed by the failure callback after QStash gave up,
+ * when compute never ran and the settings read may be precisely what failed.
+ */
+const PRE_COMPUTE_STAGE = 'dlq_exhausted';
+
+function requireProvenanceAtV2(
+  detail: { v: 1 | 2; kind: string; settings: unknown; failure: { stage: string } | null },
+  ctx: z.RefinementCtx
+): void {
+  if (detail.v !== 2 || detail.settings !== null) {
+    return;
+  }
+  if (detail.kind === 'failed' && detail.failure?.stage === PRE_COMPUTE_STAGE) {
+    return;
+  }
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ['settings'],
+    message:
+      `a v2 '${detail.kind}' outcome must record which settings produced it ` +
+      `(only a '${PRE_COMPUTE_STAGE}' failure may have none)`,
+  });
+}
+
 const storedRowsSchema = z.discriminatedUnion('kind', [
   z.object({
-    v: z.literal(1),
+    v: versionSchema,
+    settings: settingsField,
     kind: z.literal('ready'),
     /** The training's own month, for read-time workload counts. Absent on older rows. */
     trainingMonth: z.string().nullable().default(null),
@@ -89,33 +157,48 @@ const storedRowsSchema = z.discriminatedUnion('kind', [
     failure: z.null(),
   }),
   z.object({
-    v: z.literal(1),
+    v: versionSchema,
+    settings: settingsField,
     kind: z.literal('no_match'),
     // "We looked and found nobody" — an empty list is the whole content of the answer.
     rows: z.array(storedRowSchema).max(0),
     failure: z.null(),
   }),
   z.object({
-    v: z.literal(1),
+    v: versionSchema,
+    settings: settingsField,
     kind: z.literal('failed'),
     rows: z.null(),
     failure: failureSchema,
   }),
-]);
+]).superRefine(requireProvenanceAtV2);
 
 /** The detail behind a label: the rows a planner sees, or why there are none. */
 export type StoredDetail = z.infer<typeof storedRowsSchema>;
 
-/** What one execution wants to record. The label is derived, never passed separately. */
+/**
+ * What one execution wants to record. The label is derived, never passed separately.
+ *
+ * Note the asymmetry in `settings`, which is the whole v2 contract expressed in the
+ * type: a run that produced an answer **must** say which settings produced it, while a
+ * failure may legitimately have none — a settings read that never succeeded has no
+ * snapshot to name, and that is exactly when `dlq_exhausted` has to be recordable.
+ */
 export type OutcomeClaim =
   | {
       kind: 'ready';
       rows: StoredRow[];
       trainingMonth: string | null;
       duurTraining: number | null;
+      settings: SettingsProvenance;
     }
-  | { kind: 'no_match' }
-  | { kind: 'failed'; stage: string; message: string | null };
+  | { kind: 'no_match'; settings: SettingsProvenance }
+  | {
+      kind: 'failed';
+      stage: string;
+      message: string | null;
+      settings: SettingsProvenance | null;
+    };
 
 export function claimLabel(claim: OutcomeClaim): StatusLabel {
   if (claim.kind === 'ready') {
@@ -148,7 +231,8 @@ function encodeDetail(claim: OutcomeClaim): string {
 function detailOf(claim: OutcomeClaim): StoredDetail {
   if (claim.kind === 'ready') {
     return {
-      v: 1,
+      v: 2,
+      settings: claim.settings,
       kind: 'ready',
       rows: claim.rows,
       trainingMonth: claim.trainingMonth,
@@ -157,10 +241,11 @@ function detailOf(claim: OutcomeClaim): StoredDetail {
     };
   }
   if (claim.kind === 'no_match') {
-    return { v: 1, kind: 'no_match', rows: [], failure: null };
+    return { v: 2, settings: claim.settings, kind: 'no_match', rows: [], failure: null };
   }
   return {
-    v: 1,
+    v: 2,
+    settings: claim.settings,
     kind: 'failed',
     rows: null,
     failure: { stage: claim.stage, message: claim.message },

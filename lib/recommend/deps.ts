@@ -11,6 +11,9 @@ import {
   triggerGroupIds,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
+import { createSettingsLoader, provenanceOf } from '@lib/settings';
+import type { SettingsProvenance } from '@lib/settings';
+import { isProductionEnvironment } from '@lib/constants';
 
 import ackJson from '../../docs/m2a/acknowledgements.json';
 import { createAddressFormatter } from './address';
@@ -211,7 +214,18 @@ export function buildEvalStatsDeps(): NightlyDeps {
   };
 }
 
-export async function buildWorkerDeps(): Promise<EngineDeps> {
+/**
+ * Returns the provenance ALONGSIDE the deps, rather than hiding it inside them.
+ *
+ * The job needs to record which settings produced an outcome, and this is the only
+ * place that knows. Returning a pair also gets the failure case right for free: when
+ * the settings read is what failed, this throws and there is no provenance to record —
+ * which is exactly why a `failed` outcome may carry none.
+ */
+export async function buildWorkerDeps(): Promise<{
+  deps: EngineDeps;
+  settings: SettingsProvenance;
+}> {
   assertAddressHashKey(); // fail fast on a missing/short secret, not mid-run at the travel stage
   const token = requireEnv('MONDAY_API_TOKEN');
   // The live Monday reads run inside the worker's run deadline too — 5 × 30s attempts
@@ -230,7 +244,22 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
   const evaluations = evalStatsEnabled()
     ? await readEvalStats(createUpstashKvStore(createRedisClient()))
     : null;
+  /**
+   * Read BEFORE the engine is entered, and awaited here so a failure escapes
+   * `buildWorkerDeps` rather than being observed mid-run. That is what makes the
+   * snapshot a value rather than a port: there is no code path where the engine sees a
+   * broken settings read and quietly prices from `CONFIG_DEFAULTS`. A persistent
+   * failure exhausts QStash and lands as a terminal FOUT on the board — loud, and
+   * distinguishable from a run the engine diagnosed itself.
+   */
+  const settings = await createSettingsLoader({
+    client,
+    kv: createUpstashKvStore(createRedisClient()),
+    isProduction: isProductionEnvironment,
+  }).read();
   return {
+    settings: provenanceOf(settings),
+    deps: {
     reader: createMondayReader(client),
     roster: await readRoster(client, ITEM_FIELDS),
     evaluations,
@@ -253,8 +282,9 @@ export async function buildWorkerDeps(): Promise<EngineDeps> {
       boardId: agendaBoardId(),
     }),
     ack: ACK,
-    config: buildEngineConfig({ ackVersion: ACK_VERSION }),
+    config: buildEngineConfig({ settings, ackVersion: ACK_VERSION }),
     owner: newWorkerOwner(),
+    },
   };
 }
 

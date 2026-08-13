@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
+import { isProductionEnvironment } from '@lib/constants';
 import { log } from '@lib/logger';
+import { createSettingsLoader } from '@lib/settings';
 import {
   ITEM_FIELDS,
   MONDAY_API_VERSION,
@@ -14,6 +16,8 @@ import {
   buildEngineConfig,
   buildTrainerGroupReport,
   createMondayReader,
+  createRedisClient,
+  createUpstashKvStore,
   currentDeadlineMs,
   readAllEffectiveQuals,
   readRoster,
@@ -55,12 +59,25 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Bound the live Monday reads: the client would otherwise retry 5 × 30s plus an
     // uncapped Retry-After, outliving this route.
     const report = await runWithDeadline(Date.now() + DEADLINE_MS, async () => {
-      const config = buildEngineConfig();
       const client = createMondayGraphQLClient({
         token,
         apiVersion: MONDAY_API_VERSION,
         deadlineMs: currentDeadlineMs,
       });
+      /**
+       * The LIVE selection, not the environment.
+       *
+       * This endpoint exists to report which trainer groups are recommendable. Reading
+       * env after the board became the source would make it confidently wrong — the
+       * worst possible failure for a readiness check, which is consulted precisely when
+       * someone doubts the configuration.
+       */
+      const settings = await createSettingsLoader({
+        client,
+        kv: createUpstashKvStore(createRedisClient()),
+        isProduction: isProductionEnvironment,
+      }).read();
+      const config = buildEngineConfig({ settings });
       const reader = createMondayReader(client);
       // One schema call for both boards. The METADATA is forwarded, not a bare
       // count: the adapters validate whatever they are given, so this cannot skip

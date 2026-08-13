@@ -78,6 +78,11 @@ export async function handleFailureCallback(
       kind: 'failed',
       stage: 'dlq_exhausted',
       message: 'QStash retries exhausted before an outcome was recorded',
+      // NULL on purpose, and the reason `failed` permits it: compute never finished, so
+      // there is no settings snapshot to name — and the settings read may be exactly
+      // what failed. Requiring provenance here would make this FOUT unrecordable and
+      // leave the board spinning on `computing` for ever.
+      settings: null,
     }));
 
   if (alerted) {

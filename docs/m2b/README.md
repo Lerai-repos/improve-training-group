@@ -293,8 +293,10 @@ actual request goes through a route file.
 | `GOOGLE_MAPS_API_KEY` | travel | Needs the **Routes API** enabled *and* allowed in the key's restrictions. |
 | `OPENROUTER_API_KEY` | address cleanup | |
 | `ADDRESS_HASH_KEY` | travel cache + artifact | HMAC for keyed fingerprints. **Required in production.** |
-| `RECOMMENDABLE_TRAINER_GROUPS` | eligibility | See §6. **Interim home — belongs on the Instellingen board** (§10). |
-| `HQ_ADRES`, `TRAVEL_RATE_*`, `TRAVEL_TIME_*`, `THRESHOLD_HOURS` | config | The three **financial** ones are **required in production** — `buildAppConfig` throws rather than defaulting money values. **Interim home** (§10). |
+| `RECOMMENDABLE_TRAINER_GROUPS` | eligibility | See §6. **Rollback-only** since the Instellingen cutover: the board is the source, and this is read only as a fallback until phase 2a's `TRAINERGROEPEN` row exists. Keep it configured — a rollback lands on a build that still needs it. |
+| `HQ_ADRES`, `TRAVEL_RATE_*`, `TRAVEL_TIME_THRESHOLD_MINUTES`, `TRAVEL_TIME_FEE_PER_MINUTE_CENTS` | — | **Rollback-only.** These now come from the **Instellingen board** (5102171946): `HQ ADRES`, `REISTARIEF TRAINERS`, `REISTARIEF HQ`, `REISTIJD DREMPEL`, `REISTIJD VERGOEDING`. **Do not delete them yet** — a Vercel code rollback does not restore deleted variables, and the previous build's `buildAppConfig` throws when the financial ones are absent. Remove them as a deliberate step once the cutover is stable. |
+| `TRAVEL_TIME_MODE`, `THRESHOLD_HOURS` | config | **Still env, permanently.** Deliberately kept OFF the board — `hourly_rate` throws in `travelTimeCompensation`, and `THRESHOLD_HOURS` is read by nothing yet, so an editable knob would be a trap. `buildSettingsSnapshot` injects them from env as `OFF_BOARD_KEYS`: "not ITG-editable" is not "not configured". |
+| `MONDAY_INSTELLINGEN_BOARD_ID`, `MONDAY_INSTELLINGEN_NOTITIES_GROUP_ID` | settings | **Preview and local ONLY.** Production reads the pinned constant, and setting either in production makes the app refuse to boot rather than quietly prefer one of two values. They travel as a pair — Monday generates the Notities group id per board. |
 | `LOG_ENABLED` | everything | **Set `true` in production.** `lib/logger` defaults to disabled there, which would silence every alarm below. |
 | `LOG_LEVEL` | everything | `info` by default in production; `debug` also shows per-event webhook ignore reasons. |
 

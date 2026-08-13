@@ -62,3 +62,6 @@ yarn-error.log*
 # Raw Airtable snapshot dumps (real client data / PII — not for commit).
 # Anonymized parity fixtures are committed separately.
 /snapshots
+
+# One-shot intent file for `pnpm instellingen:create` (holds the new board id).
+.instellingen-create.json

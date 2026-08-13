@@ -7,27 +7,31 @@ import { isProductionEnvironment } from '@lib/constants';
 import type { EngineConfig } from './service';
 
 import type { RateCard } from '@lib/calc';
+import type { SettingsSnapshot } from '@lib/settings';
 
 /**
  * Engine configuration.
  *
- * ⚠️ ENV IS AN INTERIM HOME, AND IT IS THE WRONG ONE. `docs/build/03-aanbevelingsengine.md`
- * is explicit: "Alle bedragen en drempels komen uit het Instellingen-board, nooit uit
- * de code." These values belong to ITG, not to us:
+ * **The amounts and thresholds now come from the Monday Instellingen board**, as
+ * `docs/build/03-aanbevelingsengine.md` always required: *"Alle bedragen en drempels
+ * komen uit het Instellingen-board, nooit uit de code."* They are read in the
+ * composition root by `lib/settings` and handed to {@link buildEngineConfig} as a
+ * value; nothing here reads the environment for them any more.
  *
- *   - the travel rates and the travel-time fee are commercial rates that change;
- *   - `RECOMMENDABLE_TRAINER_GROUPS` IS the fase-2a deliverable "selecteerbare
- *     trainergroepen" — keeping it in env hardcodes it in all but name.
+ * `buildAppConfig` was reused UNCHANGED, which is what made the move cheap: it already
+ * accepted generic key/value rows, so only their SOURCE changed. It also remains the
+ * place where a FINANCIAL key missing in production is a hard error rather than a
+ * silent default — and `lib/settings/required.ts` extends that rule to *every*
+ * board-owned key, because a deleted row must not read as "no opinion" either.
  *
- * Today every one of those needs a developer and a redeploy. The fix is a Monday
- * **Instellingen** board read live into `ConfigRowLike[]`.
+ * Two values stay in the environment on purpose, injected as `OFF_BOARD_KEYS`:
+ * `TRAVEL_TIME_MODE` (selecting `hourly_rate` throws in `travelTimeCompensation`, and
+ * the formula is settled at €1/min) and `THRESHOLD_HOURS` (read by nothing yet — an
+ * inert knob is the worst thing to hand someone who can edit freely).
  *
- * `buildAppConfig` is deliberately reused UNCHANGED, and that is what makes the move
- * cheap: it already accepts generic key/value rows, so only their SOURCE changes. It
- * is also where the rule lives that a FINANCIAL key missing in production is a hard
- * error rather than a silent default — reimplementing "env with fallbacks" here would
- * quietly restore default travel prices the moment a variable went missing, and the
- * Instellingen reader must preserve that same behaviour for a missing board row.
+ * What survives below is the OFFLINE path: `configRowsFromEnv` and
+ * {@link offlineSettingsSnapshot} exist for `replay-verify` and explicitly-offline
+ * scripts, which must never touch a live board.
  */
 
 /** Env var per config key; the key names match the former `config` table rows. */
@@ -91,20 +95,27 @@ export function defaultRateCards(): RateCard[] {
   });
 }
 
-/** Assemble the immutable {@link EngineConfig}. */
-export function buildEngineConfig(opts?: {
+/**
+ * Assemble the immutable {@link EngineConfig} from an already-read settings snapshot.
+ *
+ * The snapshot is a **value, not a port**: it is produced in the composition root and
+ * handed in, so no code path inside the engine can observe a failed settings read and
+ * carry on with defaults. A failed read throws before this is ever called, which reaches
+ * QStash and ends as a visible FOUT — the same contract `readRoster` already has.
+ *
+ * Kept pure and synchronous for exactly that reason.
+ */
+export function buildEngineConfig(opts: {
+  settings: SettingsSnapshot;
   gitSha?: string | null;
   ackVersion?: string | null;
-  env?: Readonly<Record<string, string | undefined>>;
 }): EngineConfig {
-  const cfg = buildAppConfig(configRowsFromEnv(opts?.env), {
-    isProduction: isProductionEnvironment,
-  });
+  const cfg = opts.settings.app;
   return {
     boardId: agendaBoardId(),
     hqAddress: cfg.hqAddress,
     recommendableGroups: cfg.recommendableTrainerGroups,
-    rateCards: defaultRateCards(),
+    rateCards: [...opts.settings.rateCards],
     travelTimeConfig: {
       thresholdMinutes: cfg.travelTimeThresholdMinutes,
       mode: cfg.travelTimeMode,
@@ -112,8 +123,28 @@ export function buildEngineConfig(opts?: {
     },
     trainerTravelRateCentsPerKm: cfg.travelRateTrainerCentsPerKm,
     clientTravelRateCentsPerKm: cfg.travelRateClientCentsPerKm,
-    gitSha: opts?.gitSha ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-    ackVersion: opts?.ackVersion ?? null,
+    gitSha: opts.gitSha ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    ackVersion: opts.ackVersion ?? null,
+  };
+}
+
+/**
+ * A snapshot built from the ENVIRONMENT — for `replay-verify` and explicitly-offline
+ * script runs only, never production.
+ *
+ * The point of the Instellingen board is that these values stop living in env. This
+ * survives because replay must stay hermetic: it proves the engine's output against
+ * frozen fixtures, so reading a live board there would make a green run mean nothing.
+ */
+export function offlineSettingsSnapshot(
+  env?: Readonly<Record<string, string | undefined>>
+): SettingsSnapshot {
+  return {
+    app: buildAppConfig(configRowsFromEnv(env), { isProduction: false }),
+    rateCards: defaultRateCards(),
+    boardId: 'offline',
+    readAt: 0,
+    fingerprint: 'offline',
   };
 }
 

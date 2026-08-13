@@ -6,9 +6,9 @@ import { storedRow } from './stored-row.fixture';
 
 const ITEM = '5029726254';
 
-const READY: OutcomeClaim = { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null };
-const NO_MATCH: OutcomeClaim = { kind: 'no_match' };
-const FAILED: OutcomeClaim = { kind: 'failed', stage: 'travel', message: 'unreachable' };
+const READY: OutcomeClaim = { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } };
+const NO_MATCH: OutcomeClaim = { kind: 'no_match', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } };
+const FAILED: OutcomeClaim = { kind: 'failed', stage: 'travel', message: 'unreachable', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } };
 
 /**
  * One immutable outcome per (training, generation). Without it, every QStash retry,
@@ -107,6 +107,7 @@ describe('createOutcomeStore', () => {
     expect(await store.readDetail(ITEM, 1)).toMatchObject({ kind: 'no_match', rows: [] });
     expect(await store.readDetail(ITEM, 2)).toMatchObject({
       kind: 'failed',
+      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
       rows: null,
       failure: { stage: 'travel', message: 'unreachable' },
     });
@@ -258,13 +259,13 @@ describe('createOutcomeStore', () => {
     }
 
     it('leaves all three keys absent when the rows are malformed', async () => {
-      expect(await keysAfter({ kind: 'ready', duurTraining: null, rows: [storedRow({ totalCostCents: NaN })], trainingMonth: null })).toEqual(
+      expect(await keysAfter({ kind: 'ready', duurTraining: null, rows: [storedRow({ totalCostCents: NaN })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).toEqual(
         []
       );
     });
 
     it('leaves all three keys absent when a failure has no stage', async () => {
-      expect(await keysAfter({ kind: 'failed', stage: '', message: 'boom' })).toEqual([]);
+      expect(await keysAfter({ kind: 'failed', stage: '', message: 'boom', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).toEqual([]);
     });
 
     /**
@@ -272,14 +273,14 @@ describe('createOutcomeStore', () => {
      * rows would store an artifact contradicting the very label it is stored beside.
      */
     it('leaves all three keys absent for a ready claim with no rows', async () => {
-      expect(await keysAfter({ kind: 'ready', duurTraining: null, rows: [], trainingMonth: null })).toEqual([]);
+      expect(await keysAfter({ kind: 'ready', duurTraining: null, rows: [], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).toEqual([]);
     });
 
     it('does not disturb an outcome already claimed for another generation', async () => {
       const store = createOutcomeStore(createMemoryKvStore());
       await store.claim(ITEM, 1, READY);
 
-      await expect(store.claim(ITEM, 2, { kind: 'ready', duurTraining: null, rows: [], trainingMonth: null })).rejects.toThrow();
+      await expect(store.claim(ITEM, 2, { kind: 'ready', duurTraining: null, rows: [], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).rejects.toThrow();
 
       expect(await store.read(ITEM, 1)).toBe('GEREED');
       expect(await store.readCompletedGeneration(ITEM)).toBe(1);
@@ -366,5 +367,180 @@ describe('createOutcomeStore', () => {
     expect(labels[0]).toBe('GEREED');
     expect(labels[1]).toBe('GEEN MATCH');
     expect(labels[2]).toBe('GEREED');
+  });
+});
+
+/**
+ * `ROWS_TTL_MS` is a year, so every detail written before today is still being read.
+ * Adding required fields to the stored shape would therefore have failed Zod on EVERY
+ * existing recommendation the moment it deployed, and each one would have shown as
+ * unavailable. Hence a version, not an extension.
+ */
+describe('stored outcome v1 → v2', () => {
+  const rowsKey = `rows:${ITEM}:1`;
+
+  const seedV1 = async (kv: ReturnType<typeof createMemoryKvStore>, detail: unknown) => {
+    await kv.set(`result:${ITEM}:1`, 'GEREED');
+    await kv.set(rowsKey, JSON.stringify(detail));
+  };
+
+  it('still decodes a v1 ready record, with null provenance', async () => {
+    const kv = createMemoryKvStore();
+    const store = createOutcomeStore(kv);
+    await seedV1(kv, {
+      v: 1,
+      kind: 'ready',
+      rows: [storedRow()],
+      trainingMonth: null,
+      duurTraining: null,
+      failure: null,
+    });
+
+    expect(await store.readDetail(ITEM, 1)).toMatchObject({ kind: 'ready', settings: null });
+  });
+
+  it('still decodes a v1 no_match record', async () => {
+    const kv = createMemoryKvStore();
+    const store = createOutcomeStore(kv);
+    await seedV1(kv, { v: 1, kind: 'no_match', rows: [], failure: null });
+
+    expect(await store.readDetail(ITEM, 1)).toMatchObject({ kind: 'no_match', settings: null });
+  });
+
+  it('still decodes a v1 failed record', async () => {
+    const kv = createMemoryKvStore();
+    const store = createOutcomeStore(kv);
+    await seedV1(kv, {
+      v: 1,
+      kind: 'failed',
+      rows: null,
+      failure: { stage: 'travel', message: 'unreachable' },
+    });
+
+    expect(await store.readDetail(ITEM, 1)).toMatchObject({ kind: 'failed', settings: null });
+  });
+
+  it('writes v2 and round-trips the provenance', async () => {
+    const store = createOutcomeStore(createMemoryKvStore());
+    const settings = { boardId: '99', readAt: 1_760_000_000_000, fingerprint: 'deadbeef' };
+    await store.claim(ITEM, 1, { ...READY, settings });
+
+    expect(await store.readDetail(ITEM, 1)).toMatchObject({ v: 2, settings });
+  });
+
+  /**
+   * The case that would deadlock the design if provenance were required everywhere: a
+   * settings read that never succeeded has no snapshot to name, and this is the claim
+   * that has to be recordable anyway or the board never leaves `computing`.
+   */
+  it('accepts a v2 failed outcome with NO provenance', async () => {
+    const store = createOutcomeStore(createMemoryKvStore());
+    await store.claim(ITEM, 1, {
+      kind: 'failed',
+      stage: 'dlq_exhausted',
+      message: null,
+      settings: null,
+    });
+
+    expect(await store.readDetail(ITEM, 1)).toMatchObject({
+      v: 2,
+      kind: 'failed',
+      settings: null,
+    });
+  });
+});
+
+/**
+ * A version that does not change what is accepted is decoration. These pin the one
+ * asymmetry that makes `v: 2` mean something.
+ */
+describe('v2 requires provenance where it can have it', () => {
+  const seed = async (kv: ReturnType<typeof createMemoryKvStore>, detail: unknown) => {
+    await kv.set(`result:${ITEM}:1`, 'GEREED');
+    await kv.set(`rows:${ITEM}:1`, JSON.stringify(detail));
+  };
+
+  it('rejects a v2 ready record with no settings', async () => {
+    const kv = createMemoryKvStore();
+    await seed(kv, {
+      v: 2,
+      kind: 'ready',
+      settings: null,
+      rows: [storedRow()],
+      trainingMonth: null,
+      duurTraining: null,
+      failure: null,
+    });
+
+    // Unreadable rather than silently indistinguishable from a v1 record.
+    expect(await createOutcomeStore(kv).readDetail(ITEM, 1)).toBeNull();
+  });
+
+  it('rejects a v2 no_match record with no settings', async () => {
+    const kv = createMemoryKvStore();
+    await seed(kv, { v: 2, kind: 'no_match', settings: null, rows: [], failure: null });
+
+    expect(await createOutcomeStore(kv).readDetail(ITEM, 1)).toBeNull();
+  });
+
+  it('still accepts the SAME shape at v1, which is what old records look like', async () => {
+    const kv = createMemoryKvStore();
+    await seed(kv, {
+      v: 1,
+      kind: 'no_match',
+      settings: null,
+      rows: [],
+      failure: null,
+    });
+
+    expect(await createOutcomeStore(kv).readDetail(ITEM, 1)).toMatchObject({ kind: 'no_match' });
+  });
+});
+
+/**
+ * Only the failure that happens BEFORE compute may lack provenance. A failure inside a
+ * run had a snapshot by definition, so omitting it there is a bug, not a fact.
+ */
+describe('null provenance is not a blanket excuse for failures', () => {
+  const seed = async (kv: ReturnType<typeof createMemoryKvStore>, detail: unknown) => {
+    await kv.set(`result:${ITEM}:1`, 'FOUT');
+    await kv.set(`rows:${ITEM}:1`, JSON.stringify(detail));
+  };
+
+  const failedAt = (stage: string) => ({
+    v: 2,
+    kind: 'failed',
+    settings: null,
+    rows: null,
+    failure: { stage, message: null },
+  });
+
+  it('accepts dlq_exhausted with no settings — compute never ran', async () => {
+    const kv = createMemoryKvStore();
+    await seed(kv, failedAt('dlq_exhausted'));
+
+    expect(await createOutcomeStore(kv).readDetail(ITEM, 1)).toMatchObject({
+      kind: 'failed',
+      settings: null,
+    });
+  });
+
+  it('rejects an in-run failure with no settings', async () => {
+    for (const stage of ['travel', 'load_training', 'address']) {
+      const kv = createMemoryKvStore();
+      await seed(kv, failedAt(stage));
+
+      expect(await createOutcomeStore(kv).readDetail(ITEM, 1)).toBeNull();
+    }
+  });
+
+  it('accepts an in-run failure that DOES carry its settings', async () => {
+    const kv = createMemoryKvStore();
+    await seed(kv, {
+      ...failedAt('travel'),
+      settings: { boardId: '1', readAt: 0, fingerprint: 'f' },
+    });
+
+    expect(await createOutcomeStore(kv).readDetail(ITEM, 1)).toMatchObject({ kind: 'failed' });
   });
 });

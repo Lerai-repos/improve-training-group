@@ -63,8 +63,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         // outcome — so a stale job or a delivery-only retry costs no Monday quota at
         // all. Building it eagerly also put that read OUTSIDE the deadline, where a
         // roster outage could block delivery of an answer we already had.
-        runRecommendation: async (mondayItemId) =>
-          runRecommendation(await buildWorkerDeps(), mondayItemId),
+        runRecommendation: async (mondayItemId) => {
+          const { deps, settings } = await buildWorkerDeps();
+          return { result: await runRecommendation(deps, mondayItemId), settings };
+        },
       },
       parsed.data
     )

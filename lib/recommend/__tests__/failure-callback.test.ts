@@ -48,7 +48,7 @@ describe('handleFailureCallback', () => {
   it('re-delivers a stored GEREED rather than replacing it with FOUT', async () => {
     const h = harness();
     await generationAt(h.store, 1);
-    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
+    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
     const result = await handleFailureCallback(h.deps, callback);
 
@@ -73,6 +73,16 @@ describe('handleFailureCallback', () => {
     // exactly that, and keeps it distinguishable from a failure the engine diagnosed.
     expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
       kind: 'failed',
+      /**
+       * NULL, and that is the point.
+       *
+       * Compute never finished, so there is no settings snapshot to name — and the
+       * settings read may be precisely what failed. This is why `failed` permits null
+       * provenance at v2: requiring it would make this FOUT unrecordable and leave the
+       * board spinning on `computing` for ever, for exactly the failure the design
+       * exists to surface.
+       */
+      settings: null,
       rows: null,
       failure: { stage: 'dlq_exhausted' },
     });
@@ -89,6 +99,7 @@ describe('handleFailureCallback', () => {
     await generationAt(h.store, 1);
     await h.deps.outcomes.claim(ITEM, 1, {
       kind: 'ready',
+      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
       duurTraining: null,
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
       trainingMonth: null,
@@ -98,6 +109,7 @@ describe('handleFailureCallback', () => {
 
     expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
       kind: 'ready',
+      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
       duurTraining: null,
       rows: [{ trainerItemId: 't1', rank: 1 }],
     });

@@ -5,6 +5,7 @@ import type { StatusLabel, StatusWriter } from './delivery';
 import type { OutcomeClaim, OutcomeStore } from './outcome';
 import type { JobPublisher, PublishedJob } from './queue';
 import type { QueueStore } from './queue-store';
+import type { SettingsProvenance } from '@lib/settings';
 import type { RecommendationResult, Stage } from './service';
 
 /**
@@ -23,7 +24,15 @@ export interface JobDeps {
   outcomes: OutcomeStore;
   publisher: JobPublisher;
   writer: StatusWriter;
-  runRecommendation: (mondayItemId: string) => Promise<RecommendationResult>;
+  /**
+   * Returns the run's settings provenance with its result, so the recorded outcome can
+   * say which configuration produced it. A THROW here means the settings read itself
+   * failed — there is no provenance, the job stays retryable, and the eventual
+   * `dlq_exhausted` claim carries null.
+   */
+  runRecommendation: (
+    mondayItemId: string
+  ) => Promise<{ result: RecommendationResult; settings: SettingsProvenance }>;
 }
 
 export type JobOutcome =
@@ -40,9 +49,14 @@ export type JobOutcome =
  * rather than a null one: "we looked and found nobody" is an answer, and the view must
  * not present it as a missing computation.
  */
-function toClaim(result: RecommendationResult): OutcomeClaim {
+function toClaim(result: RecommendationResult, settings: SettingsProvenance): OutcomeClaim {
   if (!result.ok) {
-    return { kind: 'failed', stage: result.failure.stage, message: result.failure.message };
+    return {
+      kind: 'failed',
+      stage: result.failure.stage,
+      message: result.failure.message,
+      settings,
+    };
   }
   return result.resultStatus === 'GEREED'
     ? {
@@ -50,8 +64,9 @@ function toClaim(result: RecommendationResult): OutcomeClaim {
         rows: result.rows,
         trainingMonth: result.trainingMonth,
         duurTraining: result.duurTraining,
+        settings,
       }
-    : { kind: 'no_match' };
+    : { kind: 'no_match', settings };
 }
 
 export async function runJob(deps: JobDeps, job: PublishedJob): Promise<JobOutcome> {
@@ -73,7 +88,7 @@ export async function runJob(deps: JobDeps, job: PublishedJob): Promise<JobOutco
     return deliver(deps, job, stored);
   }
 
-  const result = await deps.runRecommendation(mondayItemId);
+  const { result, settings } = await deps.runRecommendation(mondayItemId);
 
   if (!result.ok && result.failure.retryable) {
     log.warn('job: transient failure, leaving the generation undecided', {
@@ -87,7 +102,7 @@ export async function runJob(deps: JobDeps, job: PublishedJob): Promise<JobOutco
   // Label and rows are recorded together, so the board can never show an answer whose
   // list was lost: a crash between two writes would be unrepairable, because the early
   // return above short-circuits on the label and this code would never run again.
-  const label = await deps.outcomes.claim(mondayItemId, generation, toClaim(result));
+  const label = await deps.outcomes.claim(mondayItemId, generation, toClaim(result, settings));
   const delivered = await deliver(deps, job, label);
 
   // The AUTHORITATIVE label decides this, not `result` — they can disagree. If another

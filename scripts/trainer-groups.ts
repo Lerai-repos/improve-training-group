@@ -20,6 +20,7 @@ import {
   unusableSelections,
   type TrainerGroupReadiness,
 } from '@lib/recommend';
+import { loadSettingsOnce } from '@lib/settings';
 
 /**
  * List every Monday trainer group with a readiness verdict, marking which are
@@ -49,8 +50,10 @@ async function main(): Promise<void> {
   if (!token) {
     throw new Error('Missing MONDAY_API_TOKEN (.env.local)');
   }
-  const config = buildEngineConfig();
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+  // The LIVE selection: this script exists to report which groups are recommendable,
+  // so reading env instead of the board would make it confidently wrong.
+  const config = buildEngineConfig({ settings: await loadSettingsOnce(client) });
   const reader = createMondayReader(client);
 
   // Read live: roster (all groups) + every trainer x theme qualification.

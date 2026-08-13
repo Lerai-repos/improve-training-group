@@ -24,6 +24,7 @@ import {
   runRecommendation,
   type ServiceDeps,
 } from '@lib/recommend';
+import { loadSettingsOnce } from '@lib/settings';
 
 /**
  * Parity: M2b vs the legacy Airtable "Aanbevelingen" for a sample of trainings.
@@ -170,6 +171,13 @@ async function main(): Promise<void> {
   );
   console.log(`Roster: ${roster.length} trainers (live, all groups)\n`);
 
+  // Live: a parity sweep is only meaningful against the values the engine will really
+  // use, and after the cutover those live on the Instellingen board.
+  const settings = await loadSettingsOnce(client);
+  console.log(
+    `Instellingen: board ${settings.boardId}, fingerprint ${settings.fingerprint.slice(0, 12)}\n`
+  );
+
   const deps: ServiceDeps = {
     roster,
     // A release-gated input. `null` (flag off) means NOT CONSULTED and keeps the scores
@@ -186,7 +194,7 @@ async function main(): Promise<void> {
     ack: existsSync(ACK_FILE)
       ? parseAcknowledgements(JSON.parse(readFileSync(ACK_FILE, 'utf8')))
       : EMPTY_ACK,
-    config: buildEngineConfig(),
+    config: buildEngineConfig({ settings }),
   };
 
   const rows: string[] = [];

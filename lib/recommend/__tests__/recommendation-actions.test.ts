@@ -160,6 +160,7 @@ describe('handleApproached', () => {
     await h.store.enqueueOrGet({ triggerUuid: 'u1', mondayItemId: ITEM, nowMs: 0 });
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
+      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
       trainingMonth: null, duurTraining: null,
       rows: trainerIds.map((trainerItemId, index) => storedRow({ trainerItemId, rank: index + 1 })),
     });
@@ -241,7 +242,7 @@ describe('handleApproached', () => {
   it('refuses when there is no ranked list to annotate', async () => {
     const h = harness();
     await h.store.enqueueOrGet({ triggerUuid: 'u1', mondayItemId: ITEM, nowMs: 0 });
-    await h.outcomes.claim(ITEM, 1, { kind: 'no_match' });
+    await h.outcomes.claim(ITEM, 1, { kind: 'no_match', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
     const result = await handleApproached(h.approachedDeps, {
       mondayItemId: ITEM,

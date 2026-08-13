@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import { buildAgendaScan, type AgendaScan, type AssignmentRow } from './assignments';
+import { createSharedCache } from './shared-cache';
+
 import type { KvStore } from './kv';
 
 /**
@@ -24,9 +26,6 @@ import type { KvStore } from './kv';
 /** Five minutes: workload changes when someone is booked, which is not a per-second event. */
 export const ASSIGNMENTS_TTL_MS = 5 * 60 * 1000;
 
-/** Long enough for a board scan, short enough that a crashed holder unblocks quickly. */
-const LOCK_TTL_MS = 30_000;
-
 /**
  * How long a failure is remembered.
  *
@@ -37,11 +36,6 @@ const LOCK_TTL_MS = 30_000;
  * is back.
  */
 const FAILURE_TTL_MS = 30_000;
-
-/** Distinct from a cached scan: this is "we tried and could not", never an empty index. */
-const UNAVAILABLE = '"unavailable"';
-const WAIT_STEP_MS = 250;
-const MAX_WAIT_STEPS = 12;
 
 const cachedSchema = z.object({
   workload: z.array(z.tuple([z.string(), z.array(z.tuple([z.string(), z.number()]))])),
@@ -99,73 +93,23 @@ export interface CachedAssignmentsDeps {
 }
 
 export function createCachedAssignments(deps: CachedAssignmentsDeps): CachedAssignments {
-  const ttlMs = deps.ttlMs ?? ASSIGNMENTS_TTL_MS;
-  const key = `assignments:${deps.boardId}`;
-  const lockKey = `assignments-lock:${deps.boardId}`;
-  const mintToken = deps.token ?? (() => globalThis.crypto.randomUUID());
-  const sleep =
-    deps.sleep ??
-    ((ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)));
-
-  return {
-    async read() {
-      const raw = await deps.kv.get(key);
-      if (raw === UNAVAILABLE) {
-        // A recent scan failed. Degrade immediately rather than re-running it.
-        throw new Error('Workload index unavailable: a recent refresh failed');
-      }
-      const cached = decode(raw);
-      if (cached !== null) {
-        return cached;
-      }
-
-      const token = mintToken();
-      const mine = await deps.kv.setIfAbsent(lockKey, token, { ttlMs: LOCK_TTL_MS });
-      if (mine) {
-        try {
-          const scan = await deps.load();
-          await deps.kv.set(key, encode(scan), { ttlMs });
-          return scan;
-        } catch (error) {
-          // Remember the failure, briefly. Never as an empty index — that would read as
-          // "nobody is busy" for the whole TTL.
-          await deps.kv.set(key, UNAVAILABLE, { ttlMs: FAILURE_TTL_MS });
-          throw error;
-        } finally {
-          /**
-           * Release only OUR lock.
-           *
-           * A scan that outlives the 30s lease lets someone else acquire a fresh lock;
-           * deleting unconditionally would free theirs and re-open the stampede this
-           * exists to prevent. Read-then-delete narrows that to a window of microseconds
-           * rather than closing it — the lock is a stampede guard, not a correctness
-           * mechanism, so a cheap check is the right weight of solution.
-           */
-          if ((await deps.kv.get(lockKey)) === token) {
-            await deps.kv.del(lockKey);
-          }
-        }
-      }
-
-      // Someone else is scanning. Wait for their result rather than starting a second
-      // scan of the same board.
-      for (let step = 0; step < MAX_WAIT_STEPS; step += 1) {
-        await sleep(WAIT_STEP_MS);
-        const latest = await deps.kv.get(key);
-        // The holder may have failed fast. Recognise that here too, or every waiter
-        // spends the full three seconds polling for an answer that already exists.
-        if (latest === UNAVAILABLE) {
-          throw new Error('Workload index unavailable: the refresh in front of us failed');
-        }
-        const fresh = decode(latest);
-        if (fresh !== null) {
-          return fresh;
-        }
-      }
-
-      throw new Error('Workload index unavailable: the refresh in front of us did not finish');
-    },
-  };
+  // The single-flight lock, the failure sentinel and the owner-only release all live in
+  // `createSharedCache`, so the settings reader gets exactly these guarantees rather
+  // than a second, subtly different copy of them.
+  return createSharedCache<AgendaScan>({
+    kv: deps.kv,
+    load: deps.load,
+    key: `assignments:${deps.boardId}`,
+    // Unchanged from before the extraction, on purpose — see `lockKey` in shared-cache.
+    lockKey: `assignments-lock:${deps.boardId}`,
+    encode,
+    decode,
+    ttlMs: deps.ttlMs ?? ASSIGNMENTS_TTL_MS,
+    failureTtlMs: FAILURE_TTL_MS,
+    label: 'Workload index',
+    sleep: deps.sleep,
+    token: deps.token,
+  });
 }
 
 /** Convenience for tests and scripts: a scan built straight from rows, no cache. */

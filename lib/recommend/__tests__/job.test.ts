@@ -10,6 +10,7 @@ import type { InputArtifact } from '../artifact';
 import type { RecommendationResult } from '../service';
 import type { JobPublisher, PublishedJob } from '../queue';
 
+const PROVENANCE = { boardId: 'settings-board', readAt: 0, fingerprint: 'test' };
 const ITEM = '5029726254';
 
 // The artifact is provenance; `runJob` never reads it, so a minimal valid one keeps
@@ -82,9 +83,10 @@ function harness(result: RecommendationResult | (() => Promise<RecommendationRes
     outcomes: createOutcomeStore(kv),
     publisher,
     writer,
-    runRecommendation: () => {
+    runRecommendation: async () => {
       computes += 1;
-      return typeof result === 'function' ? result() : Promise.resolve(result);
+      const value = typeof result === 'function' ? await result() : result;
+      return { result: value, settings: PROVENANCE };
     },
   };
   return { deps, store, writer, published, computes: () => computes };
@@ -148,6 +150,7 @@ describe('runJob', () => {
 
     expect(await h.deps.outcomes.readDetail(ITEM, 1)).toMatchObject({
       kind: 'failed',
+      settings: PROVENANCE,
       rows: null,
     });
   });
@@ -187,7 +190,7 @@ describe('runJob', () => {
   it('re-delivers a stored outcome without recomputing', async () => {
     const h = harness(ok('GEREED'));
     await generationAt(h.store, 1);
-    await h.deps.outcomes.claim(ITEM, 1, { kind: 'no_match' });
+    await h.deps.outcomes.claim(ITEM, 1, { kind: 'no_match', settings: PROVENANCE });
 
     const outcome = await runJob(h.deps, job);
 
@@ -257,8 +260,8 @@ describe('runJob', () => {
       runRecommendation: async () => {
         // The race has to happen DURING compute: `runJob` reads the stored outcome
         // before computing, so pre-seeding it would short-circuit and prove nothing.
-        await outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null });
-        return failed(false); // ours failed terminally, but it lost the claim
+        await outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: PROVENANCE });
+        return { result: failed(false), settings: PROVENANCE }; // ours failed terminally, but it lost the claim
       },
     };
 
