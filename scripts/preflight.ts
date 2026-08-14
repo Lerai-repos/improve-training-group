@@ -9,7 +9,13 @@ import {
   MONDAY_API_VERSION,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
-import { loadSettingsOnce } from '@lib/settings';
+import {
+  deriveOptionMap,
+  fetchGroepenLabels,
+  loadSettingsOnce,
+  resolveSettingsBoard,
+  GROEPEN_COLUMN,
+} from '@lib/settings';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { createQStashClient } from '@lib/recommend/qstash';
 
@@ -66,6 +72,64 @@ async function checkMonday(): Promise<void> {
  * on it. Reported values are the effective ones, so they can be compared line by line
  * against the env values they replace.
  */
+/**
+ * The COMPLETE option set of the `Groepen` dropdown, which the engine path cannot check.
+ *
+ * At runtime only the SELECTED options are judged — an unselected one that has been
+ * removed or retired cannot change an answer, and stopping every recommendation for it
+ * would be a false alarm. But it does mean nobody can still choose that group, so it has
+ * to be caught somewhere, and this is the somewhere.
+ */
+async function checkGroepenOptions(
+  client: ReturnType<typeof createMondayGraphQLClient>,
+  boardId: string,
+  selected: readonly string[]
+): Promise<void> {
+  const [meta] = await client.getSchema([boardId]);
+  if (!meta?.columns.some((c) => c.id === GROEPEN_COLUMN)) {
+    record('Instellingen groepen', 'warn', `nog geen ${GROEPEN_COLUMN} — draai instellingen:groepen`);
+    return;
+  }
+  try {
+    const labels = await fetchGroepenLabels(client, boardId);
+    // Refuses a duplicate, unknown, unpriceable, missing or unexpected-active option —
+    // and, once the map is pinned, disagreement between a label and its pinned identity.
+    const derived = deriveOptionMap(labels);
+    const pinned = resolveSettingsBoard().groepenOptions;
+    /**
+     * Compared in BOTH directions, or a pinned SUBSET passes.
+     *
+     * `1=topics` against a board offering both options agrees on everything it mentions,
+     * so a one-way check reports healthy — right up until someone picks the second,
+     * perfectly legitimate option and every run fails on an unknown option id.
+     */
+    const drift = pinned
+      ? [
+          ...[...pinned.entries()].filter(([id, group]) => derived.get(id) !== group),
+          ...[...derived.entries()].filter(([id, group]) => pinned.get(id) !== group),
+        ]
+      : [];
+    if (drift.length > 0) {
+      record(
+        'Instellingen groepen',
+        'fail',
+        `label(s) wijken af van de vastgelegde identiteit: ${drift
+          .map(([id, group]) => `${id} moet ${group} zijn`)
+          .join(', ')}`
+      );
+      return;
+    }
+    record(
+      'Instellingen groepen',
+      'ok',
+      `${derived.size} optie(s)${pinned ? ' (vastgelegd)' : ' (afgeleid uit de labels)'} · ` +
+        `geselecteerd: ${selected.join(', ')}`
+    );
+  } catch (error) {
+    record('Instellingen groepen', 'fail', message(error));
+  }
+}
+
 async function checkInstellingen(): Promise<void> {
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) {
@@ -89,6 +153,7 @@ async function checkInstellingen(): Promise<void> {
       'ok',
       settings.rateCards.map((c) => `${c.rateKey}=${c.hourlyRateCents}c`).join(' · ')
     );
+    await checkGroepenOptions(client, settings.boardId, app.recommendableTrainerGroups);
   } catch (error) {
     // A refusal here is the point of the check, not an inconvenience: it is exactly
     // what the worker would have done, surfaced before the worker depends on it.

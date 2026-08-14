@@ -7,12 +7,18 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import { MONDAY_API_VERSION } from '@lib/monday/board-config';
+import {
+  MONDAY_API_VERSION,
+  recommendableGroups,
+  TRAINERS_BOARD,
+} from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
 import {
   buildSettingsSnapshot,
+  groepenKeyPrefix,
   normaliseName,
+  provisionGroepselectie,
   readSettings,
   SETTINGS_EXPECTED_COLUMNS,
 } from '@lib/settings';
@@ -582,16 +588,26 @@ async function ensureRows(ctx: Ctx, boardId: string, groupId: string): Promise<v
  * which this script would otherwise notice. The contract is "the engine can read this
  * board", so that is what gets checked.
  */
-async function verifyReadable(ctx: Ctx, boardId: string, notitiesGroupId: string): Promise<void> {
+async function verifyReadable(
+  ctx: Ctx,
+  boardId: string,
+  notitiesGroupId: string,
+  groepenOptions: ReadonlyMap<string, string>
+): Promise<void> {
   if (!ctx.apply) {
     return;
   }
   try {
-    const raw = await readSettings(ctx.read, { boardId, notitiesGroupId });
+    const raw = await readSettings(ctx.read, { boardId, notitiesGroupId, groepenOptions });
     const snapshot = buildSettingsSnapshot(raw, {
       boardId,
       isProduction: false,
-      requireTrainerGroups: false,
+      /**
+       * A board this script builds is COMPLETE, so it is verified against the strict
+       * rules rather than the transitional ones — otherwise the one command that could
+       * catch a missing `TRAINERGROEPEN` row is the one that skips the check.
+       */
+      requireTrainerGroups: true,
       readAt: Date.now(),
       env: process.env,
     });
@@ -683,12 +699,49 @@ async function main(): Promise<void> {
   await ensureRows(ctx, boardId, settingsGroup);
   await dropDefaultGroups(ctx, boardId);
 
-  await verifyReadable(ctx, boardId, notitiesGroup);
+  /**
+   * The trainer-group selection is part of a complete board, not an optional extra.
+   *
+   * Seeded from `recommendableGroups()` and NOT from `loadSettingsOnce`: a board created
+   * seconds ago has no prior effective selection, and reading the live configuration
+   * would answer from the PINNED PRODUCTION board — the wrong source entirely for the
+   * fresh preview board this usually builds.
+   */
+  const [trainers] = await ctx.read.getSchema([TRAINERS_BOARD]);
+  const { optionMap } = await provisionGroepselectie({
+    read: ctx.read,
+    write: ctx.write,
+    boardId,
+    notitiesGroupId: notitiesGroup,
+    // Seeded from THIS run, so the same operation on a different board never dedupes
+    // against it inside Monday's 30-minute window.
+    keyPrefix: `${groepenKeyPrefix(boardId)}:${ctx.intent.runId}`,
+    apply,
+    // On a dry run `ensureBoard` hands back a synthetic id, so there is no board to
+    // inspect and every query against it would fail. Describing is the point here.
+    plannedBoard: !apply,
+    selection: recommendableGroups(),
+    titles: new Map((trainers?.groups ?? []).map((g) => [g.id, g.title])),
+    log: (line) => console.log(`  ${line}`),
+  });
+
+  await verifyReadable(ctx, boardId, notitiesGroup, optionMap);
 
   console.log('\n── Vast te leggen in lib/settings/board.ts ──');
   console.log('export const INSTELLINGEN_PRODUCTION: SettingsBoardConfig = {');
   console.log(`  boardId: '${boardId}',`);
   console.log(`  notitiesGroupId: '${notitiesGroup}',`);
+  if (optionMap.size === 0) {
+    // A dry run has no ids to show — Monday assigns them. Printing an empty map would
+    // look like a value to paste, and a partial option map is refused on purpose.
+    console.log('  // groepenOptions: pas bekend na --apply');
+  } else {
+    console.log('  groepenOptions: new Map([');
+    for (const [id, group] of optionMap) {
+      console.log(`    ['${id}', '${group}'],`);
+    }
+    console.log('  ]),');
+  }
   console.log('};');
   console.log(
     '\nDeze twee horen bij elkaar: Monday geeft elk board zijn eigen groep-id, ' +

@@ -100,4 +100,60 @@ describe('settingsBoardId', () => {
       })
     ).toBe(PREVIEW);
   });
+
+  describe('the Groepen option map', () => {
+    const pair = {
+      MONDAY_INSTELLINGEN_BOARD_ID: PREVIEW,
+      MONDAY_INSTELLINGEN_NOTITIES_GROUP_ID: 'group_preview_notities',
+    };
+
+    /**
+     * The property that lets an EXISTING preview deployment survive this deploy: it is
+     * configured with the pair, and the column whose ids the third value would describe
+     * does not exist yet. Requiring it here would stop that deployment booting before
+     * the migration that could satisfy it has any way to run.
+     */
+    it('accepts the pair with no option map, leaving identity to be derived', () => {
+      expect(resolveSettingsBoard(pinned, pair).groepenOptions).toBeUndefined();
+    });
+
+    it('pins identity when the third value is given', () => {
+      const resolved = resolveSettingsBoard(pinned, {
+        ...pair,
+        MONDAY_INSTELLINGEN_GROEPEN_OPTIONS: '1=topics,2=nieuwe_groep__1',
+      });
+
+      expect(resolved.groepenOptions).toEqual(
+        new Map([
+          ['1', 'topics'],
+          ['2', 'nieuwe_groep__1'],
+        ])
+      );
+    });
+
+    /**
+     * An options-only override is the quiet half-override: it reads as "I am pointing at
+     * an isolated board" while the pinned production board is what actually gets read.
+     */
+    it('refuses an option map without its board and group', () => {
+      expect(() =>
+        resolveSettingsBoard(pinned, { MONDAY_INSTELLINGEN_GROEPEN_OPTIONS: '1=topics' })
+      ).toThrow(/NOTITIES_GROUP_ID|BOARD_ID/);
+    });
+
+    it('refuses a malformed option map rather than reading it as absent', () => {
+      expect(() =>
+        resolveSettingsBoard(pinned, { ...pair, MONDAY_INSTELLINGEN_GROEPEN_OPTIONS: 'topics' })
+      ).toThrow();
+    });
+
+    it('refuses to boot when the option map is set in production', () => {
+      expect(() =>
+        resolveSettingsBoard(pinned, {
+          VERCEL_ENV: 'production',
+          MONDAY_INSTELLINGEN_GROEPEN_OPTIONS: '1=topics',
+        })
+      ).toThrow(/GROEPEN_OPTIONS/);
+    });
+  });
 });

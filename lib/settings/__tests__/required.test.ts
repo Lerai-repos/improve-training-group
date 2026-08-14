@@ -80,6 +80,28 @@ describe('assertRequiredKeys', () => {
       ];
       expect(() => assertRequiredKeys(withGroups, { requireTrainerGroups: true })).not.toThrow();
     });
+
+    /**
+     * "Row absent" and "row present, nothing selected" need DIFFERENT instructions.
+     * Telling someone who is looking straight at the row that it is missing sends them
+     * to create a second one — and a duplicate key is refused, so the board would then
+     * be broken in a new way by following our own error message.
+     */
+    it('distinguishes an empty selection from a missing row', () => {
+      const absent = () => assertRequiredKeys(complete, { requireTrainerGroups: true });
+      const empty = () =>
+        assertRequiredKeys(complete, { requireTrainerGroups: true, emptySelection: true });
+
+      expect(absent).toThrow(/mist de rij/);
+      expect(empty).toThrow(/geen groep geselecteerd/);
+      expect(empty).not.toThrow(/mist de rij/);
+    });
+
+    it('says nothing about an empty selection before the migration', () => {
+      expect(() =>
+        assertRequiredKeys(complete, { requireTrainerGroups: false, emptySelection: true })
+      ).not.toThrow();
+    });
   });
 
   it('reports the BOARD name, not the internal key — that is what ITG can act on', () => {

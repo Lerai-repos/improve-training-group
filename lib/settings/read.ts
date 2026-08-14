@@ -1,10 +1,14 @@
+import { z } from 'zod';
+
 import { assertColumns } from '@lib/monday/schema-check';
 
-import { isKnownName, resolveSetting } from './keys';
+import { activeOptionIds, deriveOptionMap, selectedGroupIds } from './groepen';
+import { isKnownName, normaliseName, resolveSetting } from './keys';
 
 import type { ConfigRowLike } from '@lib/config';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 import type { ExpectedColumn } from '@lib/monday/board-config';
+import type { DropdownLabel, DropdownSelection } from './groepen';
 
 /**
  * Read the Instellingen board.
@@ -30,6 +34,17 @@ export const SETTINGS_EXPECTED_COLUMNS: readonly ExpectedColumn[] = [
 
 const VALUE_COLUMN = 'itg_waarde';
 
+/** The dropdown that owns the trainer-group selection. Absent before the migration. */
+export const GROEPEN_COLUMN = 'itg_groepen';
+
+const TRAINERGROEPEN = normaliseName('TRAINERGROEPEN');
+/** The config key that row owns. Its value is built from the dropdown, not from `Waarde`. */
+const GROUPS_KEY = 'RECOMMENDABLE_TRAINER_GROUPS';
+
+const duplicateMessage = (name: string): string =>
+  `"${name}" staat meerdere keren op het Instellingen-board — ` +
+  'twee rijen die elkaar tegenspreken is erger dan geen rij';
+
 /**
  * `updated_at` is NOT optional decoration.
  *
@@ -39,15 +54,31 @@ const VALUE_COLUMN = 'itg_waarde';
  *
  * `group { id }` is equally load-bearing: it is how a note is told from a setting, and
  * it has to be right from the instant an item is created.
+ *
+ * The dropdown is asked for only when the board HAS it, so a pre-migration board is
+ * queried exactly as it was before this existed. Its selections arrive through the typed
+ * `DropdownValue` fragment rather than as `text`: `text` is a comma-joined list of label
+ * NAMES, and a group title containing a comma would split into garbage.
  */
-const ITEM_FIELDS = `id name updated_at group { id } column_values(ids: ["${VALUE_COLUMN}"]) { id text }`;
+function itemFields(hasGroepen: boolean): string {
+  const ids = hasGroepen ? `"${VALUE_COLUMN}", "${GROEPEN_COLUMN}"` : `"${VALUE_COLUMN}"`;
+  const selected = hasGroepen ? ' ... on DropdownValue { values { id label } }' : '';
+  return `id name updated_at group { id } column_values(ids: [${ids}]) { id text${selected} }`;
+}
+
+interface SettingsCell {
+  id: string;
+  text?: string | null;
+  /** Present only on the dropdown, via the typed `DropdownValue` fragment. */
+  values?: DropdownSelection[] | null;
+}
 
 interface SettingsItem {
   id: string;
   name: string;
   updated_at?: string | null;
   group?: { id: string } | null;
-  column_values?: Array<{ id: string; text?: string | null }> | null;
+  column_values?: SettingsCell[] | null;
 }
 
 export interface SettingsBoardConfig {
@@ -57,22 +88,113 @@ export interface SettingsBoardConfig {
    * pinned production value — the preview board has a different one.
    */
   notitiesGroupId: string;
+  /**
+   * Pinned option id → group id for the `Groepen` dropdown.
+   *
+   * Optional because it cannot exist before the migration that creates the column and
+   * discovers Monday's generated ids. While it is absent, identity is DERIVED from the
+   * labels; once pinned, the label text stops being trusted at all.
+   */
+  groepenOptions?: ReadonlyMap<string, string>;
 }
 
 export interface RawSettings {
   appRows: ConfigRowLike[];
   /** rateKey → hourly rate in cents. Turned into cards by `rates.ts`. */
   rateCents: Map<string, number>;
+  /**
+   * The row exists but nothing is selected — deliberately distinct from the row being
+   * absent, so the error can say which of the two it is to whoever has to fix it.
+   */
+  emptyGroupSelection: boolean;
+}
+
+function cellOf(item: SettingsItem, columnId: string): SettingsCell | undefined {
+  return (item.column_values ?? []).find((c) => c.id === columnId);
 }
 
 function valueOf(item: SettingsItem): string {
-  const cell = (item.column_values ?? []).find((c) => c.id === VALUE_COLUMN);
-  return cell?.text ?? '';
+  return cellOf(item, VALUE_COLUMN)?.text ?? '';
+}
+
+/**
+ * The dropdown's complete option list, from the column's TYPED settings.
+ *
+ * A second request, because the item's `values` carries only what is SELECTED on that
+ * item and therefore can never prove that an unselected option still exists — nor
+ * whether a selected one has since been deactivated, which a pinned map cannot know
+ * either. `settings_str` is deprecated as of API 2025-10; this is its typed replacement.
+ */
+const groepenSettingsSchema = z.object({
+  boards: z
+    .array(
+      z.object({
+        columns: z.array(
+          z.object({
+            settings: z.object({
+              labels: z.array(
+                z.object({
+                  id: z.union([z.number(), z.string()]),
+                  label: z.string(),
+                  is_deactivated: z.boolean().nullish(),
+                })
+              ),
+            }),
+          })
+        ),
+      })
+    )
+    .nonempty(),
+});
+
+export async function fetchGroepenLabels(
+  client: MondayGraphQLClient,
+  boardId: string
+): Promise<DropdownLabel[]> {
+  const raw = await client.query<unknown>(
+    `query ($board: ID!) {
+       boards(ids: [$board]) { columns(ids: ["${GROEPEN_COLUMN}"]) { id settings } }
+     }`,
+    { board: boardId }
+  );
+
+  const parsed = groepenSettingsSchema.safeParse(raw);
+  const labels = parsed.success ? parsed.data.boards[0].columns[0]?.settings.labels : undefined;
+  if (labels === undefined) {
+    throw new Error(
+      `Kon de opties van de kolom Groepen op board ${boardId} niet lezen — ` +
+        'zonder de optielijst is niet vast te stellen welke groepen gekozen zijn'
+    );
+  }
+  return labels;
+}
+
+/**
+ * How a selected option becomes a group id, for whichever deploy this is.
+ *
+ * BEFORE the map is pinned there is nothing else to go on, so identity is derived from
+ * the labels and `deriveOptionMap`'s refusals are load-bearing: without a coherent set
+ * there is no trustworthy way to resolve an id at all.
+ *
+ * AFTER it is pinned, only the SELECTED options are judged. An extra or retired option
+ * nobody has chosen cannot change an answer, and taking recommendations down because
+ * someone tidied the dropdown would be the engine-path equivalent of a false alarm.
+ * Drift of the whole set is checked where it can be acted on: provisioning and preflight.
+ */
+async function resolveGroepen(
+  client: MondayGraphQLClient,
+  boardId: string,
+  pinned: ReadonlyMap<string, string> | undefined,
+  values: readonly DropdownSelection[]
+): Promise<string[]> {
+  const labels = await fetchGroepenLabels(client, boardId);
+  const map = pinned ?? deriveOptionMap(labels);
+  return selectedGroupIds(values, map, activeOptionIds(labels));
 }
 
 export async function readSettings(
   client: MondayGraphQLClient,
-  { boardId, notitiesGroupId }: SettingsBoardConfig
+  { boardId, notitiesGroupId, groepenOptions }: SettingsBoardConfig
 ): Promise<RawSettings> {
   const [meta] = await client.getSchema([boardId]);
   if (meta === undefined) {
@@ -90,11 +212,17 @@ export async function readSettings(
     );
   }
 
-  const items = await client.fetchBoardItems<SettingsItem>(boardId, ITEM_FIELDS, meta.items_count);
+  const hasGroepen = meta.columns.some((c) => c.id === GROEPEN_COLUMN);
+  const items = await client.fetchBoardItems<SettingsItem>(
+    boardId,
+    itemFields(hasGroepen),
+    meta.items_count
+  );
 
   const appRows: ConfigRowLike[] = [];
   const rateCents = new Map<string, number>();
   const seen = new Set<string>();
+  let emptyGroupSelection = false;
 
   for (const item of items) {
     const name = item.name.trim();
@@ -114,6 +242,40 @@ export async function readSettings(
       continue;
     }
 
+    if (normaliseName(name) === TRAINERGROEPEN) {
+      if (seen.has(GROUPS_KEY)) {
+        throw new Error(duplicateMessage(name));
+      }
+      seen.add(GROUPS_KEY);
+
+      /**
+       * Filling in `Waarde` instead of `Groepen` must not be quietly ignored.
+       *
+       * Without this the typed-in value is dropped, the selection reads as empty, and
+       * the environment answers instead — so someone who edited the board sees their
+       * change have no effect at all, with nothing anywhere saying why.
+       */
+      if (valueOf(item).trim() !== '') {
+        throw new Error(
+          `Vul "${name}" in via de kolom Groepen, niet via Waarde — ` +
+            'wat in Waarde staat wordt niet gebruikt; maak dat veld leeg'
+        );
+      }
+
+      const values = cellOf(item, GROEPEN_COLUMN)?.values ?? [];
+      if (values.length === 0) {
+        // Row present, nothing chosen. Left OUT of the rows so the existing absent-key
+        // fallback applies unchanged, with the distinction carried separately so the
+        // error can name the right fix.
+        emptyGroupSelection = true;
+        continue;
+      }
+
+      const groups = await resolveGroepen(client, boardId, groepenOptions, values);
+      appRows.push({ key: GROUPS_KEY, value: groups.join(',') });
+      continue;
+    }
+
     const resolved = resolveSetting(name, valueOf(item));
     if (resolved.kind === 'unknown') {
       throw new Error(
@@ -124,10 +286,7 @@ export async function readSettings(
 
     const dedupeKey = resolved.kind === 'app' ? resolved.row.key : `rate:${resolved.rateKey}`;
     if (seen.has(dedupeKey)) {
-      throw new Error(
-        `"${name}" staat meerdere keren op het Instellingen-board — ` +
-          'twee rijen die elkaar tegenspreken is erger dan geen rij'
-      );
+      throw new Error(duplicateMessage(name));
     }
     seen.add(dedupeKey);
 
@@ -138,5 +297,5 @@ export async function readSettings(
     }
   }
 
-  return { appRows, rateCents };
+  return { appRows, rateCents, emptyGroupSelection };
 }

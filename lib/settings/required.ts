@@ -53,12 +53,28 @@ export interface RequiredKeyOptions {
    * missing-key outage.
    */
   requireTrainerGroups: boolean;
+  /**
+   * The row is on the board but nothing is selected.
+   *
+   * A separate signal because the two states need *different* instructions: an absent
+   * row has to be created, an empty one has to be filled in. Reporting "de rij ontbreekt"
+   * to someone looking straight at that row on the board would send them to build a
+   * second one, and a duplicate key is refused.
+   */
+  emptySelection?: boolean;
 }
 
 export function assertRequiredKeys(
   rows: readonly ConfigRowLike[],
-  { requireTrainerGroups }: RequiredKeyOptions
+  { requireTrainerGroups, emptySelection = false }: RequiredKeyOptions
 ): void {
+  if (requireTrainerGroups && emptySelection) {
+    throw new Error(
+      `"${BOARD_NAME_BY_KEY[TRAINER_GROUPS_KEY]}" staat op het Instellingen-board, maar er is ` +
+        'geen groep geselecteerd in de kolom Groepen — kies er minimaal één'
+    );
+  }
+
   const present = new Set(rows.map((row) => row.key));
   const wanted = requireTrainerGroups
     ? [...REQUIRED_APP_KEYS, TRAINER_GROUPS_KEY]

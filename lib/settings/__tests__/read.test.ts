@@ -224,4 +224,222 @@ describe('readSettings', () => {
 
     await expect(readSettings(client, config)).rejects.toThrow(/502/);
   });
+
+  /**
+   * The board BEFORE the migration, asserted as a property rather than assumed: deploy
+   * ③ ships this reader while production still has seven rows and no dropdown, so any
+   * change that made the column mandatory would be a total outage on arrival.
+   */
+  it('reads a board without the Groepen column exactly as before', async () => {
+    const client = stubClient(COMPLETE);
+    const result = await readSettings(client, config);
+
+    const [, fields] = vi.mocked(client.fetchBoardItems).mock.calls[0];
+    expect(fields).not.toContain('itg_groepen');
+    expect(client.query).not.toHaveBeenCalled();
+    expect(result.appRows.some((r) => r.key === 'RECOMMENDABLE_TRAINER_GROUPS')).toBe(false);
+    expect(result.emptyGroupSelection).toBe(false);
+  });
+});
+
+// --- fase 2a: the TRAINERGROEPEN row and its dropdown ---
+
+const GROEPEN = 'itg_groepen';
+
+/** As Monday's typed `settings.labels` returns them: `id` is an Int. */
+const LABELS = [
+  { id: 1, label: 'Topics — topics' },
+  { id: 2, label: 'Nieuwe groep — nieuwe_groep__1' },
+];
+
+const withGroepenColumn = (over: Partial<BoardMeta> = {}): BoardMeta =>
+  board({
+    columns: [
+      ...board().columns,
+      { id: GROEPEN, title: 'Groepen', type: 'dropdown', settings_str: null },
+    ],
+    items_count: 8,
+    ...over,
+  });
+
+/**
+ * The selection as `DropdownValue.values` returns it: `id` is a GraphQL `ID`, so it
+ * arrives as a STRING while the labels above carry numbers. Keeping the two shapes
+ * apart is the point — a stub that used one everywhere would hide the mismatch.
+ */
+const groepenRow = (selected: string[], waarde = ''): Row =>
+  ({
+    id: '8',
+    name: 'TRAINERGROEPEN',
+    updated_at: '2026-08-13T00:00:00Z',
+    group: { id: SETTINGS },
+    column_values: [
+      { id: 'itg_waarde', text: waarde },
+      { id: GROEPEN, text: 'whatever', values: selected.map((id) => ({ id, label: 'x' })) },
+    ],
+  }) as unknown as Row;
+
+function stubWithGroepen(
+  rows: Row[],
+  labels: Array<{ id: number | string; label: string; is_deactivated?: boolean }> = LABELS,
+  meta: BoardMeta = withGroepenColumn()
+): MondayGraphQLClient {
+  const client = stubClient(rows, meta);
+  vi.mocked(client.query).mockResolvedValue({
+    boards: [{ columns: [{ settings: { labels } }] }],
+  });
+  return client;
+}
+
+describe('readSettings — TRAINERGROEPEN', () => {
+  it('resolves the selection from the dropdown, not from Waarde', async () => {
+    const rows = [...COMPLETE, groepenRow(['1', '2'])];
+
+    const result = await readSettings(stubWithGroepen(rows), config);
+
+    expect(result.appRows).toContainEqual({
+      key: 'RECOMMENDABLE_TRAINER_GROUPS',
+      value: 'topics,nieuwe_groep__1',
+    });
+    expect(result.emptyGroupSelection).toBe(false);
+  });
+
+  /**
+   * The shape mismatch the whole `String(id)` rule exists for: the labels come back as
+   * numbers and the selection as strings. If either side is keyed on the raw value the
+   * lookup misses and the board reads as "nothing selected" — an empty eligibility set
+   * that silently defers to the environment instead of failing.
+   */
+  it('matches string selection ids against numeric label ids', async () => {
+    const rows = [...COMPLETE, groepenRow(['2'])];
+
+    const result = await readSettings(stubWithGroepen(rows), config);
+
+    expect(result.appRows).toContainEqual({
+      key: 'RECOMMENDABLE_TRAINER_GROUPS',
+      value: 'nieuwe_groep__1',
+    });
+  });
+
+  it('asks for the dropdown column once it exists', async () => {
+    const client = stubWithGroepen([...COMPLETE, groepenRow(['1', '2'])]);
+    await readSettings(client, config);
+
+    const [, fields] = vi.mocked(client.fetchBoardItems).mock.calls[0];
+    expect(fields).toContain('itg_groepen');
+    expect(fields).toContain('DropdownValue');
+  });
+
+  /**
+   * Someone who types the groups into `Waarde` has edited the board and expects an
+   * effect. Ignoring that cell would drop the value, read the selection as empty, and
+   * answer from the environment — a change with no result and no explanation.
+   */
+  it('throws when Waarde is filled in instead of Groepen', async () => {
+    const rows = [...COMPLETE, groepenRow(['1'], 'topics')];
+
+    await expect(readSettings(stubWithGroepen(rows), config)).rejects.toThrow(/Waarde/);
+  });
+
+  it('omits the row and flags it when nothing is selected', async () => {
+    const rows = [...COMPLETE, groepenRow([])];
+
+    const result = await readSettings(stubWithGroepen(rows), config);
+
+    expect(result.appRows.some((r) => r.key === 'RECOMMENDABLE_TRAINER_GROUPS')).toBe(false);
+    expect(result.emptyGroupSelection).toBe(true);
+  });
+
+  it('throws on two TRAINERGROEPEN rows', async () => {
+    const rows = [...COMPLETE, groepenRow(['1']), { ...groepenRow(['2']), id: '9' }];
+
+    await expect(
+      readSettings(stubWithGroepen(rows, LABELS, withGroepenColumn({ items_count: 9 })), config)
+    ).rejects.toThrow(/TRAINERGROEPEN/);
+  });
+
+  it('still throws when the row is parked in Notities', async () => {
+    const rows = [...COMPLETE, { ...groepenRow(['1']), group: { id: NOTITIES } }];
+
+    await expect(readSettings(stubWithGroepen(rows), config)).rejects.toThrow(/TRAINERGROEPEN/);
+  });
+
+  describe('identity', () => {
+    const pinned = new Map([
+      ['1', 'topics'],
+      ['2', 'nieuwe_groep__1'],
+    ]);
+
+    /**
+     * With the map pinned, the label is display only. Renaming one — even to something
+     * carrying a different group id — must change nothing at all.
+     */
+    it('ignores the label text when the map is pinned', async () => {
+      const renamed = [
+        { id: 1, label: 'Vaste pool — nieuwe_groep__1' },
+        { id: 2, label: 'Nieuwe groep — nieuwe_groep__1' },
+      ];
+      const rows = [...COMPLETE, groepenRow(['1'])];
+
+      const result = await readSettings(stubWithGroepen(rows, renamed), {
+        ...config,
+        groepenOptions: pinned,
+      });
+
+      expect(result.appRows).toContainEqual({
+        key: 'RECOMMENDABLE_TRAINER_GROUPS',
+        value: 'topics',
+      });
+    });
+
+    /**
+     * Without a pinned map the labels ARE the identity, so their consistency is the only
+     * thing standing between a swapped suffix and a silently different eligibility set.
+     */
+    it('refuses an incoherent label set while deriving', async () => {
+      const swapped = [
+        { id: 1, label: 'Topics — nieuwe_groep__1' },
+        { id: 2, label: 'Nieuwe groep — nieuwe_groep__1' },
+      ];
+      const rows = [...COMPLETE, groepenRow(['1'])];
+
+      await expect(readSettings(stubWithGroepen(rows, swapped), config)).rejects.toThrow(
+        /nieuwe_groep__1/
+      );
+    });
+
+    /**
+     * A pinned map is a code constant: it still contains the option id long after the
+     * label is deactivated, so it cannot tell retired from live on its own. Written
+     * WITH the pinned map, so the test fails unless activeness is read from the board.
+     */
+    it('throws when a selected option has been deactivated', async () => {
+      const retired = [LABELS[0], { ...LABELS[1], is_deactivated: true }];
+      const rows = [...COMPLETE, groepenRow(['2'])];
+
+      await expect(
+        readSettings(stubWithGroepen(rows, retired), { ...config, groepenOptions: pinned })
+      ).rejects.toThrow(/gedeactiveerd/);
+    });
+
+    /**
+     * The other half of that rule: retiring an option NOBODY selected is housekeeping,
+     * and stopping every recommendation for it would be a false alarm on the engine path.
+     */
+    it('tolerates an unselected deactivated option', async () => {
+      const retired = [LABELS[0], { ...LABELS[1], is_deactivated: true }];
+      const rows = [...COMPLETE, groepenRow(['1'])];
+
+      await expect(
+        readSettings(stubWithGroepen(rows, retired), { ...config, groepenOptions: pinned })
+      ).resolves.toBeDefined();
+    });
+
+    it('throws when the option list cannot be read at all', async () => {
+      const client = stubWithGroepen([...COMPLETE, groepenRow(['1'])]);
+      vi.mocked(client.query).mockResolvedValue({ boards: [] });
+
+      await expect(readSettings(client, config)).rejects.toThrow(/Groepen/);
+    });
+  });
 });

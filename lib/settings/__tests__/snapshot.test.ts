@@ -16,6 +16,7 @@ const raw = (): RawSettings => ({
     ['2020-2024', 8800],
     ['2024-heden', 8400],
   ]),
+  emptyGroupSelection: false,
 });
 
 const opts = {
@@ -200,5 +201,42 @@ describe('required keys are satisfied by the BOARD, never by env', () => {
     expect(() =>
       buildSettingsSnapshot(missing, { ...opts, env: { HQ_ADRES: 'Ergens 1, Utrecht' } })
     ).toThrow(/HQ ADRES/);
+  });
+
+  /** An empty selection reaches the snapshot as its own state, not as an absent row. */
+  it('reports an empty selection distinctly once the row is required', () => {
+    const empty = { ...raw(), emptyGroupSelection: true };
+
+    expect(() =>
+      buildSettingsSnapshot(empty, { ...opts, requireTrainerGroups: true })
+    ).toThrow(/geen groep geselecteerd/);
+  });
+});
+
+/**
+ * The migration's ONLY proof is "the fingerprint did not move when the source did", so a
+ * hash that reacts to something the engine ignores would raise a false alarm on a correct
+ * migration — and a check that cries wolf once gets overridden the next time.
+ */
+describe('fingerprint canonicalisation', () => {
+  const withGroups = (value: string): RawSettings => {
+    const rows = raw();
+    rows.appRows.push({ key: 'RECOMMENDABLE_TRAINER_GROUPS', value });
+    return rows;
+  };
+
+  const fingerprint = (value: string): string =>
+    buildSettingsSnapshot(withGroups(value), opts).fingerprint;
+
+  it('does not move when the same groups arrive in a different order', () => {
+    expect(fingerprint('topics,nieuwe_groep__1')).toBe(fingerprint('nieuwe_groep__1,topics'));
+  });
+
+  it('does not move when a group is listed twice', () => {
+    expect(fingerprint('topics,topics')).toBe(fingerprint('topics'));
+  });
+
+  it('still moves when the membership actually changes', () => {
+    expect(fingerprint('topics')).not.toBe(fingerprint('topics,nieuwe_groep__1'));
   });
 });

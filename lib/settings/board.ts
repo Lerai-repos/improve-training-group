@@ -1,3 +1,5 @@
+import { parseOptionMap } from './groepen';
+
 import type { SettingsBoardConfig } from './read';
 
 /**
@@ -35,10 +37,22 @@ import type { SettingsBoardConfig } from './read';
 export const INSTELLINGEN_PRODUCTION: SettingsBoardConfig = {
   boardId: '5102171946',
   notitiesGroupId: 'group_mm66k260',
+  // `groepenOptions` is deliberately ABSENT until `pnpm instellingen:groepen --apply` has
+  // run: Monday generates the dropdown's option ids, so there is nothing to pin before
+  // the column exists. While it is absent the reader derives identity from the labels.
 };
 
 const OVERRIDE = 'MONDAY_INSTELLINGEN_BOARD_ID';
 const GROUP_OVERRIDE = 'MONDAY_INSTELLINGEN_NOTITIES_GROUP_ID';
+/**
+ * Optional, unlike the other two.
+ *
+ * A preview deployment configured before the migration has only the pair, and it has to
+ * keep booting: the column it would describe does not exist yet. Once the preview board
+ * has been migrated, setting this pins its identity the same way the constant above does
+ * for production.
+ */
+const OPTIONS_OVERRIDE = 'MONDAY_INSTELLINGEN_GROEPEN_OPTIONS';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -72,12 +86,13 @@ export function resolveSettingsBoard(
   const hasGroupOverride = GROUP_OVERRIDE in env;
   const override = env[OVERRIDE]?.trim();
   const groupOverride = env[GROUP_OVERRIDE]?.trim();
+  const optionsOverride = env[OPTIONS_OVERRIDE]?.trim();
 
   if (isProductionDeployment(env)) {
-    if (hasOverride || hasGroupOverride) {
+    if (hasOverride || hasGroupOverride || OPTIONS_OVERRIDE in env) {
       throw new Error(
-        `${OVERRIDE}/${GROUP_OVERRIDE} zijn gezet in productie. Die horen alleen op preview ` +
-          'en lokaal: productie leest altijd het vastgelegde board. Verwijder ze.'
+        `${OVERRIDE}/${GROUP_OVERRIDE}/${OPTIONS_OVERRIDE} zijn gezet in productie. Die horen ` +
+          'alleen op preview en lokaal: productie leest altijd het vastgelegde board. Verwijder ze.'
       );
     }
     if (pinned.boardId === '' || pinned.notitiesGroupId === '') {
@@ -97,7 +112,8 @@ export function resolveSettingsBoard(
    * it reads as "I am pointing somewhere isolated" while the pinned production board is
    * what actually gets read.
    */
-  const wantsOverride = (override ?? '') !== '' || (groupOverride ?? '') !== '';
+  const wantsOverride =
+    (override ?? '') !== '' || (groupOverride ?? '') !== '' || (optionsOverride ?? '') !== '';
   if (wantsOverride) {
     if ((override ?? '') === '' || (groupOverride ?? '') === '') {
       throw new Error(
@@ -105,7 +121,15 @@ export function resolveSettingsBoard(
           'eigen groep-id, dus één van de twee zetten wijst naar een board dat niet gelezen wordt.'
       );
     }
-    return { boardId: override ?? '', notitiesGroupId: groupOverride ?? '' };
+    return {
+      boardId: override ?? '',
+      notitiesGroupId: groupOverride ?? '',
+      // Absent is a legitimate state (a preview board not yet migrated), so it stays
+      // undefined rather than becoming an empty map — which would claim, falsely, that
+      // the board has no options.
+      groepenOptions:
+        (optionsOverride ?? '') === '' ? undefined : parseOptionMap(optionsOverride ?? ''),
+    };
   }
 
   if (pinned.boardId === '') {

@@ -116,9 +116,27 @@ function withEnvFallbacks(boardRows: readonly ConfigRowLike[], env: Env): Config
  * A hash rather than the values themselves, so the HQ address is not copied into every
  * stored outcome for the sake of provenance.
  */
+/**
+ * The group selection is a SET, so its order and repetition must not move the hash.
+ *
+ * The env variable lists the groups in whatever order somebody typed them; the board
+ * lists them in the dropdown's order. Identical membership, different sequence — and the
+ * migration's whole proof is "the fingerprint did not change when the source did". Left
+ * as-is, that check would raise a false alarm on a migration that was perfectly correct,
+ * which is worse than no check at all: the next one gets ignored.
+ */
+function canonicalise(app: AppConfig): AppConfig {
+  return {
+    ...app,
+    recommendableTrainerGroups: [...new Set(app.recommendableTrainerGroups)].sort(),
+  };
+}
+
 function fingerprintOf(app: AppConfig, rateCards: readonly RateCard[]): string {
   const canonical = JSON.stringify({
-    app: Object.fromEntries(Object.entries(app).sort(([a], [b]) => a.localeCompare(b))),
+    app: Object.fromEntries(
+      Object.entries(canonicalise(app)).sort(([a], [b]) => a.localeCompare(b))
+    ),
     rates: [...rateCards]
       .map((c) => [c.rateKey, c.validFrom, c.validUntil, c.hourlyRateCents])
       .sort(),
@@ -141,7 +159,10 @@ export function buildSettingsSnapshot(
    *
    * A required key is BY DEFINITION one the board owns. Env can never stand in for it.
    */
-  assertRequiredKeys(raw.appRows, { requireTrainerGroups });
+  assertRequiredKeys(raw.appRows, {
+    requireTrainerGroups,
+    emptySelection: raw.emptyGroupSelection,
+  });
 
   const rows = withEnvFallbacks(raw.appRows, env);
 
