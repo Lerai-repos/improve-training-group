@@ -132,6 +132,10 @@ describe.skipIf(!hasCorpus || !hasTrainings)('the full join', () => {
     clientKey: Array.isArray(r.fields.Klanten)
       ? String(r.fields.Klanten[0])
       : str(r.fields.Bedrijfsnaam),
+    // Airtable's Thema link, so the corpus exercises the same-session rule on real data.
+    themaKey: Array.isArray(r.fields.Thema)
+      ? [...(r.fields.Thema as unknown[])].map(String).sort().join('+')
+      : str(r.fields.Thema),
   }));
 
   const attributed = async () => {
@@ -162,19 +166,25 @@ describe.skipIf(!hasCorpus || !hasTrainings)('the full join', () => {
       byKind.set(loss.kind, (byKind.get(loss.kind) ?? 0) + loss.responseCount);
     }
 
-    expect(report.attributedResponses).toBe(2666);
-    expect(byKind.get('ambiguous_code')).toBe(394);
+    // 2.666 → 2.778 when shared codes started attributing: exactly the 112 responses
+    // that used to sit in the same-client ambiguity bucket, and nothing else.
+    expect(report.attributedResponses).toBe(2778);
+    expect(byKind.get('ambiguous_code')).toBe(282);
     expect(byKind.get('unknown_code')).toBe(134);
     expect(byKind.get('case_only_miss')).toBe(12);
     expect(byKind.get('blank_code')).toBe(1);
   });
 
   /**
-   * The spec quotes one ambiguity figure; the data holds two very different ones. Two
-   * unrelated clients sharing a code is unattributable; one client reusing a code across
-   * a series is a conversation about their own numbering.
+   * The spec quoted ONE ambiguity figure; the data holds two very different ones, and
+   * they now end in different places. One client repeating a course under a single code
+   * is a session ITG recorded as several items — attributed to all of them. Two unrelated
+   * clients colliding on a hand-typed number is unattributable and stays a loss.
+   *
+   * So every remaining ambiguity must be cross-client. A same-client one surviving here
+   * would mean the rule stopped firing.
    */
-  it('separates cross-client from same-client collisions', async () => {
+  it('leaves only cross-client collisions unattributed', async () => {
     const { report } = await attributed();
     const ambiguous = report.losses.filter((l) => l.kind === 'ambiguous_code');
     const sum = (predicate: (clients: number) => boolean): number =>
@@ -183,7 +193,26 @@ describe.skipIf(!hasCorpus || !hasTrainings)('the full join', () => {
         .reduce((s, l) => s + l.responseCount, 0);
 
     expect(sum((c) => c > 1)).toBe(282);
-    expect(sum((c) => c === 1)).toBe(112);
+    expect(sum((c) => c === 1)).toBe(0);
+  });
+
+  /**
+   * The other side of the same fact, stated as a gain rather than as an absence: 112
+   * responses that legacy attributed and we used to throw away.
+   */
+  it('recovers the same-client collisions as real attributions', async () => {
+    const { report, aggregates } = await attributed();
+    const shared = aggregates.filter((a) => a.matchedCodes.length > 0);
+
+    expect(report.attributedResponses).toBe(2778);
+    // Several trainings now carry the SAME code — impossible before this rule.
+    const perCode = new Map<string, number>();
+    for (const aggregate of shared) {
+      for (const code of aggregate.matchedCodes) {
+        perCode.set(code, (perCode.get(code) ?? 0) + 1);
+      }
+    }
+    expect([...perCode.values()].filter((n) => n > 1).length).toBeGreaterThan(0);
   });
 
   /** Case-folding would buy 12 responses (0,37%) — recorded, deliberately not taken. */

@@ -25,11 +25,26 @@ import {
   type ExpectedColumn,
 } from '@lib/monday/board-config';
 
+/** The Opportunities board the klant relation points at, on both jaargangen. */
+const KLANTEN_BOARD = '1279052045';
+
 export interface AgendaHistoryColumns {
   readonly boardId: string;
   readonly jaargang: '2026' | '2025';
   readonly trainerRelation: string;
   readonly themaRelation: string;
+  /**
+   * The klant link — the RELATION, not the `lookup_mkszzfvr` mirror.
+   *
+   * Mirrors read back null through the API, and the item name is unusable as a key
+   * (`Summa College` vs `Summa College (copy)` is one client, 57 responses). Same column
+   * id on both jaargangen, unlike the trainer and thema relations.
+   *
+   * Load-bearing since the shared-code rule: it decides whether trainings sharing an IE
+   * code are one session or a collision, so a wrong value silently moves responses
+   * between clients.
+   */
+  readonly klantRelation: string;
   readonly ieCode: string;
   readonly datum: string;
   /**
@@ -48,6 +63,7 @@ export const AGENDA_2026_HISTORY: AgendaHistoryColumns = {
   jaargang: '2026',
   trainerRelation: 'board_relation_mkz4y7tb',
   themaRelation: 'board_relation_mkz4920y',
+  klantRelation: 'board_relation',
   ieCode: 'tekst_mkn58pt6',
   datum: 'datum_1',
   minimumItems: 600,
@@ -58,6 +74,7 @@ export const AGENDA_2025_HISTORY: AgendaHistoryColumns = {
   jaargang: '2025',
   trainerRelation: 'board_relation_mkz4w78',
   themaRelation: 'board_relation_mkz4hjnt',
+  klantRelation: 'board_relation',
   ieCode: 'tekst_mkn58pt6',
   datum: 'datum_1',
   minimumItems: 800,
@@ -94,6 +111,11 @@ export function agendaHistoryExpectedColumns(
       id: columns.themaRelation,
       type: 'board_relation',
       settingsIncludes: [`"boardIds":[${THEMAS_BOARD}]`],
+    },
+    {
+      id: columns.klantRelation,
+      type: 'board_relation',
+      settingsIncludes: [`"boardIds":[${KLANTEN_BOARD}]`],
     },
     { id: columns.ieCode, type: 'text' },
     { id: columns.datum, type: 'date' },

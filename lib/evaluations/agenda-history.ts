@@ -66,6 +66,16 @@ export interface AgendaHistory {
   }>;
 }
 
+/**
+ * A relation's linked ids as one comparable key, or null when it links nothing.
+ *
+ * Sorted, so two trainings linking the same items in a different order compare equal.
+ * NULL rather than `''` for empty, because two blanks are not the same client — and an
+ * empty string would compare equal and merge two trainings that share nothing.
+ */
+const relationKey = (ids: readonly (string | number)[]): string | null =>
+  ids.length === 0 ? null : [...ids].map(String).sort().join('+');
+
 function unwrapPage(raw: unknown, first: boolean): unknown {
   if (typeof raw !== 'object' || raw === null) {
     return undefined;
@@ -95,6 +105,7 @@ function readPage(
     const ieCode = byId.get(columns.ieCode);
     const trainers = byId.get(columns.trainerRelation);
     const themas = byId.get(columns.themaRelation);
+    const klant = byId.get(columns.klantRelation);
 
     /**
      * The COLUMN must be present, not just the envelope. Monday omits an id it does not
@@ -119,6 +130,11 @@ function readPage(
         `Agenda history: "${columns.themaRelation}" is not a board relation on ${where}`
       );
     }
+    if (klant === undefined || klant.linked_item_ids === undefined) {
+      throw new Error(
+        `Agenda history: "${columns.klantRelation}" is not a board relation on ${where}`
+      );
+    }
 
     const trainingItemId = String(item.id);
     const raw = ieCode.text ?? '';
@@ -133,10 +149,14 @@ function readPage(
       ref: {
         trainingItemId,
         rawIeCode: raw.trim() === '' ? null : raw,
-        // The klant is not read here: it only classifies an ambiguity as same- or
-        // cross-client, and pulling a mirror column for every training on two boards is
-        // a real cost for a reporting nicety. Filled in by the caller if wanted.
-        clientKey: null,
+        /**
+         * Both keys decide whether trainings sharing an IE code are one session or a
+         * collision, so they are read here rather than left to a caller. Empty stays
+         * NULL rather than becoming `''` — an empty string would compare equal to
+         * another empty one and quietly merge two trainings that share nothing.
+         */
+        clientKey: relationKey(klant.linked_item_ids),
+        themaKey: relationKey(themas.linked_item_ids),
       },
     };
   });
@@ -151,7 +171,7 @@ async function readBoard(
 ): Promise<{ trainings: AgendaTraining[]; pages: number }> {
   const fields =
     `id column_values(ids:["${columns.datum}","${columns.ieCode}",` +
-    `"${columns.trainerRelation}","${columns.themaRelation}"])` +
+    `"${columns.trainerRelation}","${columns.themaRelation}","${columns.klantRelation}"])` +
     `{ id text ... on BoardRelationValue { linked_item_ids } }`;
 
   const all: AgendaTraining[] = [];

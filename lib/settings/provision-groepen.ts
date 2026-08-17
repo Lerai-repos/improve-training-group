@@ -1,6 +1,7 @@
 import { assertColumns } from '@lib/monday/schema-check';
 
 import { activeOptionIds, assertLiveGroups, deriveOptionMap, groepenOptions } from './groepen';
+import { isKnownName, normaliseName } from './keys';
 import { fetchGroepenLabels, readSettings, GROEPEN_COLUMN, SETTINGS_EXPECTED_COLUMNS } from './read';
 
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
@@ -30,7 +31,6 @@ import type { DropdownLabel } from './groepen';
  */
 
 const GROEPEN_TITLE = 'Groepen';
-const GROEPSELECTIE_GROUP = 'Groepselectie';
 const ROW_NAME = 'TRAINERGROEPEN';
 const CATEGORIE = 'Trainergroepen';
 const OMSCHRIJVING =
@@ -158,24 +158,126 @@ async function ensureColumn(deps: ProvisionGroepenDeps, actions: string[]): Prom
   return true;
 }
 
-async function ensureGroup(deps: ProvisionGroepenDeps, actions: string[]): Promise<string> {
+/**
+ * The row goes in with the OTHER settings — no group of its own.
+ *
+ * An earlier version gave it a `Groepselectie` group so the otherwise-blank `Groepen`
+ * column would read as deliberate. In practice it read as a second board: Monday renders
+ * each group as its own titled block, and "groep" then meant three different things on
+ * one screen (a Monday section, the `Groepen` column, a trainer group).
+ *
+ * Located by where the EXISTING settings live rather than by a group title, because
+ * titles are editable and this must keep working after someone renames the section. Only
+ * `Notities` is load-bearing to the reader; every other group is just a place to sit.
+ */
+async function settingsLayout(deps: ProvisionGroepenDeps): Promise<{
+  settingsGroupId: string;
+  groepenRow: { id: string; groupId: string } | null;
+}> {
   const [meta] = await deps.read.getSchema([deps.boardId]);
-  const existing = meta?.groups.find((g) => g.title === GROEPSELECTIE_GROUP);
-  if (existing !== undefined) {
-    return existing.id;
+  if (meta === undefined) {
+    throw new Error(`Board ${deps.boardId} niet gevonden of niet toegankelijk`);
   }
 
-  actions.push(`groep "${GROEPSELECTIE_GROUP}"`);
-  if (!deps.apply) {
-    return `(dry-run:${GROEPSELECTIE_GROUP})`;
-  }
+  const items = await deps.read.fetchBoardItems<{
+    id: string;
+    name: string;
+    updated_at?: string | null;
+    group?: { id: string } | null;
+  }>(deps.boardId, 'id name updated_at group { id }', meta.items_count);
 
-  const result = await deps.write.mutate<{ create_group: { id: string } }>(
-    'mutation ($board: ID!, $name: String!) { create_group(board_id: $board, group_name: $name) { id } }',
-    { board: deps.boardId, name: GROEPSELECTIE_GROUP },
-    { idempotencyKey: `${deps.keyPrefix}:group` }
+  /**
+   * The anchor must NOT be the groepen row itself.
+   *
+   * `TRAINERGROEPEN` is a known name too, so without this exclusion a board still in the
+   * old layout — the row alone in its own `Groepselectie` group — answers "that group is
+   * where the settings live", and everything lands right back where we are trying to
+   * move it away from. Which of the two wins is decided by fetch order, so it is the
+   * kind of bug that works until it doesn't.
+   */
+  const anchor = items.find(
+    (i) =>
+      isKnownName(i.name.trim()) &&
+      normaliseName(i.name) !== ROW_NAME &&
+      i.group?.id !== deps.notitiesGroupId
   );
-  return result.create_group.id;
+  if (anchor?.group?.id === undefined) {
+    throw new Error(
+      `Geen bestaande instelling gevonden op board ${deps.boardId} om "${ROW_NAME}" bij te zetten`
+    );
+  }
+
+  const row = items.find((i) => normaliseName(i.name) === ROW_NAME);
+  return {
+    settingsGroupId: anchor.group.id,
+    groepenRow: row?.group?.id === undefined ? null : { id: row.id, groupId: row.group.id },
+  };
+}
+
+/**
+ * Put an already-existing row back with the others, if an earlier version stranded it.
+ *
+ * Unlike a selection, a group placement has no value to race over — moving is safe and
+ * idempotent, so this is a repair rather than the overwrite the rest of this module
+ * refuses. Without it, re-running against a board built by the `Groepselectie` version
+ * reports success and changes nothing, which is the worst combination available.
+ */
+async function relocateIfStranded(
+  deps: ProvisionGroepenDeps,
+  row: { id: string; groupId: string },
+  settingsGroupId: string,
+  actions: string[]
+): Promise<void> {
+  if (row.groupId === settingsGroupId) {
+    return;
+  }
+  actions.push(`"${ROW_NAME}" verplaatst naar de groep met de andere instellingen`);
+
+  /**
+   * The group it came from is REPORTED, never deleted.
+   *
+   * Deleting it is the tempting finish — Monday renders an empty group as its own titled
+   * block, so the extra section survives the move. But `delete_group` takes every item in
+   * the group with it and has no conditional form: between proving the group empty and
+   * deleting it, a planner can drop a row in, and that row is gone. Checking first only
+   * narrows the window, it does not close it.
+   *
+   * Doing it by hand is safe because a human can see the board is quiet. A command cannot,
+   * and this module's whole rule is that it refuses where it cannot be sure. One click of
+   * manual cleanup is a fair price for never destroying somebody's row.
+   */
+  const others = (await itemsIn(deps, row.groupId)).filter((i) => i.id !== row.id);
+  actions.push(
+    others.length === 0
+      ? `groep ${row.groupId} is daarna leeg — verwijder hem met de hand`
+      : `groep ${row.groupId} houdt nog ${others.length} rij(en): ${others
+          .map((i) => i.name)
+          .join(', ')}`
+  );
+
+  if (!deps.apply) {
+    return;
+  }
+  await deps.write.mutate(
+    `mutation ($i: ID!, $g: String!) { move_item_to_group(item_id: $i, group_id: $g) { id } }`,
+    { i: row.id, g: settingsGroupId },
+    { idempotencyKey: `${deps.keyPrefix}:move` }
+  );
+}
+
+/** Who is still in a group, read fresh. */
+async function itemsIn(
+  deps: ProvisionGroepenDeps,
+  groupId: string
+): Promise<Array<{ id: string; name: string }>> {
+  const [meta] = await deps.read.getSchema([deps.boardId]);
+  const items = await deps.read.fetchBoardItems<{
+    id: string;
+    name: string;
+    updated_at?: string | null;
+    group?: { id: string } | null;
+  }>(deps.boardId, 'id name updated_at group { id }', meta?.items_count ?? null);
+  return items.filter((i) => i.group?.id === groupId).map((i) => ({ id: i.id, name: i.name }));
 }
 
 /**
@@ -250,7 +352,7 @@ export async function provisionGroepselectie(
     const labels = groepenOptions(deps.titles).map((l) => `"${l.label}"`);
     log(
       `zou aanmaken: kolom ${GROEPEN_COLUMN} (dropdown) met opties ${labels.join(', ')}, ` +
-        `groep "${GROEPSELECTIE_GROUP}", rij "${ROW_NAME}" = ${selection.join(', ')}`
+        `rij "${ROW_NAME}" = ${selection.join(', ')} (bij de andere instellingen)`
     );
     return { optionMap: new Map(), actions };
   }
@@ -279,7 +381,7 @@ export async function provisionGroepselectie(
     throw new Error(`Optie(s) ${inactive.join(', ')} zijn gedeactiveerd — activeer ze weer`);
   }
 
-  const groupId = await ensureGroup(deps, actions);
+  const { settingsGroupId, groepenRow } = await settingsLayout(deps);
   const current = await currentSelection(deps, optionMap);
 
   if (current.state === 'empty') {
@@ -298,7 +400,16 @@ export async function provisionGroepselectie(
           'controleer welke van de twee klopt en pas hem met de hand aan.'
       );
     }
-    log(`rij "${ROW_NAME}" staat er al met de juiste selectie`);
+    // Right selection, possibly the wrong place — a board built by the `Groepselectie`
+    // version. Left alone, a re-run would report success and change nothing.
+    if (groepenRow !== null) {
+      await relocateIfStranded(deps, groepenRow, settingsGroupId, actions);
+    }
+    log(
+      actions.length > 0
+        ? `klaar: ${actions.join(', ')}`
+        : `rij "${ROW_NAME}" staat er al met de juiste selectie`
+    );
     return { optionMap, actions };
   }
 
@@ -310,7 +421,7 @@ export async function provisionGroepselectie(
        }`,
       {
         board: deps.boardId,
-        group: groupId,
+        group: settingsGroupId,
         name: ROW_NAME,
         // The selection travels WITH the create. This is the only write to an item value
         // in the whole feature, and it is safe precisely because the row does not exist

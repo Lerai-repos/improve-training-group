@@ -20,6 +20,8 @@ import {
   normaliseName,
   provisionGroepselectie,
   readSettings,
+  CATEGORIES,
+  INITIAL_ROWS,
   SETTINGS_EXPECTED_COLUMNS,
 } from '@lib/settings';
 
@@ -84,54 +86,6 @@ const BOARD_KIND = 'private';
 const BOARD_NAME = 'Instellingen';
 const NOTITIES_GROUP = 'Notities';
 const SETTINGS_GROUP = 'Instellingen';
-
-const CATEGORIES = ['Algemeen', 'Uurtarieven', 'Reistarieven', 'Trainergroepen', 'Notitie'];
-
-/** The seven rows, in board order. Values in EUROS — the reader converts. */
-const ROWS: Array<{ name: string; categorie: string; waarde: string; omschrijving: string }> = [
-  {
-    name: 'HQ ADRES',
-    categorie: 'Algemeen',
-    waarde: 'Wolvenplein 25, Utrecht',
-    omschrijving: 'Vertrekpunt voor de reiskosten die aan de klant worden gerekend.',
-  },
-  {
-    name: 'REISTARIEF TRAINERS',
-    categorie: 'Reistarieven',
-    waarde: '0.23',
-    omschrijving: 'Euro per kilometer die de trainer voor zijn reis krijgt.',
-  },
-  {
-    name: 'REISTARIEF HQ',
-    categorie: 'Reistarieven',
-    waarde: '0.45',
-    omschrijving: 'Euro per kilometer die aan de klant wordt gerekend, gerekend vanaf HQ.',
-  },
-  {
-    name: 'REISTIJD DREMPEL',
-    categorie: 'Reistarieven',
-    waarde: '90',
-    omschrijving: 'Minuten retour. Daaronder wordt geen reistijd vergoed.',
-  },
-  {
-    name: 'REISTIJD VERGOEDING',
-    categorie: 'Reistarieven',
-    waarde: '1',
-    omschrijving: 'Euro per minuut, alleen voor de minuten bóven de drempel.',
-  },
-  {
-    name: 'TARIEF 2020 - 2024',
-    categorie: 'Uurtarieven',
-    waarde: '88',
-    omschrijving: 'Uurtarief voor trainers die zijn ingestroomd tussen 2020 en 2024.',
-  },
-  {
-    name: 'TARIEF 2024 - HEDEN',
-    categorie: 'Uurtarieven',
-    waarde: '84',
-    omschrijving: 'Uurtarief voor trainers die zijn ingestroomd in 2024 of later.',
-  },
-];
 
 /**
  * `uncaptured` is safe to act on precisely because nothing of ours exists yet: the
@@ -549,7 +503,7 @@ async function ensureRows(ctx: Ctx, boardId: string, groupId: string): Promise<v
    */
   const present = new Set(existing.map((i) => normaliseName(i.name)));
 
-  for (const row of ROWS) {
+  for (const row of INITIAL_ROWS) {
     if (present.has(normaliseName(row.name))) {
       console.log(`  rij bestaat al: ${row.name}`);
       continue;

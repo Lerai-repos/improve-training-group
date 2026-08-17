@@ -150,6 +150,23 @@ function fakeBoard(
         state.groups.push({ id: SELECTIE, title: 'Groepselectie' });
         return { create_group: { id: SELECTIE } };
       }
+      if (document.includes('delete_group')) {
+        state.mutations.push('delete_group');
+        const gid = String(variables?.g);
+        // Monday takes the group's items with it — the fake must too, or the test would
+        // not notice a delete that destroyed rows.
+        state.items = state.items.filter((i) => i.groupId !== gid);
+        state.groups = state.groups.filter((g) => g.id !== gid);
+        return { delete_group: { id: gid } };
+      }
+      if (document.includes('move_item_to_group')) {
+        state.mutations.push('move');
+        const item = state.items.find((i) => i.id === String(variables?.i));
+        if (item) {
+          item.groupId = String(variables?.g);
+        }
+        return { move_item_to_group: { id: String(variables?.i) } };
+      }
       if (document.includes('create_item')) {
         state.mutations.push('item');
         const values = JSON.parse(String(variables?.values)) as {
@@ -189,12 +206,12 @@ const LIVE: Label[] = [
 ];
 
 describe('provisionGroepselectie', () => {
-  it('builds the column, its options, the group and the row', async () => {
+  it('builds the column, its options and the row', async () => {
     const fake = fakeBoard();
 
     const result = await provisionGroepselectie(deps(fake));
 
-    expect(fake.state.mutations).toEqual(['column', 'group', 'item']);
+    expect(fake.state.mutations).toEqual(['column', 'item']);
     expect(result.optionMap).toEqual(
       new Map([
         ['1', 'topics'],
@@ -202,6 +219,23 @@ describe('provisionGroepselectie', () => {
       ])
     );
     expect(fake.state.items.at(-1)).toMatchObject({ name: 'TRAINERGROEPEN', selected: [1, 2] });
+  });
+
+  /**
+   * One list, not a section of its own. Located by where the existing settings actually
+   * are rather than by a group title, so renaming the section cannot strand the row in a
+   * group of its own — the failure the `Groepselectie` version had, where Monday renders
+   * each group as its own titled block and it reads as a second board.
+   */
+  it('puts the row in with the existing settings, found by their group not its title', async () => {
+    const fake = fakeBoard();
+    fake.state.groups[0].title = 'Van alles en nog wat';
+
+    await provisionGroepselectie(deps(fake));
+
+    const settings = fake.state.items.find((i) => i.name === 'HQ ADRES');
+    expect(fake.state.items.at(-1)?.groupId).toBe(settings?.groupId);
+    expect(fake.state.groups.map((g) => g.title)).not.toContain('Groepselectie');
   });
 
   /**
@@ -296,6 +330,110 @@ describe('provisionGroepselectie', () => {
     await expect(
       provisionGroepselectie(deps(fake, { selection: ['topics', 'topics'] }))
     ).resolves.toBeDefined();
+  });
+
+  describe('a board left in the old Groepselectie layout', () => {
+    /**
+     * An earlier version parked the row in a group of its own. Re-running against such a
+     * board used to report success and change nothing at all, because the "selection is
+     * already right" path returned before looking at WHERE the row was.
+     */
+    it('moves the row in with the other settings', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+      const before = fake.state.items.find((i) => i.name === 'TRAINERGROEPEN')!;
+      const settings = fake.state.items.find((i) => i.name === 'HQ ADRES')!;
+      expect(before.groupId).not.toBe(settings.groupId);
+
+      const result = await provisionGroepselectie(deps(fake));
+
+      expect(fake.state.items.find((i) => i.name === 'TRAINERGROEPEN')!.groupId).toBe(
+        settings.groupId
+      );
+      expect(result.actions.join(' ')).toMatch(/verplaatst/);
+    });
+
+    /**
+     * `TRAINERGROEPEN` is itself a known name, so without excluding it the destination is
+     * derived from the very group we are trying to move away from — and which of the two
+     * wins depends on fetch order.
+     */
+    it('does not mistake the stranded row for where the settings live', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+      // Put the groepen row FIRST, so a naive `find` would anchor on it.
+      const row = fake.state.items.pop()!;
+      fake.state.items.unshift(row);
+
+      await provisionGroepselectie(deps(fake));
+
+      const settings = fake.state.items.find((i) => i.name === 'HQ ADRES')!;
+      expect(fake.state.items.find((i) => i.name === 'TRAINERGROEPEN')!.groupId).toBe(
+        settings.groupId
+      );
+    });
+
+    /**
+     * The group is REPORTED, never deleted. `delete_group` takes every item with it and
+     * has no conditional form, so proving it empty first only narrows the race — a
+     * planner dropping a row in during the gap would lose it. A human doing this by hand
+     * can see the board is quiet; a command cannot.
+     */
+    it('reports the now-empty group instead of deleting it', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+
+      const result = await provisionGroepselectie(deps(fake));
+
+      expect(fake.state.mutations).toEqual(['move']);
+      expect(fake.state.groups.map((g) => g.title)).toContain('Groepselectie');
+      expect(result.actions.join(' ')).toMatch(/leeg — verwijder hem met de hand/);
+    });
+
+    it('never issues a group deletion, whatever the group holds', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+
+      await provisionGroepselectie(deps(fake));
+
+      expect(fake.state.mutations).not.toContain('delete_group');
+    });
+
+    /** Anything else parked there is somebody's data — named, so they can judge it. */
+    it('names what else is in the group rather than claiming it is empty', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+      // Somebody reorganising the board dragged a real setting in there too. The reader
+      // does not care which group a setting sits in, so this is a legitimate state.
+      fake.state.items.find((i) => i.name === 'TARIEF 2020 - 2024')!.groupId = SELECTIE;
+
+      const result = await provisionGroepselectie(deps(fake));
+
+      expect(fake.state.mutations).toEqual(['move']);
+      expect(result.actions.join(' ')).toMatch(/TARIEF 2020 - 2024/);
+      expect(result.actions.join(' ')).not.toMatch(/leeg/);
+    });
+
+    it('moves nothing when the row is already in the right place', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+      const settings = fake.state.items.find((i) => i.name === 'HQ ADRES')!.groupId;
+      fake.state.items.find((i) => i.name === 'TRAINERGROEPEN')!.groupId = settings;
+
+      await provisionGroepselectie(deps(fake));
+
+      expect(fake.state.mutations).toEqual([]);
+    });
+
+    /**
+     * The dry run inspects the real board rather than asserting what cleanup it would do.
+     * An earlier version claimed the group would be tidied up unconditionally — a preview
+     * that promises something the apply never does is worse than no preview.
+     */
+    it('reports the move and the real group contents on a dry run', async () => {
+      const fake = fakeBoard({ labels: LIVE, row: { selected: [1, 2] } });
+      fake.state.items.find((i) => i.name === 'TARIEF 2020 - 2024')!.groupId = SELECTIE;
+
+      const result = await provisionGroepselectie(deps(fake, { apply: false }));
+
+      expect(fake.state.mutations).toEqual([]);
+      expect(result.actions.join(' ')).toMatch(/verplaatst/);
+      expect(result.actions.join(' ')).toMatch(/TARIEF 2020 - 2024/);
+    });
   });
 
   /**

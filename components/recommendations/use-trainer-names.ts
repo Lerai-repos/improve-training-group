@@ -31,9 +31,18 @@ import type { MondayBridge } from './monday-client';
  * quiet widening this codebase keeps out of the stored rows.
  */
 
+/**
+ * `limit` is NOT optional.
+ *
+ * `items(ids:)` returns at most **25** rows when no limit is given, and says nothing
+ * about the ones it dropped — no error, no flag, just a shorter list. Asking for 28
+ * trainers therefore yields 25 names, and the other three render as `#3138198919`
+ * scattered through the table, because Monday's return order is not our ranking order.
+ * Measured against the live API: 28 requested → 25 back without it, 28 with it.
+ */
 const NAMES_QUERY = `
-query ($ids: [ID!], $cols: [String!]) {
-  items(ids: $ids) {
+query ($ids: [ID!], $cols: [String!], $limit: Int!) {
+  items(ids: $ids, limit: $limit) {
     id
     name
     column_values(ids: $cols) { id text }
@@ -41,7 +50,18 @@ query ($ids: [ID!], $cols: [String!]) {
 }`;
 
 /** Names only — no `column_values`, so no phone number leaves Monday at all. */
-const NAMES_ONLY_QUERY = `query ($ids: [ID!]) { items(ids: $ids) { id name } }`;
+const NAMES_ONLY_QUERY = `query ($ids: [ID!], $limit: Int!) { items(ids: $ids, limit: $limit) { id name } }`;
+
+/** Monday's ceiling for one `items(ids:)` page. Longer lists are fetched in batches. */
+const MAX_IDS_PER_QUERY = 100;
+
+function batches<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
 
 /**
  * Pull `{ id, name }` pairs out of whatever came back.
@@ -124,19 +144,43 @@ export function useTrainerNames(
     let cancelled = false;
     setLoading(true);
 
-    monday
-      .api(
-        includePhones ? NAMES_QUERY : NAMES_ONLY_QUERY,
-        includePhones ? { ids, cols: [TRAINER_COLUMNS.telefoon] } : { ids }
+    Promise.all(
+      batches(ids, MAX_IDS_PER_QUERY).map((chunk) =>
+        monday.api(
+          includePhones ? NAMES_QUERY : NAMES_ONLY_QUERY,
+          includePhones
+            ? { ids: chunk, cols: [TRAINER_COLUMNS.telefoon], limit: chunk.length }
+            : { ids: chunk, limit: chunk.length }
+        )
       )
-      .then((data) => {
+    )
+      .then((pages) => {
         if (cancelled) {
           return;
         }
-        const { names, phones } = readNames(data);
+        const names = new Map<string, string>();
+        const phones = new Map<string, string>();
+        for (const page of pages) {
+          const part = readNames(page);
+          for (const [id, value] of part.names) {
+            names.set(id, value);
+          }
+          for (const [id, value] of part.phones) {
+            phones.set(id, value);
+          }
+        }
         setById(names);
         setPhoneById(phones);
-        setError(null);
+        /**
+         * A SHORT answer is reported, not shrugged off. Falling back to an id per missing
+         * trainer is the graceful part; doing it without saying why is how a silently
+         * truncated response looks exactly like a trainer who has no name.
+         */
+        setError(
+          names.size < ids.length
+            ? `Monday gaf ${names.size} van de ${ids.length} namen terug; de rest staat als nummer in de lijst.`
+            : null
+        );
       })
       .catch((cause: unknown) => {
         if (!cancelled) {

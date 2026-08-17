@@ -37,9 +37,21 @@ import type { SettingsBoardConfig } from './read';
 export const INSTELLINGEN_PRODUCTION: SettingsBoardConfig = {
   boardId: '5102171946',
   notitiesGroupId: 'group_mm66k260',
-  // `groepenOptions` is deliberately ABSENT until `pnpm instellingen:groepen --apply` has
-  // run: Monday generates the dropdown's option ids, so there is nothing to pin before
-  // the column exists. While it is absent the reader derives identity from the labels.
+  /**
+   * Option id → group id, as Monday assigned them on 14-Aug-2026.
+   *
+   * Pinned rather than derived from the labels, because everyone with board access can
+   * edit a label: reading the group out of the text would let `Topics — topics` be
+   * retyped as `Topics — nieuwe_groep__1` and silently change who is eligible. With this
+   * here, the label is display only and a drifting suffix is a reported refusal.
+   *
+   * Must stay COMPLETE — every priceable group, exactly once. A partial map works right
+   * up until someone picks the option it omits, and then every run fails.
+   */
+  groepenOptions: new Map([
+    ['1', 'topics'],
+    ['2', 'nieuwe_groep__1'],
+  ]),
 };
 
 const OVERRIDE = 'MONDAY_INSTELLINGEN_BOARD_ID';

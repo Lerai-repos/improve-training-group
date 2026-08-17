@@ -60,10 +60,22 @@ export interface TrainingRef {
   /** Raw `tekst_mkn58pt6`; may hold several codes: `"E60GE, E60LE"`. */
   readonly rawIeCode: string | null;
   /**
-   * Only used to classify an ambiguity as same-client or cross-client. **Never** a join
-   * key — two clients sharing one code is precisely the case this exists to report.
+   * The klant, from the `board_relation` link — NOT the mirror and NOT the item name.
+   *
+   * Together with {@link themaKey} this decides whether several trainings sharing one
+   * code are **one session** (ITG gives a repeated or co-delivered course a single code
+   * on purpose) or an accidental collision between unrelated clients. Null when the link
+   * is empty, which forces the collision branch: unknown is never "the same".
    */
   readonly clientKey: string | null;
+  /**
+   * The training's thema ids, sorted and joined — the second half of the same test.
+   *
+   * Required even though every same-klant code in the corpus already matches on it:
+   * one client running two DIFFERENT courses under one code is genuinely ambiguous, and
+   * klant alone would wave that through.
+   */
+  readonly themaKey: string | null;
 }
 
 /** One training as the roll-up sees it, already column-mapped per jaargang. */

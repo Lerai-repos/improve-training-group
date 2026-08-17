@@ -154,6 +154,25 @@ export function attributeResponses(
   }
 
   const clientOf = new Map(trainings.map((t) => [t.trainingItemId, t.clientKey]));
+  const themaOf = new Map(trainings.map((t) => [t.trainingItemId, t.themaKey]));
+
+  /**
+   * Do these trainings describe ONE session?
+   *
+   * Same klant and same thema. A null on either side counts as "different": an empty
+   * klant link tells us nothing, and treating unknown as a match is how one client's
+   * responses end up on another's trainer.
+   */
+  const oneSession = (claimants: readonly string[]): boolean => {
+    const clients = new Set(claimants.map((id) => clientOf.get(id) ?? null));
+    const themas = new Set(claimants.map((id) => themaOf.get(id) ?? null));
+    return (
+      clients.size === 1 &&
+      themas.size === 1 &&
+      !clients.has(null) &&
+      !themas.has(null)
+    );
+  };
 
   // 2. Group the responses by their normalized code.
   const buckets = new Map<string, Bucket>();
@@ -205,7 +224,19 @@ export function attributeResponses(
       continue;
     }
 
-    if (claimants.length > 1) {
+    /**
+     * Several trainings claim this code. That is EITHER one session recorded as several
+     * Monday items — ITG gives a repeated or co-delivered course a single code on
+     * purpose — OR two unrelated trainings colliding on a hand-typed number. The two are
+     * indistinguishable from the code alone, and the corpus holds both: 13 codes of the
+     * first kind against 14 of the second.
+     *
+     * Same klant AND same thema separates them cleanly. Every one of the 13 genuine
+     * groups matches on both; only 2 of the 14 collisions share even a thema, and none
+     * share a klant. Trainer is deliberately NOT part of the test — two of the genuine
+     * groups have different trainers, which is exactly the co-delivery this exists for.
+     */
+    if (claimants.length > 1 && !oneSession(claimants)) {
       // Only classify when we actually know who the clients are. With no client key the
       // honest answer is "unknown", not a count derived from training ids.
       const keys = claimants.map((id) => clientOf.get(id) ?? null);
@@ -219,11 +250,20 @@ export function attributeResponses(
       continue;
     }
 
-    const trainingItemId = claimants[0];
-    const entry = matched.get(trainingItemId) ?? { responses: [], codes: new Set<string>() };
-    entry.responses.push(...bucket.responses);
-    entry.codes.add(bucket.code);
-    matched.set(trainingItemId, entry);
+    for (const trainingItemId of claimants) {
+      const entry = matched.get(trainingItemId) ?? { responses: [], codes: new Set<string>() };
+      entry.responses.push(...bucket.responses);
+      entry.codes.add(bucket.code);
+      matched.set(trainingItemId, entry);
+    }
+    /**
+     * Counted ONCE, however many trainings the code covers.
+     *
+     * `attributedResponses` answers "how many responses found a home", and the ledger
+     * invariant — attributed + losses === total — depends on that reading. Adding one per
+     * claimant would make a 30-response code report as 90 and quietly break the one check
+     * that proves nothing vanished.
+     */
     attributedResponses += bucket.responses.length;
   }
 

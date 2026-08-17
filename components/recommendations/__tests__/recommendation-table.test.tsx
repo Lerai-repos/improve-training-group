@@ -103,11 +103,16 @@ describe('RecommendationTable', () => {
    * what the trainer's travel costs us. Both halves were already stored — nothing ever
    * subtracted them.
    */
-  it('shows the travel margin, derived from figures already in the row', () => {
+  /**
+   * The cents are asserted deliberately. Rounded to whole euros this margin renders as
+   * `€ 10` — the same as €9,50 and €10,49 — on the one column where the values sit near
+   * zero and planners sort by them.
+   */
+  it('shows the travel margin to the cent, derived from figures already in the row', () => {
     renderTable({
-      rows: [row({ clientTravelChargeCents: 2_500, trainerTravelCostCents: 1_500 })],
+      rows: [row({ clientTravelChargeCents: 2_549, trainerTravelCostCents: 1_500 })],
     });
-    expect(screen.getByText('€ 10')).toBeDefined();
+    expect(screen.getByText('€ 10,49')).toBeDefined();
   });
 
   it('shows a real average when there is one', () => {

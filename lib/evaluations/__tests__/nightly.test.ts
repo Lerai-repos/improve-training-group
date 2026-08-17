@@ -38,7 +38,12 @@ function build(counts: { responses: number; trainings: number; qualPairs: number
         trainerExternalIds: [`trainer${i % 50}`],
         themaExternalIds: [`thema${i % 40}`],
       },
-      ref: { trainingItemId: `tr${i}`, rawIeCode: `IE${i}`, clientKey: null },
+      ref: {
+        trainingItemId: `tr${i}`,
+        rawIeCode: `IE${i}`,
+        clientKey: null,
+        themaKey: `thema${i % 40}`,
+      },
     })),
     perBoard: [{ boardId: '1', jaargang: '2026', items: counts.trainings, pages: 1 }],
   };

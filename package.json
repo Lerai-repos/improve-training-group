@@ -41,7 +41,8 @@
     "parity": "tsx scripts/parity-check.ts",
     "view:smoke": "tsx scripts/view-smoke.ts",
     "instellingen:create": "tsx scripts/instellingen-create.ts",
-    "instellingen:groepen": "tsx scripts/instellingen-groepen.ts"
+    "instellingen:groepen": "tsx scripts/instellingen-groepen.ts",
+    "agenda:copy-item": "tsx scripts/agenda-copy-item.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",

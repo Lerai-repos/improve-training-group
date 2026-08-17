@@ -12,11 +12,21 @@ const response = (rawCode: string, grade: number | null = 8): EvaluationResponse
   return { source: SOURCE, rowNumber: nextRow, rawCode, grade, receivedAtRaw: 't' };
 };
 
-const training = (id: string, rawIeCode: string | null, clientKey = `client-${id}`): TrainingRef => ({
+const training = (
+  id: string,
+  rawIeCode: string | null,
+  clientKey: string | null = `client-${id}`,
+  themaKey: string | null = `thema-${id}`
+): TrainingRef => ({
   trainingItemId: id,
   rawIeCode,
   clientKey,
+  themaKey,
 });
+
+/** Two Monday items that ARE one session: one client, one course, one code. */
+const sameSession = (ids: readonly string[], code: string): TrainingRef[] =>
+  ids.map((id) => training(id, code, 'klant-A', 'thema-1'));
 
 /** The ledger's whole purpose: nothing may vanish between the two sides. */
 function expectFullyAccounted(result: ReturnType<typeof attributeResponses>): void {
@@ -177,8 +187,8 @@ describe('attributeResponses', () => {
       const result = attributeResponses(
         [response('260204')],
         [
-          { trainingItemId: 't1', rawIeCode: '260204', clientKey: null },
-          { trainingItemId: 't2', rawIeCode: '260204', clientKey: null },
+          { trainingItemId: 't1', rawIeCode: '260204', clientKey: null, themaKey: 'a' },
+          { trainingItemId: 't2', rawIeCode: '260204', clientKey: null, themaKey: 'b' },
         ]
       );
 
@@ -192,12 +202,94 @@ describe('attributeResponses', () => {
       const result = attributeResponses(
         [response('260204')],
         [
-          { trainingItemId: 't1', rawIeCode: '260204', clientKey: 'Pon' },
-          { trainingItemId: 't2', rawIeCode: '260204', clientKey: null },
+          { trainingItemId: 't1', rawIeCode: '260204', clientKey: 'Pon', themaKey: 'a' },
+          { trainingItemId: 't2', rawIeCode: '260204', clientKey: null, themaKey: 'b' },
         ]
       );
 
       expect(result.report.losses[0].distinctClients).toBeNull();
+    });
+
+    /**
+     * ITG gives one code to several Monday items ON PURPOSE when they are the same
+     * session — a course repeated for one client, or a group split between two trainers.
+     * Those responses belong to every one of those trainings, which is also what legacy
+     * did (`WE Fashion=30|30|30`).
+     */
+    it('attributes a shared code to every training when it is one session', () => {
+      const result = attributeResponses(
+        [response('251050'), response('251050'), response('251050')],
+        sameSession(['t1', 't2', 't3'], '251050')
+      );
+
+      expect(result.report.losses).toEqual([]);
+      expect(result.aggregates.map((a) => a.trainingItemId)).toEqual(['t1', 't2', 't3']);
+      for (const aggregate of result.aggregates) {
+        expect(aggregate.evaluationCount).toBe(3);
+      }
+      expectFullyAccounted(result);
+    });
+
+    /**
+     * The ledger invariant is the reason this counts responses and not (response ×
+     * training) pairs: three responses over three trainings is still three responses.
+     */
+    it('counts a shared code once, not once per training', () => {
+      const result = attributeResponses(
+        [response('251050'), response('251050'), response('251050')],
+        sameSession(['t1', 't2', 't3'], '251050')
+      );
+
+      expect(result.report.attributedResponses).toBe(3);
+      expectFullyAccounted(result);
+    });
+
+    /**
+     * Two of the thirteen genuine groups have DIFFERENT trainers — that is the
+     * co-delivery case, and requiring the same trainer would throw those away.
+     */
+    it('does not care whether the trainers differ', () => {
+      const result = attributeResponses([response('251050')], sameSession(['t1', 't2'], '251050'));
+
+      expect(result.report.losses).toEqual([]);
+      expect(result.aggregates).toHaveLength(2);
+    });
+
+    /** Different klant is the collision: nothing links them but a hand-typed number. */
+    it('still refuses a shared code across two clients', () => {
+      const result = attributeResponses(
+        [response('260204')],
+        [training('t1', '260204', 'Pon Holding', 'thema-1'), training('t2', '260204', 'NWO', 'thema-1')]
+      );
+
+      expect(result.report.losses[0]).toMatchObject({ kind: 'ambiguous_code', distinctClients: 2 });
+      expect(result.aggregates).toEqual([]);
+      expectFullyAccounted(result);
+    });
+
+    /**
+     * One client running two DIFFERENT courses under one code is genuinely ambiguous —
+     * the responses could be about either. Klant alone would wave this through.
+     */
+    it('refuses one client’s two different courses under one code', () => {
+      const result = attributeResponses(
+        [response('E33')],
+        [training('t1', 'E33', 'klant-A', 'thema-1'), training('t2', 'E33', 'klant-A', 'thema-2')]
+      );
+
+      expect(result.report.losses[0]).toMatchObject({ kind: 'ambiguous_code' });
+      expect(result.aggregates).toEqual([]);
+    });
+
+    /** Unknown is never "the same" — an empty klant link must not merge two trainings. */
+    it('refuses when the klant link is empty on both', () => {
+      const result = attributeResponses(
+        [response('260204')],
+        [training('t1', '260204', null, 'thema-1'), training('t2', '260204', null, 'thema-1')]
+      );
+
+      expect(result.report.losses[0]).toMatchObject({ kind: 'ambiguous_code' });
+      expect(result.aggregates).toEqual([]);
     });
 
     it('marks a same-client collision with distinctClients 1', () => {

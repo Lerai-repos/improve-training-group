@@ -8,10 +8,23 @@
  * planner's most-asked question.
  */
 
+/**
+ * Cents, shown to the cent.
+ *
+ * Whole euros read more cleanly in a dense table, but they hide the figure this table
+ * exists to compare. Two candidates €0,40 apart both render as the same number, and the
+ * damage is worst on **Reismarge**, where the values sit near zero: a displayed `€ -7`
+ * is anything from −7,49 to −6,50, on a column planners sort by.
+ *
+ * It is also what these numbers looked like in Airtable — `Total Cost 509,87`, not
+ * `€ 510` — so a planner reconciling the new screen against the old one, or against an
+ * invoice, sees the same value rather than one that is nearly the same.
+ */
 const EUR = new Intl.NumberFormat('nl-NL', {
   style: 'currency',
   currency: 'EUR',
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 const GRADE = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });

@@ -18,6 +18,7 @@ import type { AgendaHistoryColumns } from '../agenda-columns';
 
 const TRAINERS_BOARD = '1661151090';
 const THEMAS_BOARD = '5067928440';
+const KLANTEN_BOARD = '1279052045';
 
 const columnsOf = (c: AgendaHistoryColumns): BoardMeta['columns'] => [
   {
@@ -31,6 +32,12 @@ const columnsOf = (c: AgendaHistoryColumns): BoardMeta['columns'] => [
     title: "Thema's",
     type: 'board_relation',
     settings_str: `{"boardIds":[${THEMAS_BOARD}]}`,
+  },
+  {
+    id: c.klantRelation,
+    title: 'Opportunities',
+    type: 'board_relation',
+    settings_str: `{"boardIds":[${KLANTEN_BOARD}]}`,
   },
   { id: c.ieCode, title: 'IE-code', type: 'text', settings_str: null },
   { id: c.datum, title: 'Datum', type: 'date', settings_str: null },
@@ -66,6 +73,7 @@ const item = (
     { id: c.ieCode, text: `IE${id}` },
     { id: c.trainerRelation, linked_item_ids: ['tr1'] },
     { id: c.themaRelation, linked_item_ids: ['th1'] },
+    { id: c.klantRelation, linked_item_ids: ['kl1'] },
   ].map((cv) => (over[cv.id] === undefined ? cv : { id: cv.id, ...over[cv.id] })),
 });
 
@@ -357,15 +365,31 @@ describe.skipIf(!existsSync(SNAPSHOT))('against the real Agenda 2026 snapshot', 
               items: items.map((i) => ({
                 id: i.id,
                 column_values: i.column_values.filter((c) =>
-                  [columns.datum, columns.ieCode, columns.trainerRelation, columns.themaRelation].includes(
-                    c.id
-                  )
+                  [
+                    columns.datum,
+                    columns.ieCode,
+                    columns.trainerRelation,
+                    columns.themaRelation,
+                    columns.klantRelation,
+                  ].includes(c.id)
                 ),
               })),
             },
           },
         ],
       } as T),
+  });
+
+  /**
+   * The klant link on real data, because it is now load-bearing: it decides whether
+   * trainings sharing an IE code are one session or an accidental collision. A snapshot
+   * where it reads null everywhere would make every shared code look like a collision.
+   */
+  it('reads a klant on the real snapshot, not null', async () => {
+    const history = await readAgendaHistory(serve(AGENDA_2026_HISTORY), [AGENDA_2026_HISTORY]);
+    const withKlant = history.trainings.filter((t) => t.ref.clientKey !== null);
+
+    expect(withKlant.length).toBeGreaterThan(history.trainings.length / 2);
   });
 
   it('reads all 756 trainings', async () => {
