@@ -42,6 +42,7 @@
     "view:smoke": "tsx scripts/view-smoke.ts",
     "instellingen:create": "tsx scripts/instellingen-create.ts",
     "instellingen:groepen": "tsx scripts/instellingen-groepen.ts",
+    "trainers:tarief": "tsx scripts/trainers-tarief.ts",
     "agenda:copy-item": "tsx scripts/agenda-copy-item.ts"
   },
   "dependencies": {

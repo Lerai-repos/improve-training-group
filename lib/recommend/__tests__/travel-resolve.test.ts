@@ -4,6 +4,7 @@ import { createStubTravelProvider, type RouteElement } from '../travel';
 import type { CachedLeg } from '../travel-cache';
 import { resolveTravel, type TravelCache } from '../travel-resolve';
 import type { CandidateTrainer } from '../types';
+import { NO_OVERRIDE } from '@lib/trainers/uurtarief';
 
 const HQ = 'HQ Address';
 
@@ -39,6 +40,7 @@ const trainer = (ext: string, adres: string | null): CandidateTrainer => ({
   adres,
   mondayGroup: 'topics',
   rateKey: '2020-2024',
+  rateOverride: NO_OVERRIDE,
 });
 
 describe('resolveTravel', () => {

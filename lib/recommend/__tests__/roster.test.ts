@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   TRAINER_COLUMNS,
-  TRAINER_EXPECTED_COLUMNS,
+  TRAINER_ENGINE_COLUMNS,
   TRAINERS_BOARD,
 } from '@lib/monday/board-config';
 
@@ -13,7 +13,7 @@ import type { MondayTrainer } from '@lib/monday';
 
 /**
  * A board whose configured columns are all present and correctly typed. Derived
- * from TRAINER_EXPECTED_COLUMNS so the fixture cannot drift from the contract it is
+ * from TRAINER_ENGINE_COLUMNS so the fixture cannot drift from the contract it is
  * meant to satisfy.
  */
 const healthyBoard: BoardMeta = {
@@ -21,7 +21,7 @@ const healthyBoard: BoardMeta = {
   name: 'Trainers',
   groups: [{ id: 'topics', title: 'Trainers instroom 2020-2024' }],
   items_count: 1,
-  columns: TRAINER_EXPECTED_COLUMNS.map((c) => ({
+  columns: TRAINER_ENGINE_COLUMNS.map((c) => ({
     id: c.id,
     title: c.id,
     type: c.type,
@@ -38,6 +38,7 @@ function fakeClient(board: BoardMeta): Parameters<typeof readRoster>[0] {
 
 const raw = (over: Partial<MondayTrainer> & { externalItemId: string }): MondayTrainer => ({
   externalBoardId: '1661151090',
+  uurtariefRaw: null,
   naam: `T${over.externalItemId}`,
   adres: 'Straat 1',
   email: null,
@@ -120,7 +121,29 @@ describe('toRoster', () => {
       adres: 'Teststraat 1',
       mondayGroup: 'topics',
       rateKey: '2020-2024',
+      rateOverride: { kind: 'none' },
     });
+  });
+
+  it('decodes the Uurtarief cell into a per-trainer override', () => {
+    const [t] = toRoster([raw({ externalItemId: '1', uurtariefRaw: '125' })]);
+    expect(t.rateOverride).toEqual({ kind: 'cents', cents: 12500 });
+  });
+
+  /**
+   * One unreadable cell must not throw here.
+   *
+   * `toRoster` runs once for the whole board, so a single typo would take down every
+   * recommendation for every training. It is carried as `invalid` and costs exactly the
+   * one trainer, which `trainerHourlyRateCents` then refuses to price.
+   */
+  it('carries an unreadable Uurtarief without failing the whole board', () => {
+    const roster = toRoster([
+      raw({ externalItemId: '1', uurtariefRaw: '500' }),
+      raw({ externalItemId: '2', uurtariefRaw: '88' }),
+    ]);
+    expect(roster[0].rateOverride.kind).toBe('invalid');
+    expect(roster[1].rateOverride).toEqual({ kind: 'cents', cents: 8800 });
   });
 });
 

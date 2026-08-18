@@ -4,7 +4,7 @@ import { canonicalJson, hashArtifact, type InputArtifact } from '../artifact';
 import { toTrainerTravel } from '../travel-enrich';
 
 const artifact: InputArtifact = {
-  version: 3,
+  version: 4,
   code: { gitSha: 'abc123', calcVersion: '1' },
   training: {
     externalItemId: 'tr-1',
@@ -78,7 +78,7 @@ describe('canonicalJson / hashArtifact', () => {
       qualifications: artifact.qualifications,
       training: artifact.training,
       code: artifact.code,
-      version: 3,
+      version: 4,
     };
     expect(hashArtifact(shuffled)).toBe(hashArtifact(artifact));
   });
@@ -86,6 +86,62 @@ describe('canonicalJson / hashArtifact', () => {
   it('a content change changes the hash', () => {
     const changed: InputArtifact = { ...artifact, code: { gitSha: 'different', calcVersion: '1' } };
     expect(hashArtifact(changed)).not.toBe(hashArtifact(artifact));
+  });
+});
+
+describe('InputArtifact — the Uurtarief override', () => {
+  /**
+   * Two runs that BILLED different amounts must not hash the same.
+   *
+   * Before the override existed, a trainer's item id plus the cohort rate cards were
+   * genuinely enough to replay a price. They no longer are, so the artifact has to carry
+   * the cell itself or the audit trail quietly stops explaining the number.
+   */
+  it('distinguishes two runs that differ only in a trainer rate', () => {
+    const withRate = (cents: number): InputArtifact => ({
+      ...artifact,
+      trainers: [
+        {
+          externalItemId: '1',
+          mondayGroup: 'topics',
+          rateKey: '2020-2024',
+          uurtarief: { kind: 'cents', cents },
+        },
+      ],
+    });
+    expect(hashArtifact(withRate(12500))).not.toBe(hashArtifact(withRate(9000)));
+  });
+
+  it('hashes identically to a pre-override artifact when nobody set one', () => {
+    // The property that lets the recorded replay baselines keep matching untouched.
+    const none: InputArtifact = {
+      ...artifact,
+      trainers: [{ externalItemId: '1', mondayGroup: 'topics', rateKey: '2020-2024' }],
+    };
+    const explicitlyAbsent: InputArtifact = {
+      ...artifact,
+      trainers: [{ externalItemId: '1', mondayGroup: 'topics', rateKey: '2020-2024', ...{} }],
+    };
+    expect(hashArtifact(none)).toBe(hashArtifact(explicitlyAbsent));
+  });
+
+  it('separates an unreadable cell from an absent one', () => {
+    const absent: InputArtifact = {
+      ...artifact,
+      trainers: [{ externalItemId: '1', mondayGroup: 'topics', rateKey: '2020-2024' }],
+    };
+    const invalid: InputArtifact = {
+      ...artifact,
+      trainers: [
+        {
+          externalItemId: '1',
+          mondayGroup: 'topics',
+          rateKey: '2020-2024',
+          uurtarief: { kind: 'invalid', raw: '500' },
+        },
+      ],
+    };
+    expect(hashArtifact(absent)).not.toBe(hashArtifact(invalid));
   });
 });
 

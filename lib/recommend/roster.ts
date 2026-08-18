@@ -1,11 +1,12 @@
 import {
   resolveGroupPolicy,
   TRAINER_COLUMNS,
-  TRAINER_EXPECTED_COLUMNS,
+  TRAINER_ENGINE_COLUMNS,
   TRAINERS_BOARD,
 } from '@lib/monday/board-config';
 import { decodeTrainer, type RawMondayItem } from '@lib/monday/decode';
 import { assertColumns } from '@lib/monday/schema-check';
+import { parseUurtarief } from '@lib/trainers/uurtarief';
 
 import type { BoardMeta } from '@lib/monday/graphql-client';
 import type { ExpectedColumn } from '@lib/monday/board-config';
@@ -107,6 +108,7 @@ export function toRoster(trainers: readonly MondayTrainer[]): CandidateTrainer[]
       adres: t.adres,
       mondayGroup: t.mondayGroup,
       rateKey: resolveGroupPolicy(t.mondayGroup)?.rateKey ?? null,
+      rateOverride: parseUurtarief(t.uurtariefRaw),
     }));
 }
 
@@ -116,7 +118,7 @@ export async function readRoster(
   itemFields: string,
   prefetched?: BoardMeta
 ): Promise<CandidateTrainer[]> {
-  const board = await assertBoard(client, TRAINERS_BOARD, TRAINER_EXPECTED_COLUMNS, prefetched);
+  const board = await assertBoard(client, TRAINERS_BOARD, TRAINER_ENGINE_COLUMNS, prefetched);
   const raw = await client.fetchBoardItems<RawMondayItem>(
     TRAINERS_BOARD,
     itemFields,

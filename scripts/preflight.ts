@@ -6,7 +6,9 @@ loadEnv({ path: '.env.local' });
 import {
   AGENDA_2026_PRODUCTION_BOARD,
   agendaBoardId,
+  ITEM_FIELDS,
   MONDAY_API_VERSION,
+  TRAINERS_BOARD,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import {
@@ -17,6 +19,8 @@ import {
   GROEPEN_COLUMN,
 } from '@lib/settings';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
+import { readRoster } from '@lib/recommend/roster';
+import { UURTARIEF_COLUMN } from '@lib/trainers';
 import { createQStashClient } from '@lib/recommend/qstash';
 
 /**
@@ -32,6 +36,9 @@ import { createQStashClient } from '@lib/recommend/qstash';
 // `warn` does NOT fail the run: a test-board override is a legitimate state to be in,
 // it just must never go unnoticed.
 type Status = 'ok' | 'fail' | 'skip' | 'warn';
+
+/** Enough names to act on without turning the summary into a roster dump. */
+const MAX_REPORTED_TRAINERS = 5;
 const results: Array<{ name: string; status: Status; detail: string }> = [];
 
 function record(name: string, status: Status, detail: string): void {
@@ -87,7 +94,11 @@ async function checkGroepenOptions(
 ): Promise<void> {
   const [meta] = await client.getSchema([boardId]);
   if (!meta?.columns.some((c) => c.id === GROEPEN_COLUMN)) {
-    record('Instellingen groepen', 'warn', `nog geen ${GROEPEN_COLUMN} — draai instellingen:groepen`);
+    record(
+      'Instellingen groepen',
+      'warn',
+      `nog geen ${GROEPEN_COLUMN} — draai instellingen:groepen`
+    );
     return;
   }
   try {
@@ -140,7 +151,11 @@ async function checkInstellingen(): Promise<void> {
     const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
     const settings = await loadSettingsOnce(client);
     const { app } = settings;
-    record('Instellingen', 'ok', `board ${settings.boardId}, fingerprint ${settings.fingerprint.slice(0, 12)}`);
+    record(
+      'Instellingen',
+      'ok',
+      `board ${settings.boardId}, fingerprint ${settings.fingerprint.slice(0, 12)}`
+    );
     record(
       'Instellingen waarden',
       'ok',
@@ -154,10 +169,103 @@ async function checkInstellingen(): Promise<void> {
       settings.rateCards.map((c) => `${c.rateKey}=${c.hourlyRateCents}c`).join(' · ')
     );
     await checkGroepenOptions(client, settings.boardId, app.recommendableTrainerGroups);
+    await checkTrainerRates(client, app.recommendableTrainerGroups);
   } catch (error) {
     // A refusal here is the point of the check, not an inconvenience: it is exactly
     // what the worker would have done, surfaced before the worker depends on it.
     record('Instellingen', 'fail', message(error));
+  }
+}
+
+/**
+ * Can every recommendable trainer actually be priced?
+ *
+ * The one failure the `Uurtarief` column introduces is quiet: a trainer whose cell is
+ * empty AND whose group carries no cohort is simply dropped as `no_rate`, and a shorter
+ * recommendation list looks exactly like a genuinely small one. That becomes reachable
+ * the moment ITG reorganises the groups, so it is checked before every deploy rather
+ * than discovered by a planner.
+ *
+ * An unreadable cell is worse than an absent one and is reported separately: somebody
+ * typed a number there and it is sitting on the board waiting to be fixed.
+ */
+async function checkTrainerRates(
+  client: ReturnType<typeof createMondayGraphQLClient>,
+  recommendableGroups: readonly string[]
+): Promise<void> {
+  try {
+    /**
+     * Checked before the roster read only so the message can name the fix.
+     *
+     * `readRoster` asserts the column strictly, so without this the check dies on a bare
+     * "schema drift" and says nothing about what to do about it.
+     */
+    const [board] = await client.getSchema([TRAINERS_BOARD]);
+    if (board === undefined) {
+      record('Trainer uurtarieven', 'fail', `trainersbord ${TRAINERS_BOARD} niet leesbaar`);
+      return;
+    }
+    /**
+     * FAIL, not warn — the severity is the whole point here.
+     *
+     * A warning exits zero, which reads as "safe to deploy", and deploying against a
+     * board without this column FOUTs every training because `readRoster` requires it.
+     * The agenda-board warning above marks a state that WORKS and must not go unnoticed;
+     * this one marks a state that does not work at all.
+     */
+    if (!board.columns.some((c) => c.id === UURTARIEF_COLUMN)) {
+      record(
+        'Trainer uurtarieven',
+        'fail',
+        `${UURTARIEF_COLUMN} bestaat nog niet — draai eerst 'pnpm trainers:tarief --apply', ` +
+          'anders faalt elke aanbeveling na de deploy'
+      );
+      return;
+    }
+
+    const roster = await readRoster(client, ITEM_FIELDS);
+    const groups = new Set(recommendableGroups);
+    const inScope = roster.filter((t) => t.mondayGroup !== null && groups.has(t.mondayGroup));
+
+    const invalid = inScope.filter((t) => t.rateOverride.kind === 'invalid');
+    const unpriceable = inScope.filter((t) => t.rateOverride.kind === 'none' && t.rateKey === null);
+    const overridden = inScope.filter((t) => t.rateOverride.kind === 'cents');
+
+    if (invalid.length > 0) {
+      record(
+        'Trainer uurtarieven',
+        'fail',
+        `${invalid.length} onleesbaar: ` +
+          invalid
+            .slice(0, MAX_REPORTED_TRAINERS)
+            .map(
+              (t) => `${t.naam} ("${t.rateOverride.kind === 'invalid' ? t.rateOverride.raw : ''}")`
+            )
+            .join(', ')
+      );
+      return;
+    }
+    if (unpriceable.length > 0) {
+      record(
+        'Trainer uurtarieven',
+        'fail',
+        `${unpriceable.length} van ${inScope.length} aanbevelbare trainers hebben geen tarief ` +
+          `en geen cohort — zij vallen stil weg: ` +
+          unpriceable
+            .slice(0, MAX_REPORTED_TRAINERS)
+            .map((t) => t.naam)
+            .join(', ')
+      );
+      return;
+    }
+    record(
+      'Trainer uurtarieven',
+      'ok',
+      `${inScope.length} aanbevelbaar · ${overridden.length} met eigen tarief · ` +
+        `${inScope.length - overridden.length} via het cohort`
+    );
+  } catch (error) {
+    record('Trainer uurtarieven', 'fail', message(error));
   }
 }
 
@@ -182,7 +290,9 @@ async function checkStatusColumn(): Promise<void> {
     record(
       'Our status column',
       missing.length === 0 ? 'ok' : 'fail',
-      missing.length === 0 ? `${column.title} (${columnId})` : `missing label(s): ${missing.join(', ')}`
+      missing.length === 0
+        ? `${column.title} (${columnId})`
+        : `missing label(s): ${missing.join(', ')}`
     );
     // The override is a silent no-op on production if it is forgotten — the engine
     // simply stops touching ITG's board — so preflight names the board every time

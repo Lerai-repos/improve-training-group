@@ -32,8 +32,14 @@ export interface InputArtifact {
    * holds uuids that no longer resolve to anything, so a replay tool must REFUSE a
    * v2 artifact rather than silently falling back to the rateKey default and
    * reporting a rate the run never used.
+   *
+   * v3 → v4 ADDED `trainers[].uurtarief`, the per-trainer rate override from the
+   * Trainers board. Load-bearing for exactly the same reason: the field is omitted
+   * when nobody set one, so on a v3 artifact its absence means UNKNOWN rather than
+   * "no override" — and a replay that read it as "no override" would confidently
+   * report the cohort rate for a run that billed something else entirely.
    */
-  version: 3;
+  version: 4;
   code: { gitSha: string | null; calcVersion: string };
   training: {
     externalItemId: string;
@@ -58,13 +64,25 @@ export interface InputArtifact {
   };
   trainers: Array<{
     /**
-     * The Monday item id — sufficient for replay on its own: pricing resolves the
-     * rate via `tryResolveHourlyRateCents(rateCards, rateKey, externalItemId, date)`
-     * and `RateCard.trainerId` is that same id.
+     * The Monday item id. Together with {@link uurtarief} this is everything pricing
+     * consumed: a cohort rate resolves via
+     * `tryResolveHourlyRateCents(rateCards, rateKey, externalItemId, date)`, where
+     * `RateCard.trainerId` is that same id.
      */
     externalItemId: string;
     mondayGroup: string | null;
     rateKey: string | null;
+    /**
+     * The trainer's own `Uurtarief` cell, and the reason it is here: it OVERRIDES the
+     * cohort, so without it two runs that billed different amounts would produce the
+     * same artifact and the same hash.
+     *
+     * OMITTED when nobody set one, which is the overwhelmingly common case and keeps
+     * every artifact recorded before this field existed byte-identical. `invalid`
+     * carries the raw cell but deliberately not the human-readable reason — rewording
+     * a message must never change an artifact hash.
+     */
+    uurtarief?: { kind: 'cents'; cents: number } | { kind: 'invalid'; raw: string };
     // No `adres` / contact fields.
   }>;
   scores: Array<{

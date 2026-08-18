@@ -1,6 +1,6 @@
 import { log } from '@lib/logger';
 import type { Acknowledgements } from '@lib/monday';
-import { tryResolveHourlyRateCents, type RateCard, type TravelTimeConfig } from '@lib/calc';
+import { type RateCard, type TravelTimeConfig } from '@lib/calc';
 
 import {
   ADDRESS_MODEL,
@@ -12,7 +12,7 @@ import type { InputArtifact } from './artifact';
 import { hashArtifact } from './artifact';
 import type { CityStore } from './city-store';
 import { computeEffectiveQuals, filterEligible } from './eligibility';
-import { priceTrainer, rankTrainers, type PricingContext } from './pricing';
+import { priceTrainer, rankTrainers, trainerHourlyRateCents, type PricingContext } from './pricing';
 import { computeScores } from './scores';
 import type { TravelProvider } from './travel';
 import { resolveTravel, type TravelCache } from './travel-resolve';
@@ -230,6 +230,8 @@ function addressReason(addr: AddressDecision): string | null {
 
 /** Cap on the persisted/logged failure detail (avoid unbounded error strings). */
 const MAX_ERROR_DETAIL = 500;
+/** Enough names to act on without turning one bad column into a log dump. */
+const MAX_LOGGED_RATE_ERRORS = 5;
 
 /**
  * The full compute pipeline for one training. Pure orchestration over injected
@@ -307,21 +309,36 @@ export async function runRecommendation(
     // failure that would fail a run we were going to exclude them from anyway.
     stage = 'rates';
     const priceable = eligible.filter((t) => {
-      const rate =
-        t.rateKey === null
-          ? null
-          : tryResolveHourlyRateCents(
-              config.rateCards,
-              t.rateKey,
-              t.externalItemId,
-              live.datum ?? ''
-            );
+      const rate = trainerHourlyRateCents(t, config.rateCards, live.datum ?? '');
       if (rate === null) {
-        excluded.push({ externalItemId: t.externalItemId, reason: 'no_rate' });
+        /**
+         * A typed-but-unreadable `Uurtarief` is reported separately from a missing rate.
+         *
+         * Both end in exclusion, but only one is somebody's mistake sitting on the board
+         * waiting to be fixed. Folding them together would bury a fixable typo in the
+         * count of trainers who were never priceable to begin with.
+         */
+        excluded.push({
+          externalItemId: t.externalItemId,
+          reason: t.rateOverride.kind === 'invalid' ? 'invalid_rate' : 'no_rate',
+        });
         return false;
       }
       return true;
     });
+
+    const invalidRates = eligible.filter((t) => t.rateOverride.kind === 'invalid');
+    if (invalidRates.length > 0) {
+      log.error('trainers excluded for an unreadable Uurtarief', {
+        mondayItemId,
+        count: invalidRates.length,
+        detail: invalidRates
+          .map(
+            (t) => `${t.naam}: ${t.rateOverride.kind === 'invalid' ? t.rateOverride.reason : ''}`
+          )
+          .slice(0, MAX_LOGGED_RATE_ERRORS),
+      });
+    }
 
     // Qualified trainers existed but NONE could be priced. On the board that is
     // indistinguishable from a genuine no-match, so say so loudly here — it means a
@@ -415,7 +432,7 @@ export async function runRecommendation(
     const ranked: RankedRecommendation[] = rankTrainers(computed);
 
     const artifact: InputArtifact = {
-      version: 3,
+      version: 4,
       code: { gitSha: config.gitSha, calcVersion: '1' },
       training: {
         externalItemId: live.externalItemId,
@@ -441,6 +458,20 @@ export async function runRecommendation(
         externalItemId: t.externalItemId,
         mondayGroup: t.mondayGroup,
         rateKey: t.rateKey,
+        /**
+         * Spread so `none` adds no key at all, rather than a `null` one.
+         *
+         * That is what keeps every pre-override artifact byte-identical, and it is why
+         * the replay baselines still match without being regenerated. `reason` is
+         * dropped on purpose: it is a message for a human, and folding it into a hashed
+         * input would make a reworded sentence look like a changed run.
+         */
+        ...(t.rateOverride.kind === 'cents'
+          ? { uurtarief: { kind: 'cents' as const, cents: t.rateOverride.cents } }
+          : {}),
+        ...(t.rateOverride.kind === 'invalid'
+          ? { uurtarief: { kind: 'invalid' as const, raw: t.rateOverride.raw } }
+          : {}),
       })),
       scores: ranked.map((r) => ({
         trainerExternalId: r.externalItemId,

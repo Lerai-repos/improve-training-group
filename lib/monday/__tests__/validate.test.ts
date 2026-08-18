@@ -13,6 +13,7 @@ const trainer = (id: string, group: string | null = 'topics'): MondayTrainer => 
   externalItemId: id,
   externalBoardId: '1661151090',
   naam: `T${id}`,
+  uurtariefRaw: null,
   adres: null,
   email: null,
   telefoon: null,

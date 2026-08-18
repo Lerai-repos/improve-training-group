@@ -63,6 +63,7 @@ export const TRAINER_COLUMNS: TrainerColumnMap = {
   email: 'e_mail__1',
   itgEmail: 'itg_mail__1',
   telefoon: 'telefoon_mkn1hbyh',
+  uurtarief: 'itg_uurtarief',
 };
 
 export const THEMA_QUAL_COLOURS: QualificationColourMap = {
@@ -224,11 +225,38 @@ export function whatsappColumnsFor(boardId: string): readonly WhatsappColumn[] {
   return WHATSAPP_COLUMNS_BY_BOARD[boardId] ?? AGENDA_2026_WHATSAPP_COLUMNS;
 }
 
+/**
+ * The columns that make a board recognisably the Trainers board.
+ *
+ * Deliberately WITHOUT the rate columns below: `trainers:tarief` asserts this list to
+ * prove it is pointed at the right board *before* creating those columns, so including
+ * them would make the provisioning command require what it exists to add.
+ */
 export const TRAINER_EXPECTED_COLUMNS: ExpectedColumn[] = [
   { id: 'adres__1', type: 'text' },
   { id: 'e_mail__1', type: 'email' },
   { id: 'itg_mail__1', type: 'email' }, // email fallback
   { id: 'telefoon_mkn1hbyh', type: 'text' },
+];
+
+/**
+ * The per-trainer rate override, created by `pnpm trainers:tarief` (18-Aug-2026).
+ *
+ * Asserted STRICTLY on the engine path, which is the point of it. Monday omits a column
+ * id it does not recognise rather than erroring, so a deleted `Uurtarief` would read as
+ * "nobody has an override" — every trainer silently falling back to their cohort rate,
+ * which is a perfectly plausible set of numbers and wrong for anyone who had one set.
+ *
+ * `Datum instroom` is NOT here on purpose: nothing reads it, so its absence cannot make
+ * us wrong, and requiring a column ITG owns purely for their own administration would
+ * turn their housekeeping into an outage.
+ */
+export const TRAINER_RATE_COLUMNS: ExpectedColumn[] = [{ id: 'itg_uurtarief', type: 'numbers' }];
+
+/** What the engine insists on: the board's identity plus the rate override. */
+export const TRAINER_ENGINE_COLUMNS: ExpectedColumn[] = [
+  ...TRAINER_EXPECTED_COLUMNS,
+  ...TRAINER_RATE_COLUMNS,
 ];
 
 export const THEMA_EXPECTED_COLUMNS: ExpectedColumn[] = [

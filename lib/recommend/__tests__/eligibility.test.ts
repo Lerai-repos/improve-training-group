@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { EMPTY_ACK, type Acknowledgements } from '@lib/monday';
 
+import { NO_OVERRIDE } from '@lib/trainers/uurtarief';
+
 import { computeEffectiveQuals, filterEligible } from '../eligibility';
 import type { CandidateTrainer, QualObservation } from '../types';
 
@@ -11,6 +13,7 @@ const trainer = (ext: string): CandidateTrainer => ({
   adres: 'Somewhere 1',
   mondayGroup: 'topics',
   rateKey: '2020-2024',
+  rateOverride: NO_OVERRIDE,
 });
 
 const obs = (t: string, th: string, colour: QualObservation['colour']): QualObservation => ({

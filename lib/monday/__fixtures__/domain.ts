@@ -26,6 +26,7 @@ export const DEFAULT_TRAINERS: MondayTrainer[] = [
     telefoon: '0612345678',
     mondayGroup: 'nieuwe_groep__1',
     rateKey: '2024-heden',
+    uurtariefRaw: null,
   },
   {
     externalItemId: '1661150002',
@@ -36,6 +37,7 @@ export const DEFAULT_TRAINERS: MondayTrainer[] = [
     telefoon: '0687654321',
     mondayGroup: 'topics',
     rateKey: '2020-2024',
+    uurtariefRaw: null,
   },
 ];
 

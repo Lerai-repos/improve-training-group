@@ -70,6 +70,8 @@ export interface TrainerColumnMap {
   email: string;
   itgEmail?: string;
   telefoon: string;
+  /** Per-trainer hourly rate override. Read as raw text; money is parsed downstream. */
+  uurtarief?: string;
 }
 
 /** Themas-board colour board_relation columns → qualification colour. */
@@ -167,6 +169,15 @@ export function decodeTrainer(item: RawMondayItem, map: TrainerColumnMap): Decod
     telefoon: textValue(item, map.telefoon),
     mondayGroup: item.group?.id ?? null,
     rateKey: null,
+    /**
+     * Carried as TEXT, unparsed and unvalidated.
+     *
+     * `lib/monday` decodes shapes, not money — turning "84,50" into cents needs the euro
+     * parser and the plausibility bounds, and both live where the rate is used. Keeping
+     * the raw string also means an unreadable cell reaches the layer that can exclude one
+     * trainer for it, instead of throwing here and taking the whole board down.
+     */
+    uurtariefRaw: map.uurtarief === undefined ? null : textValue(item, map.uurtarief),
   };
   return { value, diagnostics };
 }

@@ -2,11 +2,11 @@ import {
   billableHours,
   clientTravelCharge,
   rankRecommendations,
-  resolveHourlyRateCents,
   totalCostCents,
   trainerTravelCost,
   trainingFeeCents,
   travelTimeCompensation,
+  tryResolveHourlyRateCents,
   type Cents,
   type RateCard,
   type TravelTimeConfig,
@@ -39,10 +39,55 @@ const ZERO_TRAVEL: TrainerTravel = {
 };
 
 /**
+ * What one trainer costs per hour on a given day, or null when they cannot be priced.
+ *
+ * The resolution order is the feature ITG asked for on 18-Aug-2026: the trainer's own
+ * `Uurtarief` cell first, their group's cohort rate second. Both callers that need a rate
+ * go through here — the eligibility filter in `service.ts` that drops unpriceable
+ * trainers, and {@link priceTrainer} that bills them — so the two can never disagree
+ * about who is priceable.
+ *
+ * Null means "excluded, with a reason", never "free". The three ways to get it:
+ *   - an `Uurtarief` that was typed but is unreadable or implausible;
+ *   - no override and a group with no cohort;
+ *   - no override, a cohort, and no rate card covering that date.
+ */
+export function trainerHourlyRateCents(
+  trainer: CandidateTrainer,
+  rateCards: readonly RateCard[],
+  trainingDate: string
+): Cents | null {
+  if (trainer.rateOverride.kind === 'cents') {
+    return trainer.rateOverride.cents;
+  }
+  /**
+   * An unreadable cell does NOT fall through to the cohort.
+   *
+   * Someone typed a number there and meant it. Quietly billing them at €84 instead
+   * produces a plausible recommendation built on a value we failed to read, which is
+   * precisely the class of error that never gets caught. Excluding them is visible.
+   */
+  if (trainer.rateOverride.kind === 'invalid') {
+    return null;
+  }
+  if (trainer.rateKey === null) {
+    return null;
+  }
+  return tryResolveHourlyRateCents(
+    rateCards,
+    trainer.rateKey,
+    // The Monday item id — the trainer's only identity now that there is no
+    // database. `RateCard.trainerId` is keyed on the same id.
+    trainer.externalItemId,
+    trainingDate
+  );
+}
+
+/**
  * Price one eligible trainer into a {@link ComputedRecommendation}, wiring the
  * pure calc layer. `travel === null` means travel is deliberately unnecessary
- * (confirmed online) → every travel figure is 0. A null `rateKey` (no cohort) has
- * no resolvable rate — `resolveHourlyRateCents` throws, surfacing as FOUT upstream.
+ * (confirmed online) → every travel figure is 0. An unpriceable trainer throws,
+ * surfacing as FOUT upstream — `service.ts` filters them out before this is reached.
  */
 export function priceTrainer(
   trainer: CandidateTrainer,
@@ -50,19 +95,15 @@ export function priceTrainer(
   scores: TrainerScores,
   ctx: PricingContext
 ): ComputedRecommendation {
-  if (trainer.rateKey === null) {
-    throw new Error(`priceTrainer: trainer ${trainer.externalItemId} has no rate_key (no cohort)`);
+  const hourlyRateCents = trainerHourlyRateCents(trainer, ctx.rateCards, ctx.trainingDate);
+  if (hourlyRateCents === null) {
+    throw new Error(
+      `priceTrainer: trainer ${trainer.externalItemId} has no resolvable hourly rate ` +
+        `(override=${trainer.rateOverride.kind}, rateKey=${trainer.rateKey ?? 'none'})`
+    );
   }
   const t = travel ?? ZERO_TRAVEL;
   const billable = billableHours(ctx.duurTraining);
-  const hourlyRateCents = resolveHourlyRateCents(
-    ctx.rateCards,
-    trainer.rateKey,
-    // The Monday item id — the trainer's only identity now that there is no
-    // database. `RateCard.trainerId` is keyed on the same id.
-    trainer.externalItemId,
-    ctx.trainingDate
-  );
   const fee = trainingFeeCents(billable, hourlyRateCents);
   const trainerTravelCostCents = trainerTravelCost(
     t.roundTripDistanceKm,

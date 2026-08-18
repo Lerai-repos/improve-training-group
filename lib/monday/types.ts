@@ -35,6 +35,13 @@ export interface MondayTrainer {
    * the group is unmapped (variabel/unset) — never blocks the import.
    */
   rateKey: string | null;
+  /**
+   * The `Uurtarief` cell as Monday rendered it, or null when empty or unconfigured.
+   *
+   * Raw on purpose: parsing it needs the euro parser and the per-uur bounds, which live
+   * with the pricing rather than with the decoder. See `lib/trainers/uurtarief.ts`.
+   */
+  uurtariefRaw: string | null;
 }
 
 export interface MondayThema {

@@ -16,7 +16,7 @@ const ITEM = '5029726254';
 // The artifact is provenance; `runJob` never reads it, so a minimal valid one keeps
 // these tests about the retryability contract rather than about artifact shape.
 const artifact: InputArtifact = {
-  version: 3,
+  version: 4,
   code: { gitSha: null, calcVersion: 'test' },
   training: { externalItemId: ITEM, datum: '2026-09-01', duurTraining: 8, themeExternalIds: [] },
   qualifications: { observations: [], effective: [], ackVersion: null },

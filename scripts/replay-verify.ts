@@ -21,6 +21,7 @@ import type { RouteElement } from '@lib/recommend/travel';
 import type { CandidateTrainer, QualObservation } from '@lib/recommend/types';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { NO_OVERRIDE } from '@lib/trainers/uurtarief';
 
 /**
  * THE equivalence proof for the Supabase strip: replay each recorded training
@@ -248,6 +249,14 @@ async function main(): Promise<void> {
     adres: t.adres === null ? null : String(t.adres),
     mondayGroup: t.monday_group === null ? null : String(t.monday_group),
     rateKey: t.rate_key === null ? null : String(t.rate_key),
+    /**
+     * Always absent, and that is the point of the replay.
+     *
+     * Every recorded fixture predates the `Uurtarief` column, so their expected outputs
+     * were computed from the cohort rate alone. Seeding anything else here would make the
+     * comparison test the override instead of the regression it exists to catch.
+     */
+    rateOverride: NO_OVERRIDE,
   }));
   const config: EngineConfig = {
     ...shared.config,

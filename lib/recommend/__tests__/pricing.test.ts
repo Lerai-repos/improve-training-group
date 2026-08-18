@@ -4,6 +4,7 @@ import type { RateCard, TravelTimeConfig } from '@lib/calc';
 
 import { priceTrainer, rankTrainers, type PricingContext } from '../pricing';
 import type { CandidateTrainer, ComputedRecommendation, TrainerTravel } from '../types';
+import { NO_OVERRIDE, parseUurtarief } from '@lib/trainers/uurtarief';
 
 const CARD: RateCard = {
   rateKey: '2020-2024',
@@ -25,12 +26,14 @@ const ctx: PricingContext = {
   trainerTravelRateCentsPerKm: 23,
   clientTravelRateCentsPerKm: 45,
 };
-const trainer = (ext: string): CandidateTrainer => ({
+const trainer = (ext: string, over: Partial<CandidateTrainer> = {}): CandidateTrainer => ({
   externalItemId: ext,
   naam: `T${ext}`,
   adres: 'A',
   mondayGroup: 'topics',
   rateKey: '2020-2024',
+  rateOverride: NO_OVERRIDE,
+  ...over,
 });
 const roundTrip: TrainerTravel = {
   roundTripDistanceKm: 20,
@@ -78,7 +81,7 @@ describe('priceTrainer rate identity', () => {
         { themeAvgScore: null, overallAvgScore: 0 },
         { ...ctx, rateCards: [override] }
       )
-    ).toThrow(/No rate_card/);
+    ).toThrow(/no resolvable hourly rate/);
   });
 });
 
@@ -107,11 +110,21 @@ describe('priceTrainer', () => {
     expect(r.calculateTravel).toBe(false);
   });
 
-  it('throws when the trainer has no rate_key (no cohort)', () => {
+  it('throws when the trainer has neither a cohort nor an Uurtarief', () => {
     const noRate = { ...trainer('t1'), rateKey: null };
     expect(() =>
       priceTrainer(noRate, roundTrip, { themeAvgScore: null, overallAvgScore: 0 }, ctx)
-    ).toThrow(/rate_key/);
+    ).toThrow(/no resolvable hourly rate/);
+  });
+
+  it('prices from the Uurtarief column when there is no cohort at all', () => {
+    const own = {
+      ...trainer('t1'),
+      rateKey: null,
+      rateOverride: parseUurtarief('125'),
+    };
+    const r = priceTrainer(own, roundTrip, { themeAvgScore: null, overallAvgScore: 0 }, ctx);
+    expect(r.hourlyRateCents).toBe(12500);
   });
 });
 

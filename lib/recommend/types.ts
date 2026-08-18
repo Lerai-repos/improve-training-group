@@ -1,5 +1,6 @@
 import type { Cents, Qualification, Rankable } from '@lib/calc';
 import type { EffectiveQualification } from '@lib/monday/qualification';
+import type { RateOverride } from '@lib/trainers/uurtarief';
 
 /**
  * Recommendation-engine domain types. Everything here is derived-from-raw and
@@ -40,6 +41,15 @@ export interface CandidateTrainer {
   adres: string | null;
   mondayGroup: string | null;
   rateKey: string | null;
+  /**
+   * What this trainer's own `Uurtarief` cell says, if anything.
+   *
+   * Wins over {@link rateKey} when set, which is the whole point: ITG wanted the rate to
+   * stop depending on which group somebody sits in. `'none'` is the common case and means
+   * the cohort applies; `'invalid'` excludes this trainer rather than falling back, since
+   * a typed-but-unreadable rate is a decision we failed to read, not an absent one.
+   */
+  rateOverride: RateOverride;
 }
 
 /** One eval-snapshot row (from `trainings.*_snapshot`) for scoring. */

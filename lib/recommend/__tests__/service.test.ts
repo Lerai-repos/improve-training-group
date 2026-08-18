@@ -12,6 +12,7 @@ import {
 import type { CandidateTrainer, QualObservation } from '../types';
 
 import type { RateCard } from '@lib/calc';
+import { NO_OVERRIDE, parseUurtarief } from '@lib/trainers/uurtarief';
 
 /**
  * Converted from the deleted `service.integration.test.ts`. These cover the
@@ -60,6 +61,7 @@ const trainer = (id: string, over: Partial<CandidateTrainer> = {}): CandidateTra
   adres: `Adres ${id}`,
   mondayGroup: 'topics',
   rateKey: '2020-2024',
+  rateOverride: NO_OVERRIDE,
   ...over,
 });
 
@@ -331,6 +333,48 @@ describe('runRecommendation — exclusions', () => {
     expect(r.resultStatus).toBe('GEREED');
     expect(r.recommendations.map((x) => x.externalItemId)).toEqual(['a']);
     expect(r.excluded).toContainEqual({ externalItemId: 'b', reason: 'no_rate' });
+  });
+
+  /**
+   * A typed-but-unreadable `Uurtarief` gets its OWN reason, and never falls back.
+   *
+   * Falling back to the cohort would price this trainer at a confident €88 built on a
+   * value we failed to read — plausible, wrong, and invisible. Sharing `no_rate` would
+   * bury a fixable typo among trainers who were never priceable to begin with.
+   */
+  it('an unreadable Uurtarief excludes that trainer as invalid_rate, not no_rate', async () => {
+    const { deps: d } = deps({
+      roster: [
+        trainer('a'),
+        // 500 is a dagdeel amount; the trainer HAS a valid cohort behind it.
+        trainer('b', { rateOverride: parseUurtarief('500') }),
+      ],
+      reader: reader(training(), [green('a'), green('b')]),
+    });
+    const r = await runRecommendation(d, 'tr1');
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.resultStatus).toBe('GEREED');
+    expect(r.recommendations.map((x) => x.externalItemId)).toEqual(['a']);
+    expect(r.excluded).toContainEqual({ externalItemId: 'b', reason: 'invalid_rate' });
+  });
+
+  it('a valid Uurtarief overrides the cohort in the ranked output', async () => {
+    const { deps: d } = deps({
+      roster: [trainer('a'), trainer('b', { rateOverride: parseUurtarief('30') })],
+      reader: reader(training(), [green('a'), green('b')]),
+    });
+    const r = await runRecommendation(d, 'tr1');
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    const b = r.recommendations.find((x) => x.externalItemId === 'b');
+    expect(b?.hourlyRateCents).toBe(3000);
+    // Cheaper per hour than the cohort, so it must also change the order.
+    expect(r.recommendations[0].externalItemId).toBe('b');
   });
 
   it('reports BOTH no_rate and travel exclusions (append, never overwrite)', async () => {
