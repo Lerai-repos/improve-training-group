@@ -11,6 +11,7 @@ const raw = (): RawSettings => ({
     { key: 'TRAVEL_RATE_CLIENT_CENTS_PER_KM', value: '45' },
     { key: 'TRAVEL_TIME_THRESHOLD_MINUTES', value: '90' },
     { key: 'TRAVEL_TIME_FEE_PER_MINUTE_CENTS', value: '100' },
+    { key: 'RECOMMENDABLE_TRAINER_GROUPS', value: 'topics' },
   ],
   rateCents: new Map([
     ['2020-2024', 8800],
@@ -22,7 +23,6 @@ const raw = (): RawSettings => ({
 const opts = {
   boardId: '123',
   isProduction: false,
-  requireTrainerGroups: false,
   readAt: 1_760_000_000_000,
 };
 
@@ -85,29 +85,6 @@ describe('buildSettingsSnapshot', () => {
    * the GROUP_POLICY default, NOT the live override — quietly changing who is eligible
    * on the very deploy that was supposed to change nothing but the source.
    */
-  describe('trainer groups during phase 1', () => {
-    it('uses the effective env selection, not the code default', () => {
-      const snapshot = buildSettingsSnapshot(raw(), {
-        ...opts,
-        env: { RECOMMENDABLE_TRAINER_GROUPS: 'nieuwe_groep__1' },
-      });
-
-      expect(snapshot.app.recommendableTrainerGroups).toEqual(['nieuwe_groep__1']);
-    });
-
-    it('prefers the board row once one exists', () => {
-      const withRow = raw();
-      withRow.appRows.push({ key: 'RECOMMENDABLE_TRAINER_GROUPS', value: 'topics' });
-
-      const snapshot = buildSettingsSnapshot(withRow, {
-        ...opts,
-        env: { RECOMMENDABLE_TRAINER_GROUPS: 'nieuwe_groep__1' },
-      });
-
-      expect(snapshot.app.recommendableTrainerGroups).toEqual(['topics']);
-    });
-  });
-
   /**
    * The fingerprint exists so a stored outcome can be lined up against the board's
    * activity log despite the five-minute cache. It must move when the effective values
@@ -163,35 +140,40 @@ describe('buildSettingsSnapshot', () => {
 });
 
 /**
- * The check that proves the phase-2a migration actually landed.
+ * The check that proves the fase-2a migration actually landed.
  *
  * `RECOMMENDABLE_TRAINER_GROUPS` is deliberately RETAINED in the environment for
- * rollback, so if required keys were checked against the merged rows the retained
- * variable would satisfy `requireTrainerGroups: true` on a board with no
- * `TRAINERGROEPEN` row — and deploy ④ would report success having verified nothing.
+ * rollback, so if required keys were checked against the MERGED rows the retained
+ * variable would satisfy the requirement on a board with no `TRAINERGROEPEN` row — and
+ * this deploy would report success having verified nothing.
  */
 describe('required keys are satisfied by the BOARD, never by env', () => {
   it('still fails when the row is missing but the rollback env var is set', () => {
+    const noRow = raw();
+    noRow.appRows = noRow.appRows.filter((r) => r.key !== 'RECOMMENDABLE_TRAINER_GROUPS');
+
     expect(() =>
-      buildSettingsSnapshot(raw(), {
+      buildSettingsSnapshot(noRow, {
         ...opts,
-        requireTrainerGroups: true,
         env: { RECOMMENDABLE_TRAINER_GROUPS: 'topics' },
       })
     ).toThrow(/TRAINERGROEPEN/);
   });
 
-  it('passes once the row is actually on the board', () => {
-    const withRow = raw();
-    withRow.appRows.push({ key: 'RECOMMENDABLE_TRAINER_GROUPS', value: 'topics' });
+  /**
+   * The env value must not reach the config even as a fallback.
+   *
+   * Before this deploy an absent row let `withEnvFallbacks` inject the environment's
+   * value. Now the board wins outright, so a stale rollback variable naming a DIFFERENT
+   * group cannot quietly change who is eligible.
+   */
+  it('ignores the rollback env var entirely when the row is on the board', () => {
+    const snapshot = buildSettingsSnapshot(raw(), {
+      ...opts,
+      env: { RECOMMENDABLE_TRAINER_GROUPS: 'nieuwe_groep__1' },
+    });
 
-    expect(() =>
-      buildSettingsSnapshot(withRow, {
-        ...opts,
-        requireTrainerGroups: true,
-        env: { RECOMMENDABLE_TRAINER_GROUPS: 'nieuwe_groep__1' },
-      })
-    ).not.toThrow();
+    expect(snapshot.app.recommendableTrainerGroups).toEqual(['topics']);
   });
 
   it('an env value cannot stand in for a deleted board row either', () => {
@@ -204,12 +186,11 @@ describe('required keys are satisfied by the BOARD, never by env', () => {
   });
 
   /** An empty selection reaches the snapshot as its own state, not as an absent row. */
-  it('reports an empty selection distinctly once the row is required', () => {
+  it('reports an empty selection distinctly', () => {
     const empty = { ...raw(), emptyGroupSelection: true };
+    empty.appRows = empty.appRows.filter((r) => r.key !== 'RECOMMENDABLE_TRAINER_GROUPS');
 
-    expect(() =>
-      buildSettingsSnapshot(empty, { ...opts, requireTrainerGroups: true })
-    ).toThrow(/geen groep geselecteerd/);
+    expect(() => buildSettingsSnapshot(empty, opts)).toThrow(/geen groep geselecteerd/);
   });
 });
 

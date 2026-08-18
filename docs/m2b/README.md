@@ -208,7 +208,18 @@ blocks every older generation from writing, so the training ends with no answer 
 
 ## 6. Configuring which trainer groups count
 
-`RECOMMENDABLE_TRAINER_GROUPS` (env, comma-separated Monday group ids).
+The **`TRAINERGROEPEN` row on the Instellingen board**, chosen in its `Groepen` dropdown.
+The board is the only source: `RECOMMENDABLE_TRAINER_GROUPS` is no longer read at all.
+
+- **Row absent** → the read is **refused** (`assertRequiredKeys`), like any other missing
+  board row. There is no environment fallback and no code default.
+- **Row present, nothing selected** → refused with its own message, because "create the
+  row" and "fill it in" are different instructions for whoever is looking at the board.
+- **The `Groepen` column deleted** → refused by `SETTINGS_ENGINE_COLUMNS`. Monday omits an
+  id it does not recognise, so without that assertion a deleted column reads exactly like
+  an empty selection.
+
+Historic behaviour of the env variable, kept for reading older builds:
 
 - **Absent** → falls back to the `GROUP_POLICY` default (`topics`, `nieuwe_groep__1`).
 - **Present but empty** → **rejected**. Clearing it would make every training GEEN
@@ -293,7 +304,7 @@ actual request goes through a route file.
 | `GOOGLE_MAPS_API_KEY` | travel | Needs the **Routes API** enabled *and* allowed in the key's restrictions. |
 | `OPENROUTER_API_KEY` | address cleanup | |
 | `ADDRESS_HASH_KEY` | travel cache + artifact | HMAC for keyed fingerprints. **Required in production.** |
-| `RECOMMENDABLE_TRAINER_GROUPS` | eligibility | See §6. **Rollback-only** since the Instellingen cutover: the board is the source, and this is read only as a fallback until phase 2a's `TRAINERGROEPEN` row exists. Keep it configured — a rollback lands on a build that still needs it. |
+| `RECOMMENDABLE_TRAINER_GROUPS` | — | **Rollback-only, and no longer read.** The `TRAINERGROEPEN` row on the Instellingen board is the sole source (§6); this variable is not consulted even as a fallback. Keep it configured until the cutover is proven stable — a Vercel code rollback lands on a build that still needs it — then delete it as its own deliberate step. |
 | `HQ_ADRES`, `TRAVEL_RATE_*`, `TRAVEL_TIME_THRESHOLD_MINUTES`, `TRAVEL_TIME_FEE_PER_MINUTE_CENTS` | — | **Rollback-only.** These now come from the **Instellingen board** (5102171946): `HQ ADRES`, `REISTARIEF TRAINERS`, `REISTARIEF HQ`, `REISTIJD DREMPEL`, `REISTIJD VERGOEDING`. **Do not delete them yet** — a Vercel code rollback does not restore deleted variables, and the previous build's `buildAppConfig` throws when the financial ones are absent. Remove them as a deliberate step once the cutover is stable. |
 | `TRAVEL_TIME_MODE`, `THRESHOLD_HOURS` | config | **Still env, permanently.** Deliberately kept OFF the board — `hourly_rate` throws in `travelTimeCompensation`, and `THRESHOLD_HOURS` is read by nothing yet, so an editable knob would be a trap. `buildSettingsSnapshot` injects them from env as `OFF_BOARD_KEYS`: "not ITG-editable" is not "not configured". |
 | `MONDAY_INSTELLINGEN_BOARD_ID`, `MONDAY_INSTELLINGEN_NOTITIES_GROUP_ID` | settings | **Preview and local ONLY.** Production reads the pinned constant, and setting either in production makes the app refuse to boot rather than quietly prefer one of two values. They travel as a pair — Monday generates the Notities group id per board. |
@@ -354,16 +365,17 @@ write records against arbitrary item ids.
 - **A per-generation compute lease.** Two deliveries can both compute before either wins
   the `SET NX`, so duplicate provider charges are possible when execution exceeds the
   QStash timeout. Accepted as a rare cost; the lease is the fix if it shows up in billing.
-- **The Instellingen board — the next pass.** Travel rates, the travel-time fee, the
-  thresholds and `RECOMMENDABLE_TRAINER_GROUPS` currently live in **env**, which is the
-  wrong home: `docs/build/03-aanbevelingsengine.md` says "Alle bedragen en drempels
-  komen uit het Instellingen-board, nooit uit de code", and the groups setting *is* the
-  fase-2a deliverable "selecteerbare trainergroepen". Today ITG cannot change any of
-  them without a developer and a redeploy. The move is cheap because `buildAppConfig`
-  already takes generic key/value rows — only their source changes — but the reader
-  must keep the same fail-closed rule: a missing financial row in production is an
-  error, never a default. Config is rates and group ids, no PII, so a short Redis cache
-  is fine here (unlike the roster).
+- **The Instellingen board — DONE (fase 1 + 2a).** Travel rates, the travel-time fee, the
+  thresholds and the trainer-group selection now all live on board `5102171946`, and ITG
+  edits them without a developer or a redeploy. Kept here as the record of why it was
+  worth doing: `docs/build/03-aanbevelingsengine.md` says "Alle bedragen en drempels komen
+  uit het Instellingen-board, nooit uit de code", and the groups setting *is* the fase-2a
+  deliverable "selecteerbare trainergroepen". The move was cheap because `buildAppConfig`
+  already took generic key/value rows — only their source changed — and the reader kept
+  the same fail-closed rule throughout: a missing row is an error, never a default. Config
+  is rates and group ids, no PII, so the short Redis cache is fine here (unlike the
+  roster). Still open: `PLANNING GROEPEN` (the trigger groups, next bullet) and the
+  Schaduwpool unlock, which needs options appended to the live `Groepen` dropdown.
 - **Trigger groups on the Instellingen board — read this before moving them there.**
   `MONDAY_TRIGGER_GROUP_IDS` looks like ordinary config, but it is only *half* of a
   subscription. Monday delivers `item_moved_to_specific_group` **only for groups a

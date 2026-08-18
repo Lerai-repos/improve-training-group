@@ -12,13 +12,14 @@ const complete: ConfigRowLike[] = [
   { key: 'TRAVEL_RATE_CLIENT_CENTS_PER_KM', value: '45' },
   { key: 'TRAVEL_TIME_THRESHOLD_MINUTES', value: '90' },
   { key: 'TRAVEL_TIME_FEE_PER_MINUTE_CENTS', value: '100' },
+  { key: 'RECOMMENDABLE_TRAINER_GROUPS', value: 'topics' },
 ];
 
 const without = (key: string): ConfigRowLike[] => complete.filter((r) => r.key !== key);
 
 describe('assertRequiredKeys', () => {
   it('passes when every board-owned key is present', () => {
-    expect(() => assertRequiredKeys(complete, { requireTrainerGroups: false })).not.toThrow();
+    expect(() => assertRequiredKeys(complete)).not.toThrow();
   });
 
   /**
@@ -40,12 +41,12 @@ describe('assertRequiredKeys', () => {
     expect(buildAppConfig(rows, { isProduction: false }).hqAddress).toBe('Wolvenplein 25, Utrecht');
 
     // The board reader is not.
-    expect(() => assertRequiredKeys(rows, { requireTrainerGroups: false })).toThrow(/HQ ADRES/);
+    expect(() => assertRequiredKeys(rows)).toThrow(/HQ ADRES/);
   });
 
   it('rejects every other board-owned key too, not only the financial ones', () => {
     for (const key of REQUIRED_APP_KEYS) {
-      expect(() => assertRequiredKeys(without(key), { requireTrainerGroups: false })).toThrow();
+      expect(() => assertRequiredKeys(without(key))).toThrow();
     }
   });
 
@@ -53,32 +54,22 @@ describe('assertRequiredKeys', () => {
     const rows = complete.filter(
       (r) => r.key !== 'HQ_ADRES' && r.key !== 'TRAVEL_TIME_THRESHOLD_MINUTES'
     );
-    const run = (): void => assertRequiredKeys(rows, { requireTrainerGroups: false });
+    const run = (): void => assertRequiredKeys(rows);
 
     expect(run).toThrow(/HQ ADRES/);
     expect(run).toThrow(/REISTIJD DREMPEL/);
   });
 
   /**
-   * Phase 2a adds `TRAINERGROEPEN` to the required set — but only in the deploy AFTER
-   * the row exists, or every board becomes a missing-key outage. The flag is that
-   * ordering made explicit rather than left to a code comment.
+   * The fase-2a cutover has landed: the group selection is a required BOARD key, with no
+   * flag and no environment fallback left. The flag existed only to sequence the rollout;
+   * deleting it is what guarantees no caller can ask for the lenient reading any more.
    */
-  describe('TRAINERGROEPEN, once phase 2a has landed', () => {
-    it('is not required before the migration', () => {
-      expect(() => assertRequiredKeys(complete, { requireTrainerGroups: false })).not.toThrow();
-    });
-
-    it('is required after it', () => {
-      expect(() => assertRequiredKeys(complete, { requireTrainerGroups: true })).toThrow(
+  describe('TRAINERGROEPEN', () => {
+    it('is required like every other board key', () => {
+      expect(() => assertRequiredKeys(without('RECOMMENDABLE_TRAINER_GROUPS'))).toThrow(
         /TRAINERGROEPEN/
       );
-
-      const withGroups = [
-        ...complete,
-        { key: 'RECOMMENDABLE_TRAINER_GROUPS', value: 'topics' },
-      ];
-      expect(() => assertRequiredKeys(withGroups, { requireTrainerGroups: true })).not.toThrow();
     });
 
     /**
@@ -88,25 +79,27 @@ describe('assertRequiredKeys', () => {
      * be broken in a new way by following our own error message.
      */
     it('distinguishes an empty selection from a missing row', () => {
-      const absent = () => assertRequiredKeys(complete, { requireTrainerGroups: true });
-      const empty = () =>
-        assertRequiredKeys(complete, { requireTrainerGroups: true, emptySelection: true });
+      const absent = (): void => assertRequiredKeys(without('RECOMMENDABLE_TRAINER_GROUPS'));
+      const empty = (): void => assertRequiredKeys(complete, { emptySelection: true });
 
       expect(absent).toThrow(/mist de rij/);
       expect(empty).toThrow(/geen groep geselecteerd/);
       expect(empty).not.toThrow(/mist de rij/);
     });
 
-    it('says nothing about an empty selection before the migration', () => {
-      expect(() =>
-        assertRequiredKeys(complete, { requireTrainerGroups: false, emptySelection: true })
-      ).not.toThrow();
+    /**
+     * An empty selection is fatal even when the row itself is present, which is the case
+     * the env fallback used to swallow: before this deploy it read as "absent", the
+     * environment answered, and the board edit had no visible effect at all.
+     */
+    it('refuses an empty selection on an otherwise complete board', () => {
+      expect(() => assertRequiredKeys(complete, { emptySelection: true })).toThrow();
     });
   });
 
   it('reports the BOARD name, not the internal key — that is what ITG can act on', () => {
-    expect(() => assertRequiredKeys(without('TRAVEL_TIME_FEE_PER_MINUTE_CENTS'), {
-      requireTrainerGroups: false,
-    })).toThrow(/REISTIJD VERGOEDING/);
+    expect(() => assertRequiredKeys(without('TRAVEL_TIME_FEE_PER_MINUTE_CENTS'))).toThrow(
+      /REISTIJD VERGOEDING/
+    );
   });
 });

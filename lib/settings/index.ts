@@ -24,7 +24,13 @@ export { buildRateCards, REQUIRED_RATE_KEYS } from './rates';
 export { assertRequiredKeys, REQUIRED_APP_KEYS } from './required';
 export { CATEGORIES, INITIAL_ROWS } from './initial-rows';
 export type { InitialRow } from './initial-rows';
-export { fetchGroepenLabels, readSettings, GROEPEN_COLUMN, SETTINGS_EXPECTED_COLUMNS } from './read';
+export {
+  fetchGroepenLabels,
+  readSettings,
+  GROEPEN_COLUMN,
+  SETTINGS_ENGINE_COLUMNS,
+  SETTINGS_EXPECTED_COLUMNS,
+} from './read';
 export {
   activeOptionIds,
   deriveOptionMap,

@@ -21,11 +21,6 @@ export interface SettingsLoaderDeps {
   client: MondayGraphQLClient;
   kv: KvStore;
   isProduction: boolean;
-  /**
-   * False until the phase-2a row exists and has been verified. See the rollout order:
-   * turning this on before the row is created makes every board a missing-key outage.
-   */
-  requireTrainerGroups?: boolean;
   now?: () => number;
   env?: Readonly<Record<string, string | undefined>>;
   /** Overridden in tests; production reads the pinned pair. */
@@ -45,7 +40,6 @@ export async function loadSettingsOnce(
   client: MondayGraphQLClient,
   opts: {
     isProduction?: boolean;
-    requireTrainerGroups?: boolean;
     env?: Readonly<Record<string, string | undefined>>;
     pinned?: SettingsBoardConfig;
     now?: () => number;
@@ -58,7 +52,6 @@ export async function loadSettingsOnce(
   return buildSettingsSnapshot(raw, {
     boardId: board.boardId,
     isProduction: opts.isProduction ?? false,
-    requireTrainerGroups: opts.requireTrainerGroups ?? false,
     readAt: (opts.now ?? Date.now)(),
     env,
   });
@@ -79,7 +72,6 @@ export function createSettingsLoader(deps: SettingsLoaderDeps): SharedCache<Sett
       return buildSettingsSnapshot(raw, {
         boardId: board.boardId,
         isProduction: deps.isProduction,
-        requireTrainerGroups: deps.requireTrainerGroups ?? false,
         readAt: now(),
         env,
       });

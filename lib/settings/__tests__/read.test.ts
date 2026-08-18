@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { readSettings, SETTINGS_EXPECTED_COLUMNS } from '../read';
+import { readSettings, SETTINGS_ENGINE_COLUMNS } from '../read';
 
 import type { BoardMeta, MondayGraphQLClient } from '@lib/monday/graphql-client';
 
@@ -41,7 +41,7 @@ const board = (over: Partial<BoardMeta> = {}): BoardMeta => ({
     { id: SETTINGS, title: 'Instellingen' },
     { id: NOTITIES, title: 'Notities' },
   ],
-  columns: SETTINGS_EXPECTED_COLUMNS.map((c) => ({
+  columns: SETTINGS_ENGINE_COLUMNS.map((c) => ({
     id: c.id,
     title: c.id,
     type: c.type,
@@ -114,6 +114,7 @@ describe('readSettings', () => {
         { id: 'itg_waarde', title: 'Waarde', type: 'numbers', settings_str: null },
         { id: 'itg_categorie', title: 'Categorie', type: 'status', settings_str: null },
         { id: 'itg_omschrijving', title: 'Omschrijving', type: 'text', settings_str: null },
+        { id: 'itg_groepen', title: 'Groepen', type: 'dropdown', settings_str: null },
       ],
     });
 
@@ -151,8 +152,9 @@ describe('readSettings', () => {
     it('ignores a brand-new note that has no category yet', async () => {
       const rows = [...COMPLETE, row('8', 'even opletten hier', '', NOTITIES)];
 
-      await expect(readSettings(stubClient(rows, board({ items_count: 8 })), config)).resolves
-        .toBeDefined();
+      await expect(
+        readSettings(stubClient(rows, board({ items_count: 8 })), config)
+      ).resolves.toBeDefined();
     });
 
     it('throws on an unknown name OUTSIDE the Notities group', async () => {
@@ -197,17 +199,17 @@ describe('readSettings', () => {
   it('throws on a duplicate key — two rows disagreeing is worse than none', async () => {
     const rows = [...COMPLETE, row('8', 'REISTARIEF TRAINERS', '0.30')];
 
-    await expect(
-      readSettings(stubClient(rows, board({ items_count: 8 })), config)
-    ).rejects.toThrow(/REISTARIEF TRAINERS/);
+    await expect(readSettings(stubClient(rows, board({ items_count: 8 })), config)).rejects.toThrow(
+      /REISTARIEF TRAINERS/
+    );
   });
 
   it('throws on a duplicate tariff row too', async () => {
     const rows = [...COMPLETE, row('8', 'TARIEF 2020 - 2024', '90')];
 
-    await expect(
-      readSettings(stubClient(rows, board({ items_count: 8 })), config)
-    ).rejects.toThrow(/TARIEF 2020 - 2024/);
+    await expect(readSettings(stubClient(rows, board({ items_count: 8 })), config)).rejects.toThrow(
+      /TARIEF 2020 - 2024/
+    );
   });
 
   it('throws on a malformed value rather than skipping the row', async () => {
@@ -226,19 +228,20 @@ describe('readSettings', () => {
   });
 
   /**
-   * The board BEFORE the migration, asserted as a property rather than assumed: deploy
-   * ③ ships this reader while production still has seven rows and no dropdown, so any
-   * change that made the column mandatory would be a total outage on arrival.
+   * The fase-2a cutover, as a property rather than a comment.
+   *
+   * A deleted `Groepen` column used to read exactly like "the row is there but nothing is
+   * selected" — Monday omits an id it does not recognise — and the environment then
+   * answered with a perfectly plausible set of trainers. Now the read refuses.
    */
-  it('reads a board without the Groepen column exactly as before', async () => {
-    const client = stubClient(COMPLETE);
-    const result = await readSettings(client, config);
+  it('refuses a board that has lost the Groepen column', async () => {
+    const withoutDropdown = board({
+      columns: board().columns.filter((c) => c.id !== 'itg_groepen'),
+    });
 
-    const [, fields] = vi.mocked(client.fetchBoardItems).mock.calls[0];
-    expect(fields).not.toContain('itg_groepen');
-    expect(client.query).not.toHaveBeenCalled();
-    expect(result.appRows.some((r) => r.key === 'RECOMMENDABLE_TRAINER_GROUPS')).toBe(false);
-    expect(result.emptyGroupSelection).toBe(false);
+    await expect(readSettings(stubClient(COMPLETE, withoutDropdown), config)).rejects.toThrow(
+      /itg_groepen/
+    );
   });
 });
 

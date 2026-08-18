@@ -39,20 +39,20 @@ export const REQUIRED_APP_KEYS: readonly string[] = [
   'TRAVEL_RATE_CLIENT_CENTS_PER_KM',
   'TRAVEL_TIME_THRESHOLD_MINUTES',
   'TRAVEL_TIME_FEE_PER_MINUTE_CENTS',
+  /**
+   * Required since the fase-2a cutover completed.
+   *
+   * It was a FLAG through the migration, because turning it on before the row existed
+   * would have made every board a missing-key outage. The row now exists and has been
+   * verified, so the flag is gone: there is no caller left that could ask for the lenient
+   * reading, which is the point of deleting the option rather than defaulting it.
+   */
+  'RECOMMENDABLE_TRAINER_GROUPS',
 ];
 
 const TRAINER_GROUPS_KEY = 'RECOMMENDABLE_TRAINER_GROUPS';
 
 export interface RequiredKeyOptions {
-  /**
-   * Whether `TRAINERGROEPEN` must be present.
-   *
-   * False until the phase-2a migration has created the row and been verified; true in
-   * the deploy after. Making it a flag rather than a constant is the rollout ordering
-   * expressed in code — turning it on too early makes every existing board a
-   * missing-key outage.
-   */
-  requireTrainerGroups: boolean;
   /**
    * The row is on the board but nothing is selected.
    *
@@ -66,9 +66,9 @@ export interface RequiredKeyOptions {
 
 export function assertRequiredKeys(
   rows: readonly ConfigRowLike[],
-  { requireTrainerGroups, emptySelection = false }: RequiredKeyOptions
+  { emptySelection = false }: RequiredKeyOptions = {}
 ): void {
-  if (requireTrainerGroups && emptySelection) {
+  if (emptySelection) {
     throw new Error(
       `"${BOARD_NAME_BY_KEY[TRAINER_GROUPS_KEY]}" staat op het Instellingen-board, maar er is ` +
         'geen groep geselecteerd in de kolom Groepen — kies er minimaal één'
@@ -76,11 +76,7 @@ export function assertRequiredKeys(
   }
 
   const present = new Set(rows.map((row) => row.key));
-  const wanted = requireTrainerGroups
-    ? [...REQUIRED_APP_KEYS, TRAINER_GROUPS_KEY]
-    : REQUIRED_APP_KEYS;
-
-  const missing = wanted.filter((key) => !present.has(key));
+  const missing = REQUIRED_APP_KEYS.filter((key) => !present.has(key));
   if (missing.length === 0) {
     return;
   }

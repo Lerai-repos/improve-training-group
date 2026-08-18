@@ -26,10 +26,30 @@ import type { DropdownLabel, DropdownSelection } from './groepen';
  * config reader on a mutable name is the mistake this codebase has already rejected for
  * agenda columns. A rename is then harmless, which is the point.
  */
+/**
+ * The columns that make a board recognisably the Instellingen board.
+ *
+ * Deliberately WITHOUT `itg_groepen`: `instellingen:groepen` and `instellingen:create`
+ * assert this list to prove they are pointed at the right board *before* creating that
+ * column, so including it would make provisioning require what it exists to add.
+ */
 export const SETTINGS_EXPECTED_COLUMNS: readonly ExpectedColumn[] = [
   { id: 'itg_waarde', type: 'text' },
   { id: 'itg_categorie', type: 'status' },
   { id: 'itg_omschrijving', type: 'text' },
+];
+
+/**
+ * What the ENGINE insists on: the board's identity plus the trainer-group dropdown.
+ *
+ * Strict since the fase-2a cutover. Monday omits a column id it does not recognise
+ * rather than erroring, so a deleted `Groepen` column would read as "the row exists but
+ * nothing is selected" — and before this deploy that fell back to the environment and
+ * carried on with a perfectly plausible set of trainers. Now it stops.
+ */
+export const SETTINGS_ENGINE_COLUMNS: readonly ExpectedColumn[] = [
+  ...SETTINGS_EXPECTED_COLUMNS,
+  { id: 'itg_groepen', type: 'dropdown' },
 ];
 
 const VALUE_COLUMN = 'itg_waarde';
@@ -55,15 +75,18 @@ const duplicateMessage = (name: string): string =>
  * `group { id }` is equally load-bearing: it is how a note is told from a setting, and
  * it has to be right from the instant an item is created.
  *
- * The dropdown is asked for only when the board HAS it, so a pre-migration board is
- * queried exactly as it was before this existed. Its selections arrive through the typed
- * `DropdownValue` fragment rather than as `text`: `text` is a comma-joined list of label
- * NAMES, and a group title containing a comma would split into garbage.
+ * The dropdown is always asked for: `SETTINGS_ENGINE_COLUMNS` proves it exists before we
+ * get here, so the pre-migration branch this used to carry is now unreachable. Its
+ * selections arrive through the typed `DropdownValue` fragment rather than as `text`:
+ * `text` is a comma-joined list of label NAMES, and a group title containing a comma
+ * would split into garbage.
  */
-function itemFields(hasGroepen: boolean): string {
-  const ids = hasGroepen ? `"${VALUE_COLUMN}", "${GROEPEN_COLUMN}"` : `"${VALUE_COLUMN}"`;
-  const selected = hasGroepen ? ' ... on DropdownValue { values { id label } }' : '';
-  return `id name updated_at group { id } column_values(ids: [${ids}]) { id text${selected} }`;
+function itemFields(): string {
+  return (
+    `id name updated_at group { id } ` +
+    `column_values(ids: ["${VALUE_COLUMN}", "${GROEPEN_COLUMN}"]) ` +
+    `{ id text ... on DropdownValue { values { id label } } }`
+  );
 }
 
 interface SettingsCell {
@@ -203,7 +226,7 @@ export async function readSettings(
 
   // Required ids with the expected types. Extra columns are IGNORED on purpose: on a
   // board everyone can edit, a helper column is ordinary and must not stop the engine.
-  assertColumns(meta, SETTINGS_EXPECTED_COLUMNS);
+  assertColumns(meta, SETTINGS_ENGINE_COLUMNS);
 
   if (!meta.groups.some((g) => g.id === notitiesGroupId)) {
     throw new Error(
@@ -212,12 +235,7 @@ export async function readSettings(
     );
   }
 
-  const hasGroepen = meta.columns.some((c) => c.id === GROEPEN_COLUMN);
-  const items = await client.fetchBoardItems<SettingsItem>(
-    boardId,
-    itemFields(hasGroepen),
-    meta.items_count
-  );
+  const items = await client.fetchBoardItems<SettingsItem>(boardId, itemFields(), meta.items_count);
 
   const appRows: ConfigRowLike[] = [];
   const rateCents = new Map<string, number>();

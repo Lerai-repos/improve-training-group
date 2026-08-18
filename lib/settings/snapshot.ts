@@ -60,23 +60,11 @@ export function provenanceOf(snapshot: SettingsSnapshot): SettingsProvenance {
  */
 const OFF_BOARD_KEYS = ['TRAVEL_TIME_MODE', 'THRESHOLD_HOURS'] as const;
 
-/**
- * Phase 1 only: the board has no `TRAINERGROEPEN` row yet, so without this the group
- * selection would fall back to `CONFIG_DEFAULTS` — the `GROUP_POLICY` default rather
- * than the live `RECOMMENDABLE_TRAINER_GROUPS` — changing who is eligible on the very
- * deploy that was meant to change nothing but where the values come from.
- *
- * Dropped in the deploy that makes `TRAINERGROEPEN` required.
- */
-const GROUPS_KEY = 'RECOMMENDABLE_TRAINER_GROUPS';
-
 type Env = Readonly<Record<string, string | undefined>>;
 
 export interface SnapshotOptions {
   boardId: string;
   isProduction: boolean;
-  /** False until the phase-2a row exists and has been verified. */
-  requireTrainerGroups: boolean;
   readAt: number;
   env?: Env;
 }
@@ -89,7 +77,7 @@ function withEnvFallbacks(boardRows: readonly ConfigRowLike[], env: Env): Config
   const present = new Set(boardRows.map((row) => row.key));
   const rows = [...boardRows];
 
-  for (const key of [...OFF_BOARD_KEYS, GROUPS_KEY]) {
+  for (const key of OFF_BOARD_KEYS) {
     if (present.has(key)) {
       continue;
     }
@@ -146,23 +134,19 @@ function fingerprintOf(app: AppConfig, rateCards: readonly RateCard[]): string {
 
 export function buildSettingsSnapshot(
   raw: RawSettings,
-  { boardId, isProduction, requireTrainerGroups, readAt, env = process.env }: SnapshotOptions
+  { boardId, isProduction, readAt, env = process.env }: SnapshotOptions
 ): SettingsSnapshot {
   /**
    * Required keys are checked against the BOARD ROWS, before any env fallback.
    *
-   * Checking the merged set would let the retained rollback variables satisfy the
-   * requirement: `RECOMMENDABLE_TRAINER_GROUPS` is deliberately kept configured for
-   * rollback, so a merged check would pass `requireTrainerGroups: true` even with no
-   * `TRAINERGROEPEN` row on the board — defeating the entire point of the final
-   * phase-2a deploy, silently, on the one check meant to prove the migration landed.
+   * Load-bearing while the rollback variables are still configured: an environment that
+   * still carries `RECOMMENDABLE_TRAINER_GROUPS` would satisfy a merged check even with
+   * no `TRAINERGROEPEN` row on the board, defeating the whole point of this deploy on the
+   * one check meant to prove the migration landed.
    *
    * A required key is BY DEFINITION one the board owns. Env can never stand in for it.
    */
-  assertRequiredKeys(raw.appRows, {
-    requireTrainerGroups,
-    emptySelection: raw.emptyGroupSelection,
-  });
+  assertRequiredKeys(raw.appRows, { emptySelection: raw.emptyGroupSelection });
 
   const rows = withEnvFallbacks(raw.appRows, env);
 

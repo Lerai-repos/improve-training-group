@@ -7,11 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import {
-  MONDAY_API_VERSION,
-  recommendableGroups,
-  TRAINERS_BOARD,
-} from '@lib/monday/board-config';
+import { MONDAY_API_VERSION, recommendableGroups, TRAINERS_BOARD } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
 import {
@@ -218,11 +214,11 @@ async function ensureBoard(ctx: Ctx): Promise<string> {
  */
 async function clearMondayDefaults(ctx: Ctx, boardId: string): Promise<string[]> {
   const [meta] = await ctx.read.getSchema([boardId]);
-  const items = await ctx.read.fetchBoardItems<{ id: string; name: string; updated_at?: string | null }>(
-    boardId,
-    'id name updated_at',
-    meta?.items_count ?? null
-  );
+  const items = await ctx.read.fetchBoardItems<{
+    id: string;
+    name: string;
+    updated_at?: string | null;
+  }>(boardId, 'id name updated_at', meta?.items_count ?? null);
 
   const samples: SampleState = {
     phase: 'captured',
@@ -319,11 +315,11 @@ async function assertPristineInstellingen(ctx: Ctx, meta: BoardMeta): Promise<vo
     refuse(`het heeft ${meta.groups.length} groepen; een net aangemaakt board heeft er één`);
   }
 
-  const items = await ctx.read.fetchBoardItems<{ id: string; name: string; updated_at?: string | null }>(
-    meta.id,
-    'id name updated_at',
-    meta.items_count
-  );
+  const items = await ctx.read.fetchBoardItems<{
+    id: string;
+    name: string;
+    updated_at?: string | null;
+  }>(meta.id, 'id name updated_at', meta.items_count);
 
   /**
    * A POSITIVE signature, not merely the absence of a stranger.
@@ -435,7 +431,11 @@ async function ensureGroup(ctx: Ctx, boardId: string, title: string): Promise<st
   return result.create_group.id;
 }
 
-async function ensureColumns(ctx: Ctx, boardId: string, meta: BoardMeta | undefined): Promise<void> {
+async function ensureColumns(
+  ctx: Ctx,
+  boardId: string,
+  meta: BoardMeta | undefined
+): Promise<void> {
   const byId = new Map((meta?.columns ?? []).map((c) => [c.id, c]));
 
   for (const expected of SETTINGS_EXPECTED_COLUMNS) {
@@ -556,12 +556,8 @@ async function verifyReadable(
     const snapshot = buildSettingsSnapshot(raw, {
       boardId,
       isProduction: false,
-      /**
-       * A board this script builds is COMPLETE, so it is verified against the strict
-       * rules rather than the transitional ones — otherwise the one command that could
-       * catch a missing `TRAINERGROEPEN` row is the one that skips the check.
-       */
-      requireTrainerGroups: true,
+      // There are no transitional rules left to opt out of: every reader requires
+      // `TRAINERGROEPEN` since the fase-2a cutover, this one included.
       readAt: Date.now(),
       env: process.env,
     });
@@ -587,7 +583,9 @@ async function main(): Promise<void> {
   // straight through to the CREATE path — which with `--apply` and no prior intent
   // makes a SECOND board out of what was meant to be a recovery.
   if (resumeAt >= 0 && (resumeId === undefined || resumeId.startsWith('--'))) {
-    throw new Error('--resume vereist een board-id: pnpm instellingen:create --apply --resume <boardId>');
+    throw new Error(
+      '--resume vereist een board-id: pnpm instellingen:create --apply --resume <boardId>'
+    );
   }
 
   const token = process.env.MONDAY_API_TOKEN;
@@ -605,8 +603,7 @@ async function main(): Promise<void> {
    * null: that is the lost-`create_board`-response case, where reusing the key is the
    * entire point.
    */
-  const sameRun =
-    previous !== null && (previous.boardId === resumeId || previous.boardId === null);
+  const sameRun = previous !== null && (previous.boardId === resumeId || previous.boardId === null);
 
   const intent: Intent = resumeId
     ? {
