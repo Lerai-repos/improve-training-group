@@ -65,3 +65,6 @@ yarn-error.log*
 
 # One-shot intent file for `pnpm instellingen:create` (holds the new board id).
 .instellingen-create.json
+
+# Gegenereerde voorbeeldbriefings: bevatten echte klant- en persoonsgegevens
+briefing-demo/
