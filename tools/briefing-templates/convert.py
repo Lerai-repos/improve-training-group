@@ -72,7 +72,33 @@ def set_cell(tc, text):
     t.text = text
     t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
 
+def drop_extra_columns(tbl, keep=2):
+    """Kolommen voorbij `keep` weggooien, en zeggen dat we het doen.
+
+    Het FT-sjabloon heeft een DERDE kolom met een ingevuld voorbeeld: een echte klantnaam,
+    een echt thema en de naam plus het 06-nummer van een accountmanager. Alleen kolom 1 en
+    2 aanpassen liet die gegevens gewoon staan, en ze waren daarmee op weg naar Git.
+
+    Ook `tblGrid` moet mee krimpen, anders rekent Word met meer kolommen dan er zijn.
+    """
+    trs = tbl.findall(W + 'tr')
+    widest = max((len(tr.findall(W + 'tc')) for tr in trs), default=0)
+    if widest <= keep:
+        return 0
+    for tr in trs:
+        for tc in tr.findall(W + 'tc')[keep:]:
+            tr.remove(tc)
+    grid = tbl.find(W + 'tblGrid')
+    if grid is not None:
+        for col in grid.findall(W + 'gridCol')[keep:]:
+            grid.remove(col)
+    return widest - keep
+
+
 def convert_table(tbl):
+    dropped = drop_extra_columns(tbl)
+    if dropped:
+        print(f'  let op: {dropped} extra kolom(men) met voorbeelddata verwijderd')
     trs = tbl.findall(W + 'tr')
     by_label = {}
     for tr in trs:
@@ -87,6 +113,11 @@ def convert_table(tbl):
             src = copy.deepcopy(template_row)
             created.append(label)
         tcs = src.findall(W + 'tc')
+        if len(tcs) != 2:
+            raise SystemExit(
+                f'rij "{label}" heeft {len(tcs)} cellen, verwacht 2 — sjabloonopbouw '
+                'onverwacht, controleer met de hand'
+            )
         # Keep the template's own term (Workshop / Teambuilding / Cursus), but correct
         # CC's doubled-s spellings by falling back to the canonical label.
         keep = found if found and 'ss' not in found.lower() else label
