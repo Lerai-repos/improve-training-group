@@ -79,10 +79,25 @@ export const BRIEFING_AGENDA_COLUMNS = {
   opportunity: 'board_relation',
 } as const;
 
-/** Het Opportunitybord: alleen de stap naar de contactpersoon. */
+/** Het Opportunitybord waar de agenda naartoe koppelt. */
+export const OPPORTUNITY_BOARD = '1279052045';
+
 export const OPPORTUNITY_COLUMNS = {
   /** Board relation naar `Contacten 👫` (1279052020). */
   contact: 'deal_contact',
+  /**
+   * De achtergrondinformatie, bij ITG "de aanleidingtekst". Aangemaakt door ons met
+   * `pnpm opportunity:achtergrond`.
+   *
+   * Dirkje in `docs/correspondence/correspondence_august.md`: *"Denk dan in het opportunitybord
+   * een lang tekstveld. We gebruiken wel altijd meerdere alinea's."* Vandaar `long_text` en
+   * niet `text`.
+   *
+   * **Niet te verwarren met `beschrijving_2_0`** ("Beschrijving"), dat al op dit bord staat:
+   * daar staat de aanvraag van de klant zelf in, in de ik-vorm, inclusief dingen als "ik ben
+   * dinsdag telefonisch bereikbaar". Hooguit grondstof, geen briefingtekst.
+   */
+  achtergrond: 'itg_achtergrond',
 } as const;
 
 /**

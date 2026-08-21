@@ -59,6 +59,10 @@ interface FakeOpts {
   reverseTrainers?: boolean;
   /** Trainer-ids die in de groep `Acteurs` op het trainersbord staan. */
   actorIds?: string[];
+  /** Bootst een van type veranderde achtergrondkolom na. */
+  oppAchtergrondType?: string;
+  /** De tekst in `itg_achtergrond`; leeg is de begintoestand van die kolom. */
+  achtergrond?: string;
 }
 
 /** Een bord dat aan alle verwachtingen voldoet, tenzij de test iets omzet. */
@@ -106,7 +110,16 @@ function client(item: unknown, opts: FakeOpts = {}) {
     if (doc.includes('deal_contact')) {
       const ids = opts.noContact ? [] : (opts.contacts?.map((c) => c.id) ?? ['800']);
       return Promise.resolve({
-        items: [{ id: '300', name: 'Opp', column_values: [{ id: 'deal_contact', linked_item_ids: ids }] }],
+        items: [
+          {
+            id: '300',
+            name: 'Opp',
+            column_values: [
+              { id: 'deal_contact', linked_item_ids: ids },
+              { id: 'itg_achtergrond', text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.' },
+            ],
+          },
+        ],
       } as T);
     }
     if (doc.includes('tekst__1')) {
@@ -145,6 +158,12 @@ function client(item: unknown, opts: FakeOpts = {}) {
                   title: 'Contactpersoon',
                   type: opts.oppRelationType ?? 'board_relation',
                   settings_str: opts.oppSettings ?? '{"boardIds":[1279052020]}',
+                },
+                {
+                  id: 'itg_achtergrond',
+                  title: 'Achtergrondinformatie',
+                  type: opts.oppAchtergrondType ?? 'long_text',
+                  settings_str: '{}',
                 },
               ],
               items_count: 1,
@@ -466,6 +485,33 @@ describe('readBriefingTraining', () => {
       '1'
     );
     expect(t.missing.map((m) => m.label)).not.toContain('Trainer');
+  });
+
+  /**
+   * De kolom is op 20-Aug-2026 door ons aangemaakt en begon overal leeg. Tot ITG hem vult
+   * moet elke training dit melden — dat is precies waarom er een verplicht-veld-melding voor
+   * is en geen `«nog niet aangesloten»`-regel: de bron bestaat, hij is nog niet ingevuld.
+   */
+  it('reports an empty achtergrond column as a missing field', async () => {
+    const t = await readBriefingTraining(client(agendaItem(), { achtergrond: '' }), '1');
+    expect(t.achtergrond).toBe('');
+    expect(t.missing.map((m) => m.label)).toContain('Achtergrondinformatie');
+  });
+
+  it('reads the achtergrond text from the linked Opportunity', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), { achtergrond: 'Eerste alinea.\n\nTweede alinea.' }),
+      '1'
+    );
+    expect(t.achtergrond).toBe('Eerste alinea.\n\nTweede alinea.');
+    expect(t.missing.map((m) => m.label)).not.toContain('Achtergrondinformatie');
+  });
+
+  /** Een van type veranderde kolom is schemadrift en moet hard falen, niet stil leeglopen. */
+  it('fails when the achtergrond column changed type', async () => {
+    await expect(
+      readBriefingTraining(client(agendaItem(), { oppAchtergrondType: 'text' }), '1')
+    ).rejects.toThrow(/itg_achtergrond/);
   });
 
   /**

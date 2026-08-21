@@ -74,6 +74,14 @@ export interface BriefingTraining {
   readonly acteuraantal: number | null;
   /** Item-id van de gekoppelde Opportunity, voor de updates en de contactpersoon. */
   readonly opportunityItemId: string | null;
+  /**
+   * De achtergrondinformatie ("de aanleidingtekst") uit `itg_achtergrond` op de Opportunity.
+   *
+   * Ruwe tekst met regelafbrekingen; de alinea-indeling gebeurt in de opmaaklaag. Leeg is
+   * normaal zolang ITG de kolom nog aan het vullen is — hij is op 20-Aug-2026 door ons
+   * aangemaakt en begon dus overal leeg.
+   */
+  readonly achtergrond: string;
 
   /** Lege verplichte velden. Leeg betekent: klaar om te genereren. */
   readonly missing: readonly MissingField[];

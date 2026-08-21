@@ -39,6 +39,7 @@ const TRAINING: BriefingTraining = {
   trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false }],
   acteuraantal: null,
   opportunityItemId: null,
+  achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
   missing: [],
 };
 

@@ -21,6 +21,7 @@ import { agendaBoardId } from '@lib/monday/board-config';
 import {
   BRIEFING_AGENDA_COLUMNS,
   CONTACT_COLUMNS,
+  OPPORTUNITY_BOARD,
   OPPORTUNITY_COLUMNS,
   TRAINER_ACTEURS_GROUP,
 } from './columns';
@@ -30,9 +31,6 @@ import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 import type { BriefingTraining, BriefingTrainer, MissingField } from './types';
 
 const C = BRIEFING_AGENDA_COLUMNS;
-
-/** Het Opportunitybord waar de agenda naartoe koppelt. */
-const OPPORTUNITY_BOARD = '1279052045';
 
 /** Telefoonnummer op het trainersbord. Zelfde kolom die de aanbevelingen voor WhatsApp lezen. */
 const TRAINER_PHONE_COLUMN = 'telefoon_mkn1hbyh';
@@ -329,16 +327,23 @@ const OPPORTUNITY_EXPECTED_COLUMNS: ExpectedColumn[] = [
     type: 'board_relation',
     settingsIncludes: ['"boardIds":[1279052020]'],
   },
+  /**
+   * Door ons aangemaakt met `pnpm opportunity:achtergrond`. Hier controleren zodat een
+   * verwijderde of van type veranderde kolom hard faalt: Monday laat een onbekend kolom-id
+   * stilzwijgend weg, en dan is "de adviseur heeft het niet ingevuld" niet te onderscheiden
+   * van "de kolom bestaat niet meer".
+   */
+  { id: OPPORTUNITY_COLUMNS.achtergrond, type: 'long_text' },
 ];
 
 async function readContact(
   client: MondayGraphQLClient,
   opportunityItemId: string | null,
   agendaNaam: string
-): Promise<{ naam: string; telefoon: string } | null> {
+): Promise<{ contact: { naam: string; telefoon: string } | null; achtergrond: string }> {
   const naam = agendaNaam.trim();
   if (opportunityItemId === null) {
-    return naam === '' ? null : { naam, telefoon: '' };
+    return { contact: naam === '' ? null : { naam, telefoon: '' }, achtergrond: '' };
   }
   const [oppMeta] = await client.getSchema([OPPORTUNITY_BOARD]);
   if (oppMeta === undefined) {
@@ -350,8 +355,8 @@ async function readContact(
     `query ($ids: [ID!]) {
        items(ids: $ids) {
          id name
-         column_values(ids: ["${OPPORTUNITY_COLUMNS.contact}"]) {
-           id ... on BoardRelationValue { linked_item_ids }
+         column_values(ids: ["${OPPORTUNITY_COLUMNS.contact}", "${OPPORTUNITY_COLUMNS.achtergrond}"]) {
+           id text ... on BoardRelationValue { linked_item_ids }
          }
        }
      }`,
@@ -366,9 +371,15 @@ async function readContact(
    * telefoonnummer zonder dat iemand weet waarom.
    */
   assertAllResolved([opportunityItemId], oppItem === undefined ? [] : [String(oppItem.id)], 'Opportunity');
+  if (oppItem === undefined) {
+    // Onbereikbaar: assertAllResolved werpt hierboven al. Staat er zodat de rest van deze
+    // functie met een echte RawItem werkt in plaats van met een cast.
+    throw new Error(`Briefing: Opportunity ${opportunityItemId} kon niet worden opgehaald`);
+  }
+  const achtergrond = text(oppItem, OPPORTUNITY_COLUMNS.achtergrond);
   const linked = linkedIds(oppItem, OPPORTUNITY_COLUMNS.contact);
   if (linked.length === 0) {
-    return naam === '' ? null : { naam, telefoon: '' };
+    return { contact: naam === '' ? null : { naam, telefoon: '' }, achtergrond };
   }
 
   const contact = await client.query<{ items: RawItem[] }>(
@@ -404,9 +415,12 @@ async function readContact(
    */
   if (naam !== '') {
     const match = candidates.find((c) => c.naam.toLowerCase() === naam.toLowerCase());
-    return { naam, telefoon: match?.telefoon ?? '' };
+    return { contact: { naam, telefoon: match?.telefoon ?? '' }, achtergrond };
   }
-  return candidates.length === 1 ? (candidates[0] ?? null) : null;
+  return {
+    contact: candidates.length === 1 ? (candidates[0] ?? null) : null,
+    achtergrond,
+  };
 }
 
 export async function readBriefingTraining(
@@ -458,12 +472,13 @@ export async function readBriefingTraining(
   const people = cell(item, C.accountmanager).persons_and_teams ?? [];
   const amId = people.length > 0 ? String(people[0].id) : null;
 
-  const [themaNames, trainers, accountmanager, contactpersoon] = await Promise.all([
+  const [themaNames, trainers, accountmanager, opportunity] = await Promise.all([
     readLinkedNames(client, themaIds),
     readTrainers(client, trainerIds),
     readAccountmanager(client, amId),
     readContact(client, opportunityItemId, text(item, C.contactpersoonNaam)),
   ]);
+  const contactpersoon = opportunity.contact;
 
   const acteurRaw = text(item, C.acteuraantal);
   const training: BriefingTraining = {
@@ -488,6 +503,7 @@ export async function readBriefingTraining(
     trainers,
     acteuraantal: acteurRaw === '' ? null : Number(acteurRaw),
     opportunityItemId,
+    achtergrond: opportunity.achtergrond,
     missing: [],
   };
 
@@ -513,6 +529,14 @@ export async function readBriefingTraining(
    */
   if (trainers.every((t) => t.isActeur)) {
     missing.push({ column: C.trainerRelation, label: 'Trainer' });
+  }
+  /**
+   * De achtergrondinformatie staat op de Opportunity en wordt door de adviseur getypt. De
+   * kolom is op 20-Aug-2026 door ons aangemaakt en begon dus overal leeg; tot ITG hem vult
+   * meldt elke training dit veld als ontbrekend. Dat is de bedoeling.
+   */
+  if (opportunity.achtergrond.trim() === '') {
+    missing.push({ column: OPPORTUNITY_COLUMNS.achtergrond, label: 'Achtergrondinformatie' });
   }
   /**
    * Een label dat we niet kennen is erger dan een leeg label: `TMT`, `YNS`,

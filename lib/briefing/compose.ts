@@ -43,7 +43,7 @@ import {
   type HistoryRow,
   type SessionFacts,
 } from './blocks';
-import { isOpenIssue, notConnected } from './open-issues';
+import { isOpenIssue, notConnected, notDecided } from './open-issues';
 
 import type { BriefingTrainer, BriefingTraining } from './types';
 
@@ -112,9 +112,16 @@ export interface BriefingDocumentData {
 }
 
 const MISSING = {
-  achtergrond: notConnected('achtergrondinformatie', 'Briefings-board, ingevuld door de adviseur'),
+  achtergrond: notDecided(
+    'achtergrondinformatie (de aanleidingtekst)',
+    'de kolom Achtergrondinformatie op de gekoppelde Opportunity is nog leeg'
+  ),
   extraInfo: notConnected('extra informatie trainer', 'Monday-updates met "voor in briefing:"'),
-  bullets: notConnected('concept-inhoud', 'bullets per thema'),
+  bullets: notConnected(
+    'concept-inhoud',
+    'de standaardbullets per thema in Monday (skelettenbestand van ITG), of de afwijkende ' +
+      'versie die de AM er zelf in plakt'
+  ),
   inventarisatie: notConnected('inventarisatie klant', 'Google Form van het label'),
   reis: notConnected('km en reistijd', 'route van de trainer naar de locatie'),
   trainingscodeMc: notConnected('trainingscode MC', 'nog niet belegd, zie 06-briefing.md'),
@@ -158,7 +165,7 @@ export function composeBriefing(
     evaluatie: formatEvaluation(training.evaluatie),
     iecode: formatIeCode(training.ieCode),
     trainingscodeMc: extras.trainingscodeMc ?? MISSING.trainingscodeMc,
-    achtergrond: extras.achtergrond ?? [MISSING.achtergrond],
+    achtergrond: achtergrondAlineas(training, extras),
     extraInfo: extras.extraInfo ?? [MISSING.extraInfo],
     mondayChallenge: extras.mondayChallenge ?? false,
     bullets: extras.bullets ?? [MISSING.bullets],
@@ -166,6 +173,29 @@ export function composeBriefing(
     inventarisatie:
       extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
   };
+}
+
+/**
+ * De achtergrondinformatie als alinea's.
+ *
+ * Komt uit `itg_achtergrond` op de Opportunity — Dirkje: *"Denk dan in het opportunitybord een
+ * lang tekstveld. We gebruiken wel altijd meerdere alinea's."* `extras.achtergrond` blijft
+ * bestaan zodat een aanroeper hem kan overschrijven, maar de bron is nu de kolom.
+ *
+ * Een lege kolom is **geen ontbrekende bron** meer maar een leeg veld: de kolom bestaat, de
+ * adviseur heeft hem nog niet ingevuld. Dat hoort in `training.missing` thuis, niet in een
+ * `«…»`-regel. Wel blijft er iets zichtbaars in het document staan, want een lege sectie ziet
+ * eruit als een afgeronde briefing.
+ */
+function achtergrondAlineas(training: BriefingTraining, extras: BriefingExtras): readonly string[] {
+  if (extras.achtergrond !== undefined) {
+    return extras.achtergrond;
+  }
+  const alineas = training.achtergrond
+    .split('\n')
+    .map((r) => r.trim())
+    .filter((r) => r !== '');
+  return alineas.length > 0 ? alineas : [MISSING.achtergrond];
 }
 
 /** De gekoppelde personen die in de groep `Acteurs` staan; voor de voorinvulling. */

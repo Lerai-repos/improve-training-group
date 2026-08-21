@@ -36,6 +36,7 @@ const PROBIBLIO: BriefingTraining = {
   trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false }],
   acteuraantal: null,
   opportunityItemId: '2674263314',
+  achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
   missing: [],
 };
 
@@ -76,9 +77,43 @@ describe('composeBriefing', () => {
    */
   it('markeert elke bron die nog niet is aangesloten', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
-    expect(openIssues(data)).toHaveLength(7);
-    expect(data.achtergrond[0]).toContain('achtergrondinformatie');
+    expect(openIssues(data)).toHaveLength(6);
     expect(data.reis).toContain('km en reistijd');
+  });
+
+  /**
+   * De achtergrondinformatie komt uit `itg_achtergrond` op de gekoppelde Opportunity, zonder
+   * dat de aanroeper hem hoeft mee te geven. Zolang dat niet gebeurde, kreeg élke briefing
+   * een `«…»`-regel op de plek van een tekst die de adviseur allang had getypt.
+   */
+  it('neemt de achtergrondtekst van de Opportunity over', () => {
+    const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
+    expect(data.achtergrond).toEqual(['Probiblio ondersteunt openbare bibliotheken.']);
+  });
+
+  /** Dirkje: *"We gebruiken wel altijd meerdere alinea's."* */
+  it('splitst de achtergrondtekst in alinea’s', () => {
+    const data = composeBriefing(
+      { ...PROBIBLIO, achtergrond: 'Eerste alinea.\n\n  Tweede alinea.  \n' },
+      EMPTY_CHECKLIST
+    );
+    expect(data.achtergrond).toEqual(['Eerste alinea.', 'Tweede alinea.']);
+  });
+
+  /**
+   * Aangesloten en leeg, en tóch zichtbaar: de kolom bestaat, de adviseur heeft hem nog niet
+   * ingevuld. Een weggelaten sectie ziet eruit als een afgeronde briefing.
+   */
+  it('houdt een lege achtergrondkolom zichtbaar in het document', () => {
+    const data = composeBriefing({ ...PROBIBLIO, achtergrond: '   ' }, EMPTY_CHECKLIST);
+    expect(data.achtergrond[0]).toContain('achtergrondinformatie');
+    expect(openIssues(data)).toHaveLength(7);
+  });
+
+  /** De aanroeper mag hem nog steeds overschrijven — de kolom is de bron, niet de baas. */
+  it('laat een meegegeven achtergrond voorgaan op de kolom', () => {
+    const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST, { achtergrond: ['Eigen tekst.'] });
+    expect(data.achtergrond).toEqual(['Eigen tekst.']);
   });
 
   /**
