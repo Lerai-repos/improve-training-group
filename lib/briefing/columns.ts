@@ -86,6 +86,27 @@ export const OPPORTUNITY_COLUMNS = {
 } as const;
 
 /**
+ * De groep `Acteurs` op het trainersbord (1661151090).
+ *
+ * De trainerrelatie op de agenda bevat trainers **en** acteurs door elkaar, dus zonder dit
+ * onderscheid telt een acteur mee als co-trainer en krijgt de trainer een blok over een
+ * co-trainer die niet bestaat.
+ *
+ * Gemeten over 823 trainingen, 15 mensen in de groep:
+ *
+ * | Situatie | Aantal |
+ * |---|---|
+ * | `Acteuraantal=1`, 2 gekoppeld, 1 daarvan zit in de groep | 20 |
+ * | `Acteuraantal=1`, 2 gekoppeld, geen enkele in de groep | 8 |
+ * | `Acteuraantal` leeg, maar er hángt wel een acteur aan | 5 |
+ *
+ * Dus: de groep is het beste signaal dat er is, maar hij is **niet volledig**. Daarom is hij
+ * alleen goed genoeg om iemand als acteur te herkennen, en nooit om te concluderen dat er
+ * géén acteur is. Dat laatste beantwoordt de adviseur in de checklist.
+ */
+export const TRAINER_ACTEURS_GROUP = 'nieuwe_groep22164__1';
+
+/**
  * Het contactenbord. Het telefoonnummer staat hier en nergens anders.
  *
  * Gemeten: ~49% gevuld (147 van 300). Dus een flink deel van de briefings krijgt een naam

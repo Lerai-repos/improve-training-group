@@ -68,3 +68,7 @@ yarn-error.log*
 
 # Gegenereerde voorbeeldbriefings: bevatten echte klant- en persoonsgegevens
 briefing-demo/
+
+# Python-bytecode van de sjabloontools
+__pycache__/
+*.py[cod]

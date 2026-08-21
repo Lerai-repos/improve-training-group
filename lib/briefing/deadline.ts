@@ -128,12 +128,26 @@ export function materialsDeadline(input: {
   };
 }
 
+/**
+ * `24 maart 2026` uit `2026-03-24`. Leeg bij alles wat geen ISO-datum is.
+ *
+ * Staat hier omdat de maandnamen hier al stonden; de gegevenstabel schrijft de
+ * trainingsdatum in exact dezelfde opmaak als de materialen-deadline.
+ */
+export function formatDutchDate(iso: string | null | undefined): string {
+  const date = parseIsoDate(iso);
+  if (date === null) {
+    return '';
+  }
+  const [year, month, day] = (iso ?? '').trim().split('-');
+  return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+}
+
 /** `19 maart 2026; 09:30 uur`, exact de opmaak uit de v2.0-briefing. */
 export function formatDeadline(deadline: MaterialsDeadline | null): string {
   if (deadline === null) {
     return '';
   }
-  const [year, month, day] = deadline.date.split('-');
-  const written = `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+  const written = formatDutchDate(deadline.date);
   return deadline.time === '' ? written : `${written}; ${deadline.time} uur`;
 }

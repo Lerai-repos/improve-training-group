@@ -18,7 +18,12 @@ import { assertColumns } from '@lib/monday/schema-check';
 
 import { agendaBoardId } from '@lib/monday/board-config';
 
-import { BRIEFING_AGENDA_COLUMNS, CONTACT_COLUMNS, OPPORTUNITY_COLUMNS } from './columns';
+import {
+  BRIEFING_AGENDA_COLUMNS,
+  CONTACT_COLUMNS,
+  OPPORTUNITY_COLUMNS,
+  TRAINER_ACTEURS_GROUP,
+} from './columns';
 
 import type { ExpectedColumn } from '@lib/monday/board-config';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
@@ -104,6 +109,8 @@ interface RawItem {
   id: string | number;
   name: string;
   board?: { id: string | number } | null;
+  /** Alleen opgevraagd bij trainers: bepaalt of iemand in de groep `Acteurs` zit. */
+  group?: { id: string } | null;
   column_values?: RawColumn[];
 }
 
@@ -246,7 +253,12 @@ async function readTrainers(
   }
   const data = await client.query<{ items: RawItem[] }>(
     `query ($ids: [ID!]) {
-       items(ids: $ids) { id name column_values(ids: ["${TRAINER_PHONE_COLUMN}"]) { id text } }
+       items(ids: $ids) {
+         id
+         name
+         group { id }
+         column_values(ids: ["${TRAINER_PHONE_COLUMN}"]) { id text }
+       }
      }`,
     { ids: [...ids] }
   );
@@ -269,6 +281,7 @@ async function readTrainers(
       itemId: id,
       naam: found.name,
       telefoon: (cell(found, TRAINER_PHONE_COLUMN).text ?? '').trim(),
+      isActeur: found.group?.id === TRAINER_ACTEURS_GROUP,
     };
   });
 }
@@ -493,8 +506,12 @@ export async function readBriefingTraining(
    * Zonder trainer is er geen ontvanger: het bestand heet naar de trainer, en de lead- en
    * co-trainerblokken zijn niet te bouwen. "Klaar om te genereren" melden zou dan een
    * document beloven dat nergens heen kan.
+   *
+   * **Een acteur telt hier niet mee.** De relatie mengt trainers en acteurs, dus een training
+   * waar alleen een acteur aan hangt heeft wél een gevulde relatie en tóch geen ontvanger.
+   * Op `trainers.length` kijken zou die als compleet afvinken.
    */
-  if (trainers.length === 0) {
+  if (trainers.every((t) => t.isActeur)) {
     missing.push({ column: C.trainerRelation, label: 'Trainer' });
   }
   /**

@@ -57,6 +57,8 @@ interface FakeOpts {
   dropPhoneColumn?: boolean;
   /** Draait het antwoord van items(ids:) om, zoals Monday mag doen. */
   reverseTrainers?: boolean;
+  /** Trainer-ids die in de groep `Acteurs` op het trainersbord staan. */
+  actorIds?: string[];
 }
 
 /** Een bord dat aan alle verwachtingen voldoet, tenzij de test iets omzet. */
@@ -94,6 +96,7 @@ function client(item: unknown, opts: FakeOpts = {}) {
           .map((id) => ({
             id,
             name: namen[id]?.[0] ?? `Trainer ${id}`,
+            group: { id: (opts.actorIds ?? []).includes(id) ? 'nieuwe_groep22164__1' : 'topics' },
             column_values: opts.dropPhoneColumn
               ? []
               : [{ id: 'telefoon_mkn1hbyh', text: namen[id]?.[1] ?? '' }],
@@ -160,7 +163,7 @@ describe('readBriefingTraining', () => {
     expect(t.accountmanager).toEqual({ naam: 'Dirkje Pril', mobiel: '+31648431025' });
     expect(t.contactpersoon).toEqual({ naam: 'Paula Hollander', telefoon: '+31 6 42085076' });
     expect(t.trainers).toEqual([
-      { itemId: '500', naam: 'Lennart Bosschaart', telefoon: '06-11111111' },
+      { itemId: '500', naam: 'Lennart Bosschaart', telefoon: '06-11111111', isActeur: false },
     ]);
     expect(t.missing).toEqual([]);
   });
@@ -419,6 +422,50 @@ describe('readBriefingTraining', () => {
     );
     expect(t.trainers.map((x) => x.itemId)).toEqual(['500', '501']);
     expect(t.trainers[0]?.naam).toBe('Lennart Bosschaart');
+  });
+
+  /**
+   * De trainerrelatie mengt trainers en acteurs. Zonder dit onderscheid telt een acteur mee
+   * als co-trainer: gemeten heeft `Acteuraantal=1` met twee gekoppelde personen er 20 keer
+   * eentje uit de groep `Acteurs` bij.
+   */
+  it('marks a linked trainer who sits in the Acteurs group', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem({ [C.trainerRelation]: { linked_item_ids: ['500', '501'] } }), {
+        actorIds: ['501'],
+      }),
+      '1'
+    );
+    expect(t.trainers.map((x) => [x.itemId, x.isActeur])).toEqual([
+      ['500', false],
+      ['501', true],
+    ]);
+  });
+
+  /**
+   * De relatie mengt trainers en acteurs, dus een training met alléén een acteur eraan heeft
+   * wel een gevulde relatie en tóch geen ontvanger. Op `trainers.length` kijken zou hem als
+   * compleet afvinken en een briefing beloven die nergens heen kan.
+   */
+  it('treats an actor-only relation as having no trainer', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem({ [C.trainerRelation]: { linked_item_ids: ['501'] } }), {
+        actorIds: ['501'],
+      }),
+      '1'
+    );
+    expect(t.trainers).toHaveLength(1);
+    expect(t.missing.map((m) => m.label)).toContain('Trainer');
+  });
+
+  it('accepts a relation holding a trainer plus an actor', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem({ [C.trainerRelation]: { linked_item_ids: ['500', '501'] } }), {
+        actorIds: ['501'],
+      }),
+      '1'
+    );
+    expect(t.missing.map((m) => m.label)).not.toContain('Trainer');
   });
 
   /**

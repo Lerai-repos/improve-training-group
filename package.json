@@ -44,7 +44,8 @@
     "instellingen:groepen": "tsx scripts/instellingen-groepen.ts",
     "trainers:tarief": "tsx scripts/trainers-tarief.ts",
     "agenda:copy-item": "tsx scripts/agenda-copy-item.ts",
-    "briefing:read": "tsx scripts/briefing-read.ts"
+    "briefing:read": "tsx scripts/briefing-read.ts",
+    "briefing:generate": "tsx scripts/briefing-generate.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",

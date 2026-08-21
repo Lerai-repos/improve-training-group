@@ -24,6 +24,14 @@ export interface BriefingTrainer {
   readonly naam: string;
   /** Uit de Trainers-kolom `telefoon_mkn1hbyh`; leeg is normaal. */
   readonly telefoon: string;
+  /**
+   * Staat deze persoon in de groep `Acteurs` op het trainersbord?
+   *
+   * De trainerrelatie mengt trainers en acteurs. `false` betekent hier "niet in die groep
+   * gevonden" en niet "zeker geen acteur": de groep is gemeten incompleet, zie
+   * `TRAINER_ACTEURS_GROUP` in `columns.ts`.
+   */
+  readonly isActeur: boolean;
 }
 
 /**

@@ -37,6 +37,84 @@ def para_like(model, text):
     return p
 
 
+
+# Kolommen van de historie-tabel, letterlijk uit ITG's bronbestand:
+# "Tabel met onderstaande kolommen: Datum | Tijd | Klanttitel | Trainer (tel nr) | CP klant"
+HISTORIE_KOLOMMEN = [
+    ('Datum', '+++$h.datum+++'),
+    ('Tijd', '+++$h.tijd+++'),
+    ('Klanttitel', '+++$h.klanttitel+++'),
+    ('Trainer (tel nr)', '+++$h.trainer+++'),
+    ('CP klant', '+++$h.contactpersoon+++'),
+]
+
+# Twaalf centimeter tekstbreedte, gelijk verdeeld. In twintigsten van een punt (dxa).
+TABEL_BREEDTE_DXA = 9060
+
+
+def cel(model_para, text, breedte):
+    tc = ET.Element(W + 'tc')
+    pr = ET.SubElement(tc, W + 'tcPr')
+    w = ET.SubElement(pr, W + 'tcW')
+    w.set(W + 'w', str(breedte))
+    w.set(W + 'type', 'dxa')
+    tc.append(para_like(model_para, text))
+    return tc
+
+
+def historie_tabel(model_para):
+    """Een echte Word-tabel voor de historie, met een koprij en één FOR-rij.
+
+    Waarom een tabel en geen alinea's met streepjes ertussen: zodra een klanttitel of een
+    trainersnaam over twee regels loopt, staan de kolommen niet meer onder elkaar en is het
+    geen tabel meer maar een brij. ITG's bronbestand vraagt hier letterlijk om een tabel.
+
+    De rij zit tussen `FOR h` en `END-FOR h`, die in eigen alinea's in de eerste cel staan;
+    docx-templates herhaalt dan de hele rij.
+    """
+    breedte = TABEL_BREEDTE_DXA // len(HISTORIE_KOLOMMEN)
+    tbl = ET.Element(W + 'tbl')
+    pr = ET.SubElement(tbl, W + 'tblPr')
+    tw = ET.SubElement(pr, W + 'tblW')
+    tw.set(W + 'w', str(TABEL_BREEDTE_DXA))
+    tw.set(W + 'type', 'dxa')
+    borders = ET.SubElement(pr, W + 'tblBorders')
+    for kant in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        b = ET.SubElement(borders, W + kant)
+        b.set(W + 'val', 'single')
+        b.set(W + 'sz', '4')
+        b.set(W + 'color', 'BFBFBF')
+    grid = ET.SubElement(tbl, W + 'tblGrid')
+    for _ in HISTORIE_KOLOMMEN:
+        gc = ET.SubElement(grid, W + 'gridCol')
+        gc.set(W + 'w', str(breedte))
+
+    def rij(waarden):
+        tr = ET.SubElement(tbl, W + 'tr')
+        for waarde in waarden:
+            tr.append(cel(model_para, waarde, breedte))
+        return tr
+
+    leeg = [''] * (len(HISTORIE_KOLOMMEN) - 1)
+
+    # De FOR en de END-FOR staan in EIGEN rijen, boven en onder de datarij.
+    #
+    # Gemeten met drie varianten tegen docx-templates 4.15, want de plaatsing bepaalt wát er
+    # herhaald wordt:
+    #
+    #   beide in de datarij      -> de CELLEN herhalen: één rij die steeds breder wordt
+    #   FOR in de koprij         -> de koprij herhaalt mee, in elke datarij opnieuw
+    #   eigen rijen (dit)        -> precies de datarij herhaalt
+    #
+    # De twee commandorijen verdwijnen bij het renderen; dat is geverifieerd op de uitvoer en
+    # niet aangenomen.
+    rij([label for label, _ in HISTORIE_KOLOMMEN])
+    rij(['+++FOR h IN $blk.historie+++', *leeg])
+    rij([veld for _, veld in HISTORIE_KOLOMMEN])
+    rij(['+++END-FOR h+++', *leeg])
+    return tbl
+
+
 def build(src, dst):
     zin = zipfile.ZipFile(src)
     parts = {}
@@ -83,13 +161,18 @@ def rewrite(root):
     parents = {c: p for p in root.iter() for c in p}
 
     def replace_with(model, lines):
-        """Swap one paragraph for a list of paragraphs in the same place."""
+        """Swap one paragraph for a list of paragraphs in the same place.
+
+        An entry may also be a ready-made element (the historie table); that one is inserted
+        as it is instead of being wrapped in a paragraph.
+        """
         parent = parents[model]
         kids = list(parent)
         at = kids.index(model)
         parent.remove(model)
         for i, line in enumerate(lines):
-            parent.insert(at + i, para_like(model, line))
+            node = copy.deepcopy(line) if ET.iselement(line) else para_like(model, line)
+            parent.insert(at + i, node)
 
     lorem = [p for p in root.iter(W + 'p') if txt(p).startswith('Lorem ipsum')]
     tail = [p for p in root.iter(W + 'p') if txt(p).startswith('Vestibulum non malesuada')]
@@ -127,6 +210,11 @@ def rewrite(root):
             '+++FOR b IN bullets+++', '+++$b+++', '+++END-FOR b+++',
             '+++FOR blk IN blokken+++', '+++$blk.titel+++',
             '+++FOR r IN $blk.regels+++', '+++$r+++', '+++END-FOR r+++',
+            # The training-cycle block carries a diagram; every other block leaves this empty.
+            # IMAGE needs the call parentheses, and the function comes from additionalJsContext.
+            '+++IF $blk.afbeelding+++', '+++IMAGE blockImage($blk)+++', '+++END-IF+++',
+            # Vaste klant brings the historie table; every other block leaves it empty.
+            '+++IF $blk.historie+++', historie_tabel(p), '', '+++END-IF+++',
             '+++END-FOR blk+++',
         ])
 
