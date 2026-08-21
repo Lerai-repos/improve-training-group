@@ -69,6 +69,20 @@ export function fakeMonday(
         });
       }
 
+      // The training's own date. Answered in its own shape for the same reason the
+      // relation is: the header reads `date` off a DateValue fragment, and the names
+      // payload would look exactly like a column that stopped being a date.
+      if (document.includes('DateValue')) {
+        return Promise.resolve({
+          items: [
+            {
+              id: '111',
+              column_values: [{ id: AGENDA_2026_COLUMNS.datum, date: '2026-03-24' }],
+            },
+          ],
+        });
+      }
+
       if (/\bmutation\b/.test(document)) {
         const value: unknown = variables?.value;
         if (typeof value === 'string') {

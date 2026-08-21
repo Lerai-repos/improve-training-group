@@ -43,6 +43,24 @@ const renderView = (overrides: Partial<UseRecommendationView> = {}) =>
   render(<RecommendationsView monday={monday} api={api} view={view(overrides)} />);
 
 describe('RecommendationsView', () => {
+  describe('de datum van de opdracht', () => {
+    it('names the training’s date in the header', async () => {
+      renderView();
+
+      expect(await screen.findByText('dinsdag 24 maart 2026')).toBeTruthy();
+    });
+
+    /**
+     * Nothing is painted before Monday's theme has arrived, the date included — a header
+     * line rendered in a guessed palette is the white flash this view works to avoid.
+     */
+    it('shows no date before the context has arrived', () => {
+      renderView({ theme: null });
+
+      expect(screen.queryByText('dinsdag 24 maart 2026')).toBeNull();
+    });
+  });
+
   describe('Monday’s theme', () => {
     /**
      * Scoped to this container, never to the shared `next-themes` preference. That one

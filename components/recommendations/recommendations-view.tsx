@@ -16,6 +16,7 @@ import { WhatsappButton, WhatsappPanel } from './whatsapp-panel';
 import { useWhatsappMessage } from './use-whatsapp-message';
 import type { SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
+import { useTrainingDate } from './use-training-date';
 
 import type { MondayBridge } from './monday-client';
 import type { MessageState } from './whatsapp-link';
@@ -181,6 +182,9 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
       : [];
   const names = useTrainerNames(monday, trainerIds, { includePhones: caps?.canPlan === true });
 
+  /** The training's own date, read live — see `use-training-date.ts`. */
+  const trainingDate = useTrainingDate(monday, view.itemId);
+
   /**
    * A pick that needs an answer before it can be written — see `PickConfirmDialog`.
    *
@@ -287,7 +291,15 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
       {pending ? null : (
         <>
           <header className="relative flex items-center justify-between gap-4">
-            <h1 className="text-lg font-semibold">Aanbevolen trainers</h1>
+            <div>
+              <h1 className="text-lg font-semibold">Aanbevolen trainers</h1>
+              {/* Left out entirely when there is no date to show, rather than held open
+              with a dash: an empty slot under the heading reads as a missing value on a
+              training that may simply not be dated yet. */}
+              {trainingDate.label !== null && (
+                <p className="text-sm text-muted-foreground">{trainingDate.label}</p>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {/* The outside-click boundary is the trigger and panel ALONE. Wrapping the
               whole group would count Recalculate as "inside", leaving the panel hanging
