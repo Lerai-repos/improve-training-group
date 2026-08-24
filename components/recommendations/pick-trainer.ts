@@ -2,7 +2,7 @@
 
 import { AGENDA_2026_COLUMNS } from '@lib/monday/board-config';
 
-import { readLinkedTrainers } from './linked-trainers';
+import { readCoTrainers, readLeadTrainers } from './linked-trainers';
 
 import type { RecommendationsApi } from './api';
 import type { MondayBridge } from './monday-client';
@@ -116,30 +116,75 @@ export interface PickDeps {
 /**
  * What a pick does to the trainers already on the training.
  *
- * - `replace` — this trainer becomes the only one. Destructive, and the historical
- *   behaviour of every pick.
- * - `append` — added alongside whoever is already linked.
+ * - `replace` — deze trainer wordt de **leadtrainer**, in plaats van wie daar stond.
+ *   Vernietigend, en het historische gedrag van elke keuze.
+ *
+ *   Raakt `itg_cotrainers` **niet**. Tot de kolomsplitsing van 21-Aug-2026 was "de enige"
+ *   letterlijk waar, want er was één kolom; nu zou het meewissen van co-trainers een nieuwe
+ *   vernietigende schrijfactie zijn die niemand heeft gevraagd. Een planner die van lead
+ *   wisselt bedoelt bijna altijd "verkeerde lead" en niet "gooi de bezetting weg". De
+ *   bevestigingsdialoog zegt dat inmiddels ook met zoveel woorden.
+ * - `append` — added alongside whoever is already linked, as a co-trainer once there is a
+ *   lead. See `plannedWrite`.
  */
 export type PickMode = 'replace' | 'append';
 
+interface PlannedWrite {
+  /** De relatiekolom die wordt overschreven. */
+  readonly columnId: string;
+  /** De volledige nieuwe lijst voor die kolom — een relatieschrijfactie vervangt alles. */
+  readonly ids: readonly string[];
+}
+
 /**
- * The ids to write, read FRESH from Monday when appending.
+ * Welke kolom er wordt geschreven, en met welke lijst.
  *
- * Deliberately not taken from the caller: the view refreshes the relation every 20
- * seconds, so a union built from what the planner can see would drop a trainer a
- * colleague linked inside that window — the very bug `append` exists to prevent.
+ * De ids worden VERS uit Monday gelezen en niet van de aanroeper aangenomen: de weergave
+ * ververst de relatie elke 20 seconden, dus een vereniging op basis van wat de planner ziet
+ * laat een trainer vallen die een collega binnen dat venster koppelde — precies de fout
+ * waarvoor `append` bestaat.
+ *
+ * **Toevoegen betekent co-trainer, niet tweede lead.** Sinds 21-Aug-2026 draagt
+ * `board_relation_mkz4y7tb` de leadtrainer en `itg_cotrainers` de co-trainers, en Dirkje's
+ * regel is dat er **altijd precies één lead** is: *"iemand moet altijd de lead hebben."*
+ * Toevoegen aan de leadkolom zou dus een toestand maken die per definitie niet bestaat — en
+ * niet vrijblijvend: bij twee mensen in de leadkolom weigert de briefing te genereren, want
+ * dan is niet te zeggen wie het klantcontact doet. De popup zou dat probleem dan zelf zitten
+ * fabriceren.
+ *
+ * Daaruit volgt de regel zonder dat er iets te raden valt:
+ *
+ * | Situatie | Kolom |
+ * |---|---|
+ * | `replace` | de lead — dit is de nieuwe lead |
+ * | `append`, leadkolom leeg | de lead — de eerste die erbij komt ís de lead |
+ * | `append`, er is al een lead | de **co-trainers** |
+ * | `append`, deze persoon is al lead | de lead, ongewijzigd — nooit in beide kolommen |
+ *
+ * Op een bord zonder co-trainerkolom (Agenda 2025) blijft het oude gedrag staan.
+ *
+ * Wat dit NIET doet is iemand van co naar lead promoveren; daar is de popup de verkeerde
+ * plek voor zolang ITG niet heeft gezegd hoe dat zou moeten werken.
  */
-async function idsToWrite(
+async function plannedWrite(
   deps: PickDeps,
   mondayItemId: string,
   trainerItemId: string,
   mode: PickMode
-): Promise<readonly string[]> {
+): Promise<PlannedWrite> {
+  const leadColumn = AGENDA_2026_COLUMNS.trainerRelation;
   if (mode === 'replace') {
-    return [trainerItemId];
+    return { columnId: leadColumn, ids: [trainerItemId] };
   }
-  const linked = await readLinkedTrainers(deps.monday, mondayItemId);
-  return [...new Set([...linked, trainerItemId])];
+
+  const coColumn = AGENDA_2026_COLUMNS.coTrainerRelation;
+  const leads = await readLeadTrainers(deps.monday, mondayItemId);
+  if (coColumn === undefined || leads.length === 0 || leads.includes(trainerItemId)) {
+    return { columnId: leadColumn, ids: [...new Set([...leads, trainerItemId])] };
+  }
+
+  const co = await readCoTrainers(deps.monday, mondayItemId);
+  return { columnId: coColumn, ids: [...new Set([...co, trainerItemId])] };
 }
 
 export async function pickTrainer(
@@ -173,13 +218,14 @@ export async function pickTrainer(
   // list there is no union to write, and falling back to the new trainer alone would
   // perform the destructive replace the planner explicitly declined. Nothing is written,
   // so the failure is plainly retryable.
+  let written: PlannedWrite;
   try {
-    const ids = await idsToWrite(deps, mondayItemId, trainerItemId, mode);
+    written = await plannedWrite(deps, mondayItemId, trainerItemId, mode);
     await deps.monday.api(LINK_TRAINER, {
       boardId: deps.boardId,
       itemId: mondayItemId,
-      columnId: AGENDA_2026_COLUMNS.trainerRelation,
-      value: JSON.stringify({ item_ids: ids.map(Number) }),
+      columnId: written.columnId,
+      value: JSON.stringify({ item_ids: written.ids.map(Number) }),
     });
   } catch (error) {
     return { kind: 'failed', message: error instanceof Error ? error.message : String(error) };
@@ -200,7 +246,15 @@ export async function pickTrainer(
      * scheduled a trainer who is not on the training. A concurrent append by a colleague
      * is the way this happens — see `linked_but_lost`.
      */
-    const linkedAfter = await readLinkedTrainers(deps.monday, mondayItemId);
+    /**
+     * Terugkijken in de kolom waar we hébben geschreven. De leadkolom controleren na een
+     * co-trainerschrijfactie meldt `linked_but_lost` terwijl de koppeling er gewoon staat,
+     * en dat leest voor de planner als een mislukte keuze.
+     */
+    const linkedAfter =
+      written.columnId === AGENDA_2026_COLUMNS.trainerRelation
+        ? await readLeadTrainers(deps.monday, mondayItemId)
+        : await readCoTrainers(deps.monday, mondayItemId);
     if (!linkedAfter.includes(trainerItemId)) {
       return { kind: 'linked_but_lost', trainerItemId };
     }

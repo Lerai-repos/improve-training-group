@@ -210,12 +210,17 @@ describe('RecommendationsView', () => {
       expect(pick).toHaveBeenCalledWith('901', 'append');
     });
 
-    it('replaces when the planner chooses Vervangen', async () => {
+    /**
+     * De knop heet "Leadtrainer vervangen" en niet "Vervangen": `replace` schrijft alleen de
+     * leadkolom en laat `itg_cotrainers` staan. De oude tekst beloofde alle koppelingen te
+     * vervangen en noemde de co-trainers in dezelfde zin bij naam.
+     */
+    it('vervangt de leadtrainer als de planner daarvoor kiest', async () => {
       const pick = vi.fn<UseRecommendationView['pick']>(() => Promise.resolve());
       withSecond(pick);
 
       await userEvent.click(await screen.findByRole('button', { name: 'Kies 901' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Vervangen' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Leadtrainer vervangen' }));
 
       expect(pick).toHaveBeenCalledWith('901', 'replace');
     });

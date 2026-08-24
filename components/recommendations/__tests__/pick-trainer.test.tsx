@@ -41,11 +41,19 @@ const pick = { mondayItemId: ITEM, generation: 1, trainerItemId: TRAINER, mode: 
  * Stateful: a write updates what the next read returns, which is what makes the post-write
  * "did our own link survive" check testable.
  */
-function mondayWithRelation(linked: readonly string[] | Error) {
+const CO_COLUMN = AGENDA_2026_COLUMNS.coTrainerRelation ?? 'itg_cotrainers';
+
+/**
+ * Twee kolommen, allebei stateful: sinds 21-Aug-2026 draagt de bestaande relatie de
+ * leadtrainer en `itg_cotrainers` de co-trainers, en `append` schrijft naar de tweede zodra
+ * er al een lead is. Eén kolom nabootsen zou dat onderscheid onzichtbaar maken.
+ */
+function mondayWithRelation(linked: readonly string[] | Error, co: readonly string[] = []) {
   const mutations: Array<Record<string, unknown> | undefined> = [];
   let reads = 0;
   // Stateful, so the post-write "did our link survive" check has something real to read.
   let current: readonly string[] = linked instanceof Error ? [] : linked;
+  let currentCo: readonly string[] = co;
 
   const bridge: MondayBridge = {
     ...fakeMonday(),
@@ -55,13 +63,16 @@ function mondayWithRelation(linked: readonly string[] | Error) {
         if (linked instanceof Error) {
           return Promise.reject(linked);
         }
+        const asked = (variables?.columnIds as string[] | undefined) ?? [];
+        const byId: Record<string, readonly string[]> = {
+          [AGENDA_2026_COLUMNS.trainerRelation]: current,
+          [CO_COLUMN]: currentCo,
+        };
         return Promise.resolve({
           items: [
             {
               id: ITEM,
-              column_values: [
-                { id: AGENDA_2026_COLUMNS.trainerRelation, linked_item_ids: [...current] },
-              ],
+              column_values: asked.map((id) => ({ id, linked_item_ids: [...(byId[id] ?? [])] })),
             },
           ],
         });
@@ -74,7 +85,12 @@ function mondayWithRelation(linked: readonly string[] | Error) {
         'item_ids' in parsed &&
         Array.isArray(parsed.item_ids)
       ) {
-        current = parsed.item_ids.map(String);
+        const ids = parsed.item_ids.map(String);
+        if (variables?.columnId === CO_COLUMN) {
+          currentCo = ids;
+        } else {
+          current = ids;
+        }
       }
       return Promise.resolve({});
     },
@@ -99,12 +115,20 @@ const sentIds = (variables: Record<string, unknown> | undefined): unknown =>
  * 80 of 756 trainings on Agenda 2026 carry two or more trainers, and the relation write
  * REPLACES the whole list — so before this mode existed, choosing the second one silently
  * dropped the first.
+ *
+ * Sinds 21-Aug-2026 komt daar de rolverdeling bij: er is **altijd precies één lead**
+ * (Dirkje: *"iemand moet altijd de lead hebben"*), dus toevoegen aan een training die al een
+ * lead heeft betekent een **co-trainer**. Een tweede naam in de leadkolom is niet alleen
+ * lelijk maar blokkerend: de briefing weigert dan te genereren, omdat niet te zeggen is wie
+ * het klantcontact doet.
  */
 describe('pickTrainer — append', () => {
   const append = { ...pick, mode: 'append' as const };
+  const columnOf = (variables: Record<string, unknown> | undefined): unknown =>
+    variables?.columnId;
 
-  it('writes the existing trainers plus the new one', async () => {
-    const monday = mondayWithRelation(['700', '800']);
+  it('zet de toegevoegde trainer in de co-kolom als er al een lead is', async () => {
+    const monday = mondayWithRelation(['700']);
 
     const outcome = await pickTrainer(
       { monday: monday.bridge, api: apiReturning([1, 1]), boardId: BOARD },
@@ -112,7 +136,44 @@ describe('pickTrainer — append', () => {
     );
 
     expect(outcome).toEqual({ kind: 'linked' });
-    expect(sentIds(monday.mutations[0])).toEqual([700, 800, 900]);
+    expect(columnOf(monday.mutations[0])).toBe(CO_COLUMN);
+    expect(sentIds(monday.mutations[0])).toEqual([900]);
+  });
+
+  it('laat de leadkolom ongemoeid bij zo\'n toevoeging', async () => {
+    const monday = mondayWithRelation(['700', '800']);
+
+    await pickTrainer(
+      { monday: monday.bridge, api: apiReturning([1, 1]), boardId: BOARD },
+      append
+    );
+
+    expect(monday.mutations).toHaveLength(1);
+    expect(columnOf(monday.mutations[0])).toBe(CO_COLUMN);
+  });
+
+  it('telt de nieuwe co-trainer bij de bestaande co-trainers op', async () => {
+    const monday = mondayWithRelation(['700'], ['800']);
+
+    await pickTrainer(
+      { monday: monday.bridge, api: apiReturning([1, 1]), boardId: BOARD },
+      append
+    );
+
+    expect(sentIds(monday.mutations[0])).toEqual([800, 900]);
+  });
+
+  /** Zonder lead is de eerste die erbij komt de lead — niet meteen een co-trainer. */
+  it('schrijft naar de leadkolom als er nog geen lead is', async () => {
+    const monday = mondayWithRelation([]);
+
+    await pickTrainer(
+      { monday: monday.bridge, api: apiReturning([1, 1]), boardId: BOARD },
+      append
+    );
+
+    expect(columnOf(monday.mutations[0])).toBe(AGENDA_2026_COLUMNS.trainerRelation);
+    expect(sentIds(monday.mutations[0])).toEqual([900]);
   });
 
   /**
@@ -133,8 +194,12 @@ describe('pickTrainer — append', () => {
     expect(monday.reads).toBeGreaterThan(0);
   });
 
-  /** Appending someone already linked is a no-op, not a duplicated id. */
-  it('does not duplicate a trainer who is already linked', async () => {
+  /**
+   * Wie al lead is blijft lead. Hem als co-trainer toevoegen zou dezelfde persoon in beide
+   * kolommen zetten, en dan telt hij overal dubbel — werklast, evaluaties, en twee
+   * briefings voor één mens.
+   */
+  it('zet iemand die al lead is niet óók in de co-kolom', async () => {
     const monday = mondayWithRelation(['900']);
 
     await pickTrainer(
@@ -142,6 +207,7 @@ describe('pickTrainer — append', () => {
       append
     );
 
+    expect(columnOf(monday.mutations[0])).toBe(AGENDA_2026_COLUMNS.trainerRelation);
     expect(sentIds(monday.mutations[0])).toEqual([900]);
   });
 
@@ -200,16 +266,24 @@ describe('pickTrainer — append', () => {
   it('reports a link that a concurrent write removed', async () => {
     const monday: MondayBridge = {
       ...fakeMonday(),
-      api(document: string) {
+      api(document: string, variables?: Record<string, unknown>) {
         if (document.includes('linked_item_ids')) {
-          // A colleague's append landed in between, without our trainer.
+          /**
+           * De koppeling van een collega landde ertussen, zonder onze trainer. Er staat een
+           * lead, dus onze schrijfactie gaat naar de co-kolom — en juist daar controleren we
+           * terug. Zou de controle de leadkolom lezen, dan meldt hij `linked_but_lost` bij
+           * élke geslaagde co-toevoeging.
+           */
+          const byId: Record<string, string[]> = {
+            [AGENDA_2026_COLUMNS.trainerRelation]: ['700'],
+            [CO_COLUMN]: ['800'],
+          };
+          const asked = (variables?.columnIds as string[] | undefined) ?? [];
           return Promise.resolve({
             items: [
               {
                 id: ITEM,
-                column_values: [
-                  { id: AGENDA_2026_COLUMNS.trainerRelation, linked_item_ids: ['700', '800'] },
-                ],
+                column_values: asked.map((id) => ({ id, linked_item_ids: byId[id] ?? [] })),
               },
             ],
           });
@@ -427,5 +501,40 @@ describe('pickTrainer', () => {
       kind: 'refused',
       generation: 0,
     });
+  });
+});
+
+/**
+ * `replace` raakt de leadkolom en laat de co-trainers staan. Dat is een keuze en geen
+ * omissie: co-trainers meewissen zou een nieuwe vernietigende schrijfactie zijn die niemand
+ * heeft gevraagd, op een knop die is bedacht toen er nog één kolom was. De dialoog zegt het
+ * inmiddels met zoveel woorden ("Co-trainers blijven in beide gevallen staan").
+ */
+describe('pickTrainer — replace laat co-trainers staan', () => {
+  const replace = { ...pick, mode: 'replace' as const };
+
+  it('schrijft alleen de leadkolom', async () => {
+    const monday = mondayWithRelation(['700'], ['800']);
+
+    const outcome = await pickTrainer(
+      { monday: monday.bridge, api: apiReturning([1, 1]), boardId: BOARD },
+      replace
+    );
+
+    expect(outcome).toEqual({ kind: 'linked' });
+    expect(monday.mutations).toHaveLength(1);
+    expect(monday.mutations[0]?.columnId).toBe(AGENDA_2026_COLUMNS.trainerRelation);
+    expect(sentIds(monday.mutations[0])).toEqual([900]);
+  });
+
+  it('raakt de co-trainerkolom niet aan', async () => {
+    const monday = mondayWithRelation(['700'], ['800']);
+
+    await pickTrainer(
+      { monday: monday.bridge, api: apiReturning([1, 1]), boardId: BOARD },
+      replace
+    );
+
+    expect(monday.mutations.some((m) => m?.columnId === CO_COLUMN)).toBe(false);
   });
 });

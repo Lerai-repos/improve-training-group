@@ -121,7 +121,7 @@ describe('readAgendaScan', () => {
     const scan = await readAgendaScan(client, {
       boardId: '5087396949',
       dateColumnId: 'datum_1',
-      trainerColumnId: 'rel',
+      trainerColumnIds: ['rel'],
     });
 
     expect(countsFor(scan.workload, 'a', '2026-09').thisMonth).toBe(1);
@@ -146,7 +146,7 @@ describe('readAgendaScan', () => {
           return Promise.resolve(JSON.parse(JSON.stringify({ boards: [{ items_page: page([], null) }] })));
         },
       },
-      { boardId: '1', dateColumnId: 'datum_x', trainerColumnId: 'rel_y' }
+      { boardId: '1', dateColumnId: 'datum_x', trainerColumnIds: ['rel_y'] }
     );
 
     expect(asked).toContain('datum_x');
@@ -162,7 +162,7 @@ describe('readAgendaScan', () => {
     await expect(
       readAgendaScan(
         { query: <T,>(): Promise<T> => Promise.resolve(JSON.parse('{"nope":1}')) },
-        { boardId: '1', dateColumnId: 'd', trainerColumnId: 'r' }
+        { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/unreadable page/);
   });
@@ -182,7 +182,7 @@ describe('readAgendaScan', () => {
           query: <T,>(): Promise<T> =>
             Promise.resolve(JSON.parse(JSON.stringify(reply(columns)))),
         },
-        { boardId: '1', dateColumnId: 'datum_1', trainerColumnId: 'rel' }
+        { boardId: '1', dateColumnId: 'datum_1', trainerColumnIds: ['rel'] }
       );
 
     it('throws when the date column is missing', async () => {
@@ -223,7 +223,7 @@ describe('readAgendaScan', () => {
     await expect(
       readAgendaScan(
         { query: <T,>(): Promise<T> => Promise.resolve(JSON.parse(JSON.stringify(body))) },
-        { boardId: '1', dateColumnId: 'd', trainerColumnId: 'r' }
+        { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/repeated a pagination cursor/);
   });
@@ -242,7 +242,7 @@ describe('readAgendaScan', () => {
             return Promise.resolve(JSON.parse(JSON.stringify(body)));
           },
         },
-        { boardId: '1', dateColumnId: 'd', trainerColumnId: 'r' }
+        { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/refusing a partial index/);
   });
@@ -274,7 +274,7 @@ describe('readAgendaScan', () => {
             return Promise.resolve(JSON.parse(JSON.stringify(body)));
           },
         },
-        { boardId: '1', dateColumnId: 'd', trainerColumnId: 'r' }
+        { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/duplicate item ids/);
   });

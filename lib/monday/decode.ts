@@ -52,7 +52,19 @@ export interface Decoded<T> {
 
 /** Maps semantic training fields → Monday column ids (per-year plumbing config). */
 export interface TrainingColumnMap {
+  /**
+   * De **leadtrainer**-relatie. Heette tot 21-Aug-2026 gewoon "de trainers"; sindsdien is
+   * afgesproken dat deze kolom de lead draagt en dat co-trainers hun eigen kolom krijgen.
+   */
   trainerRelation: string;
+  /**
+   * De co-trainerrelatie (`itg_cotrainers`), als het bord hem heeft.
+   *
+   * Optioneel omdat oudere jaargangen hem niet hebben. Ontbreekt hij op een bord waar ITG
+   * co-trainers wél verplaatst, dan verdwijnen die mensen stil uit de werklast en uit hun
+   * eigen cijfers — daarom staat hij voor Agenda 2026 óók in `AGENDA_EXPECTED_COLUMNS`.
+   */
+  coTrainerRelation?: string;
   themaRelation: string;
   companyMirror: string;
   datum: string;
@@ -63,6 +75,22 @@ export interface TrainingColumnMap {
   omzet: string;
   tijd?: string;
   taal?: string;
+}
+
+/**
+ * Beide trainerkolommen van een agendabord, lead eerst.
+ *
+ * Eén plek waar "wie hoort er bij deze sessie" wordt beantwoord, zodat een nieuwe lezer niet
+ * per ongeluk alleen de leadkolom pakt. De volgorde is betekenisvol: de eerste id is de
+ * leadkolom, en wie daaruit komt is de lead.
+ *
+ * **Niet gebruiken om te schrijven.** De popup schrijft de vereniging terug naar de kolom
+ * waaruit hij las; las hij beide, dan verhuizen de co-trainers stilletjes naar de leadkolom.
+ */
+export function trainerRelationIds(map: TrainingColumnMap): readonly string[] {
+  return map.coTrainerRelation === undefined
+    ? [map.trainerRelation]
+    : [map.trainerRelation, map.coTrainerRelation];
 }
 
 export interface TrainerColumnMap {
@@ -91,6 +119,48 @@ function columnById(item: RawMondayItem, id: string): RawColumnValue | undefined
 /** Linked item ids from a board_relation column — NOT the (null) `value`. */
 export function linkedItemIds(item: RawMondayItem, id: string): string[] {
   return columnById(item, id)?.linked_item_ids ?? [];
+}
+
+/**
+ * De gekoppelde ids van meerdere relatiekolommen achter elkaar, ontdubbeld.
+ *
+ * Bestaat voor de twee trainerkolommen: sinds 21-Aug-2026 draagt `board_relation_mkz4y7tb`
+ * de leadtrainer en `itg_cotrainers` de co-trainers. Alleen de eerste lezen laat een
+ * co-trainer stil uit de werklast, de conflictdetectie en zijn eigen evaluatiecijfers
+ * verdwijnen — en dat ziet er precies hetzelfde uit als een sessie waar hij niet bij was.
+ *
+ * Op één plek, want alle drie de lezers (de decoder, de agendascan en de
+ * evaluatiehistorie) hebben dezelfde twee valkuilen:
+ *
+ * - **Ontdubbelen.** Dezelfde persoon kan in beide kolommen staan; niets op het bord houdt
+ *   dat tegen. Twee keer meetellen verdubbelt zijn werklast.
+ * - **Elke kolom moet terugkomen.** Monday laat een kolom-id dat het niet kent gewoon weg,
+ *   dus een hernoemde co-trainerkolom levert "niemand is co-trainer" op in plaats van een
+ *   fout. `onDrift` laat de aanroeper daar zijn eigen, herkenbare fout van maken.
+ *
+ * De volgorde blijft die van de kolommen, dus de lead staat vooraan.
+ */
+export function unionLinkedIds(
+  columnIds: readonly string[],
+  lookup: (id: string) => { linked_item_ids?: readonly (string | number)[] | null } | undefined,
+  onDrift: (columnId: string) => never
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const columnId of columnIds) {
+    const column = lookup(columnId);
+    if (column === undefined || column.linked_item_ids === undefined) {
+      onDrift(columnId);
+    }
+    for (const linked of column.linked_item_ids ?? []) {
+      const id = String(linked);
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    }
+  }
+  return out;
 }
 
 /** Mirror display value — NOT the (null) `text`/`value`. Empty string → null. */
@@ -145,7 +215,19 @@ export function decodeTraining(
     locatie: textValue(item, map.locatie),
     label: textValue(item, map.label),
     companyName: mirrorValue(item, map.companyMirror),
-    trainerExternalIds: linkedItemIds(item, map.trainerRelation),
+    /**
+     * De decoder is de enige lezer die een ontbrekende kolom **niet** fataal mag vinden:
+     * `columnById` geeft hier al `undefined` terug voor elk veld dat de aanroeper niet
+     * heeft opgevraagd, en dit pad draait ook over oudere jaargangen zonder
+     * co-trainerkolom. Een lege lijst is daar het juiste antwoord.
+     */
+    trainerExternalIds: unionLinkedIds(
+      trainerRelationIds(map),
+      (id) => ({ linked_item_ids: linkedItemIds(item, id) }),
+      () => {
+        throw new Error('unreachable: linkedItemIds levert altijd een array');
+      }
+    ),
     themaExternalIds: linkedItemIds(item, map.themaRelation),
     // Stable klant key is derived from companyName in the sync (no Opportunities traversal).
     klantExternalIds: [],

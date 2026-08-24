@@ -62,7 +62,16 @@ export const BRIEFING_AGENDA_COLUMNS = {
   qr: 'dup__of_cert',
   ieCode: AGENDA_2026_COLUMNS.ieCode,
   label: requireColumn(AGENDA_2026_COLUMNS.label, 'Label'),
+  /** De **leadtrainer**; sinds 21-Aug-2026 draagt deze kolom alleen de lead. */
   trainerRelation: AGENDA_2026_COLUMNS.trainerRelation,
+  /**
+   * De co-trainers, `itg_cotrainers`, door ons aangemaakt met `pnpm agenda:cotrainer`.
+   *
+   * Verplicht en niet optioneel: zodra ITG hier iemand in zet en de briefing leest hem
+   * niet, staat er een document bij de trainer waarin een collega ontbreekt die die dag
+   * gewoon meedraait.
+   */
+  coTrainerRelation: requireColumn(AGENDA_2026_COLUMNS.coTrainerRelation, 'Co-trainer(s)'),
   /** De briefing-statuskolom die het proces stuurt. */
   brie: 'dup__of_brie7__1',
   /**
@@ -98,6 +107,54 @@ export const OPPORTUNITY_COLUMNS = {
    * dinsdag telefonisch bereikbaar". Hooguit grondstof, geen briefingtekst.
    */
   achtergrond: 'itg_achtergrond',
+} as const;
+
+/**
+ * Het Themas-bord, waar het agendabord met `themaRelation` naartoe koppelt.
+ *
+ * Let op: **er staan dubbele items op**. `Focus en aandacht` komt twee keer voor en
+ * `Teamcoaching` ook. Alleen het eerste item bijwerken laat de helft van de trainingen met
+ * een leeg veld achter, en dat is niet te onderscheiden van een thema dat nooit een skelet
+ * heeft gekregen.
+ */
+export const THEMAS_COLUMNS = {
+  /**
+   * De concept-inhoud per thema: de 85 skeletten uit `ITG - Training skeletten 2024.docx`.
+   *
+   * `long_text` en niet `text`, want het zijn twaalf regels per thema en een `text`-kolom
+   * kapt af. Eén bullet per regel; de organisatienaam staat er als `{organisatie}` in en
+   * wordt bij het genereren ingevuld — zie `concept.ts`.
+   *
+   * Gevuld met `pnpm themas:conceptinhoud --apply`.
+   */
+  conceptInhoud: 'itg_conceptinhoud',
+} as const;
+
+/**
+ * Het Briefings-bord: het register van gegenereerde briefings, één rij per document.
+ *
+ * Aangemaakt 21-Aug-2026 met `pnpm briefings:create --apply`.
+ *
+ * **De drie spiegelkolommen (`itg_klant`, `itg_datum`, `itg_thema`) zijn met de hand
+ * gekoppeld**, want Monday's API maakt een mirror-kolom wel aan maar negeert de configuratie
+ * volledig: `create_column` meldt succes en `settings_str` blijft `{}`. Gemeten met drie
+ * verschillende vormen. Controleer dus na elke bordwijziging of ze nog ergens naartoe wijzen —
+ * een niet-gekoppelde spiegel ziet er hetzelfde uit als een lege.
+ */
+export const BRIEFINGS_BOARD = '5102783564';
+
+export const BRIEFINGS_COLUMNS = {
+  /** board_relation naar het agendabord. Draagt de betekenis; de spiegels zijn weergave. */
+  training: 'itg_training',
+  klant: 'itg_klant',
+  datum: 'itg_datum',
+  thema: 'itg_thema',
+  /** De trainer voor wie déze kopie is. */
+  ontvanger: 'itg_ontvanger',
+  /** status: Leadtrainer / Co-trainer / Trainingsacteur. */
+  rol: 'itg_rol',
+  bestandslink: 'itg_bestandslink',
+  gegenereerd: 'itg_gegenereerd',
 } as const;
 
 /**

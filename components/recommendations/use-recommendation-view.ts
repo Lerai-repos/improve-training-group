@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiError, type RecommendationsApi } from './api';
-import { readLinkedTrainers } from './linked-trainers';
+import { readInvolvedTrainers } from './linked-trainers';
 import { pickTrainer, type PickMode } from './pick-trainer';
 import type { Appearance, MondayBridge, MondayContext } from './monday-client';
 import type { RecommendationView } from './types';
@@ -240,7 +240,12 @@ export function useRecommendationView(
       }
       const owner = itemId;
       try {
-        const trainerItemIds = await readLinkedTrainers(monday, owner);
+        /**
+         * Beide trainerkolommen, want dit bepaalt welke rijen als "Gekozen" staan. Alleen
+         * de lead lezen zet een co-trainer als kiesbaar in de lijst, en één klik koppelt
+         * hem dan ook nog als lead.
+         */
+        const trainerItemIds = await readInvolvedTrainers(monday, owner);
         if (revision === revisionRef.current) {
           setLinkedFor({ itemId: owner, state: { kind: 'ready', trainerItemIds } });
         }

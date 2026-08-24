@@ -27,6 +27,16 @@ const columnsOf = (c: AgendaHistoryColumns): BoardMeta['columns'] => [
     type: 'board_relation',
     settings_str: `{"boardIds":[${TRAINERS_BOARD}]}`,
   },
+  ...(c.coTrainerRelation === undefined
+    ? []
+    : [
+        {
+          id: c.coTrainerRelation,
+          title: 'Co-trainer(s)',
+          type: 'board_relation',
+          settings_str: `{"boardIds":[${TRAINERS_BOARD}]}`,
+        },
+      ]),
   {
     id: c.themaRelation,
     title: "Thema's",
@@ -72,6 +82,9 @@ const item = (
     { id: c.datum, text: '2026-01-01' },
     { id: c.ieCode, text: `IE${id}` },
     { id: c.trainerRelation, linked_item_ids: ['tr1'] },
+    ...(c.coTrainerRelation === undefined
+      ? []
+      : [{ id: c.coTrainerRelation, linked_item_ids: [] as string[] }]),
     { id: c.themaRelation, linked_item_ids: ['th1'] },
     { id: c.klantRelation, linked_item_ids: ['kl1'] },
   ].map((cv) => (over[cv.id] === undefined ? cv : { id: cv.id, ...over[cv.id] })),
@@ -364,15 +377,26 @@ describe.skipIf(!existsSync(SNAPSHOT))('against the real Agenda 2026 snapshot', 
               // Narrow to the requested ids, exactly as Monday would.
               items: items.map((i) => ({
                 id: i.id,
-                column_values: i.column_values.filter((c) =>
-                  [
-                    columns.datum,
-                    columns.ieCode,
-                    columns.trainerRelation,
-                    columns.themaRelation,
-                    columns.klantRelation,
-                  ].includes(c.id)
-                ),
+                column_values: [
+                  ...i.column_values.filter((c) =>
+                    [
+                      columns.datum,
+                      columns.ieCode,
+                      columns.trainerRelation,
+                      columns.themaRelation,
+                      columns.klantRelation,
+                    ].includes(c.id)
+                  ),
+                  /**
+                   * De snapshot is van 24 juli en de co-trainerkolom is op 21 augustus
+                   * aangemaakt, dus hij staat er niet in. Een lege relatie is precies wat
+                   * Monday teruggeeft voor een training zonder co-trainer, en dat is op dit
+                   * moment ook elke training: ITG is nog niemand aan het verplaatsen.
+                   */
+                  ...(columns.coTrainerRelation === undefined
+                    ? []
+                    : [{ id: columns.coTrainerRelation, linked_item_ids: [] as string[] }]),
+                ],
               })),
             },
           },
@@ -415,6 +439,50 @@ describe.skipIf(!existsSync(SNAPSHOT))('against the real Agenda 2026 snapshot', 
 
     await expect(readAgendaHistory(serve(wrongMap), [wrongMap])).rejects.toThrow(
       /board relation|date column|IE-code/
+    );
+  });
+});
+
+/**
+ * De co-trainerkolom, sinds 21-Aug-2026. Dit is het scenario dat stil misgaat: ITG haalt een
+ * co-trainer uit de leadkolom, en zonder deze lezing telt die sessie niet meer mee voor hem —
+ * zijn evaluatiecijfers zakken zonder dat er iets op een scherm verandert.
+ */
+describe('co-trainers in de evaluatiehistorie', () => {
+  const CO = AGENDA_2026_HISTORY.coTrainerRelation ?? '';
+  /** Dezelfde kolommen, maar zonder de ondergrens van 600 items voor één testitem. */
+  const BOARD: AgendaHistoryColumns = { ...AGENDA_2026_HISTORY, minimumItems: 1 };
+
+  const oneItem = (over: Record<string, Record<string, unknown>>): AgendaHistoryClient =>
+    client({ pages: [{ cursor: null, items: [item('1', BOARD, over)] }], board: BOARD });
+
+  it('kent de kolom, anders test de rest hieronder niets', () => {
+    expect(CO).toBe('itg_cotrainers');
+  });
+
+  it('schrijft de sessie toe aan de lead én aan de co-trainer', async () => {
+    const { trainings } = await readAgendaHistory(oneItem({ [CO]: { linked_item_ids: ['tr2'] } }), [
+      BOARD,
+    ]);
+    expect(trainings[0]?.entry.trainerExternalIds).toEqual(['tr1', 'tr2']);
+  });
+
+  it('telt dezelfde persoon in beide kolommen één keer', async () => {
+    const { trainings } = await readAgendaHistory(oneItem({ [CO]: { linked_item_ids: ['tr1'] } }), [
+      BOARD,
+    ]);
+    expect(trainings[0]?.entry.trainerExternalIds).toEqual(['tr1']);
+  });
+
+  /**
+   * Een hernoemde co-trainerkolom moet stuklopen. Monday laat een onbekend kolom-id weg, dus
+   * stil doorgaan zou "er zijn geen co-trainers" opleveren — precies de plausibele nul die
+   * niemand opmerkt.
+   */
+  it('werpt als de co-trainerkolom niet als relatie terugkomt', async () => {
+    const broken = oneItem({ [CO]: { text: 'geen relatie meer' } });
+    await expect(readAgendaHistory(broken, [BOARD])).rejects.toThrow(
+      /itg_cotrainers/
     );
   });
 });

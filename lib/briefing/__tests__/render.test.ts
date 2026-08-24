@@ -24,6 +24,7 @@ const TRAINING: BriefingTraining = {
   brie: 'Aanmaken',
   opdrachtgever: 'Probiblio',
   themas: ['Verbindend communiceren'],
+  themaInhoud: '',
   klanttitel: 'Verbindend communiceren',
   duur: '3',
   datum: '2026-03-24',
@@ -36,7 +37,7 @@ const TRAINING: BriefingTraining = {
   ieCode: '',
   accountmanager: { naam: 'Dirkje Pril', mobiel: '+31648431025' },
   contactpersoon: { naam: 'Paula Hollander', telefoon: '+31642085076' },
-  trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false }],
+  trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false }],
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
@@ -160,6 +161,40 @@ describe('renderBriefing', () => {
 
     const xml = documentXml(met).replace(/<[^>]+>/g, '');
     expect(xml).toContain('Grofweg zie de cyclus ziet er als onderstaand uit');
+  });
+
+  /**
+   * De concept-inhoud loopt van het Themas-bord tot in het Word-document, inclusief het
+   * invullen van de organisatienaam. Alleen `compose` testen zou missen dat de bullets in
+   * het sjabloon op de verkeerde plek herhaald worden.
+   */
+  it('zet de bullets van het thema in het document, met de organisatienaam ingevuld', async () => {
+    const training: BriefingTraining = {
+      ...TRAINING,
+      opdrachtgever: 'Probiblio',
+      themaInhoud:
+        'Plenaire opening, kennismaking en introductie tot het onderwerp.\n' +
+        'Reflectie: hoe staat het er nu voor met feedback binnen {organisatie} en binnen deze groep?',
+    };
+    const xml = documentXml(
+      await renderBriefing('IT', composeBriefing(training, EMPTY_CHECKLIST, { historie: [] }))
+    );
+    expect(xml).toContain('Plenaire opening, kennismaking en introductie tot het onderwerp.');
+    expect(xml).toContain('feedback binnen Probiblio en binnen deze groep');
+    expect(xml).not.toContain('{organisatie}');
+  });
+
+  it('laat de tekst van de adviseur winnen van het skelet van het thema', async () => {
+    const training: BriefingTraining = { ...TRAINING, themaInhoud: 'Het standaardskelet.' };
+    const checklist: BriefingChecklist = {
+      ...EMPTY_CHECKLIST,
+      conceptInhoud: 'De versie van de adviseur.',
+    };
+    const xml = documentXml(
+      await renderBriefing('IT', composeBriefing(training, checklist, { historie: [] }))
+    );
+    expect(xml).toContain('De versie van de adviseur.');
+    expect(xml).not.toContain('Het standaardskelet.');
   });
 
   it('weigert een label zonder sjabloon in plaats van er een te kiezen', async () => {

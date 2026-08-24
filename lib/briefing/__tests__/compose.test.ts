@@ -21,6 +21,7 @@ const PROBIBLIO: BriefingTraining = {
   brie: 'Verzonden',
   opdrachtgever: 'Probiblio',
   themas: ['Verbindend communiceren'],
+  themaInhoud: '',
   klanttitel: 'Verbindend communiceren',
   duur: '3',
   datum: '2026-03-24',
@@ -33,7 +34,7 @@ const PROBIBLIO: BriefingTraining = {
   ieCode: '',
   accountmanager: { naam: 'Dirkje Pril', mobiel: '+31648431025' },
   contactpersoon: { naam: 'Paula Hollander', telefoon: '+31642085076' },
-  trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false }],
+  trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false }],
   acteuraantal: null,
   opportunityItemId: '2674263314',
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
@@ -348,7 +349,13 @@ describe('selectBlocks', () => {
 });
 
 describe('sessionFacts', () => {
-  const trainer = (id: string, isActeur: boolean) => ({ itemId: id, naam: id, telefoon: '', isActeur });
+  const trainer = (id: string, isActeur: boolean, isCoTrainer = false) => ({
+    itemId: id,
+    naam: id,
+    telefoon: '',
+    isActeur,
+    isCoTrainer,
+  });
 
   it('scheidt de herkende acteurs van de trainers', () => {
     const facts = sessionFacts(
@@ -391,11 +398,12 @@ describe('sessionFacts', () => {
 });
 
 describe('resolveRecipients', () => {
-  const trainer = (id: string, naam: string, isActeur: boolean) => ({
+  const trainer = (id: string, naam: string, isActeur: boolean, isCoTrainer = false) => ({
     itemId: id,
     naam,
     telefoon: '',
     isActeur,
+    isCoTrainer,
   });
 
   /**

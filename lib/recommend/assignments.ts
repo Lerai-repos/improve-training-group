@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
+import { unionLinkedIds } from '@lib/monday/decode';
 
 /**
  * How much work a trainer already has, this month and this year.
@@ -155,7 +156,15 @@ interface QueryClient {
 
 interface ColumnIds {
   dateColumnId: string;
-  trainerColumnId: string;
+  /**
+   * Elke relatiekolom die een trainer aan deze training koppelt, lead eerst.
+   *
+   * Meervoud sinds 21-Aug-2026: `board_relation_mkz4y7tb` draagt de leadtrainer en
+   * `itg_cotrainers` de co-trainers. Alleen de eerste tellen zou een co-trainer als vrij
+   * laten zien op een dag dat hij traint — en dat is precies de "plausibele nul" waar de
+   * rest van dit bestand tegen beschermt.
+   */
+  trainerColumnIds: readonly string[];
 }
 
 function readPage(
@@ -188,7 +197,6 @@ function readPage(
   const rows = parsed.data.items.map((item) => {
     const byId = new Map(item.column_values.map((c) => [c.id, c]));
     const date = byId.get(columns.dateColumnId);
-    const trainers = byId.get(columns.trainerColumnId);
 
     /**
      * The columns themselves must be there, not just the envelope.
@@ -202,16 +210,23 @@ function readPage(
     if (date === undefined) {
       throw new Error(`Agenda scan: date column "${columns.dateColumnId}" is missing from item ${item.id}`);
     }
-    if (trainers === undefined || trainers.linked_item_ids === undefined) {
-      throw new Error(
-        `Agenda scan: "${columns.trainerColumnId}" did not return a board relation on item ${item.id}`
-      );
-    }
+    /**
+     * Elke genoemde kolom moet terugkomen, niet alleen de eerste. Ontbreekt de
+     * co-trainerkolom, dan is dat schemadrift met precies hetzelfde gezicht als "niemand
+     * is co-trainer", en dan klopt de werklast van iedereen die erin staat niet meer.
+     */
+    const trainerItemIds = unionLinkedIds(
+      columns.trainerColumnIds,
+      (id) => byId.get(id),
+      (id) => {
+        throw new Error(`Agenda scan: "${id}" did not return a board relation on item ${item.id}`);
+      }
+    );
 
     return {
       itemId: String(item.id),
       date: date.text ?? null,
-      trainerItemIds: trainers.linked_item_ids.map(String),
+      trainerItemIds,
     };
   });
   return { rows, cursor: parsed.data.cursor };
@@ -229,12 +244,18 @@ const MAX_PAGES = 8;
  */
 export async function readAgendaScan(
   client: QueryClient,
-  input: { boardId: string; dateColumnId: string; trainerColumnId: string }
+  input: { boardId: string; dateColumnId: string; trainerColumnIds: readonly string[] }
 ): Promise<AgendaScan> {
   // The column ids travel with the call rather than sitting in module state: they differ
   // per Agenda board year — the trap that made 202 trainings look trainer-less during the
   // evaluation analysis — and shared mutable ids would let two runs corrupt each other.
-  const fields = `id column_values(ids:["${input.dateColumnId}","${input.trainerColumnId}"]){ id text ... on BoardRelationValue { linked_item_ids } }`;
+  if (input.trainerColumnIds.length === 0) {
+    throw new Error('Agenda scan: geen trainerkolom opgegeven; dat zou iedereen als vrij tellen');
+  }
+  const columnIds = [input.dateColumnId, ...input.trainerColumnIds]
+    .map((id) => `"${id}"`)
+    .join(',');
+  const fields = `id column_values(ids:[${columnIds}]){ id text ... on BoardRelationValue { linked_item_ids } }`;
   const all: AssignmentRow[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;

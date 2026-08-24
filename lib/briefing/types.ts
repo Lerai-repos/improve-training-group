@@ -32,6 +32,19 @@ export interface BriefingTrainer {
    * `TRAINER_ACTEURS_GROUP` in `columns.ts`.
    */
   readonly isActeur: boolean;
+  /**
+   * Stond deze persoon in `itg_cotrainers` in plaats van in de leadkolom?
+   *
+   * Sinds 21-Aug-2026 is dat een **feit van het bord** en geen gok meer. Daarvoor werd de
+   * rol afgeleid uit de koppelvolgorde, en die klopte lang niet altijd: Dirkje over hoe het
+   * nu gaat, *"Peter geeft vaak aan in de updates wie de lead trainer is. Maar dit gaat
+   * vaak niet goed."*
+   *
+   * Let op: bij de trainingen van vóór de kolomsplitsing staat iedereen nog in de leadkolom,
+   * dus daar is dit voor iedereen `false`. Dat is bewust legacy, zie
+   * `itg-briefing-open-vragen`.
+   */
+  readonly isCoTrainer: boolean;
 }
 
 /**
@@ -41,6 +54,13 @@ export interface BriefingTrainer {
  * document staan gebeurt in de opmaaklaag, niet hier. Zo blijft dit testbaar tegen wat
  * Monday werkelijk teruggeeft.
  */
+/** Eén gekoppeld thema van het Themas-bord. */
+export interface BriefingThema {
+  readonly naam: string;
+  /** `itg_conceptinhoud`: de standaardbullets, één per regel. Leeg is normaal. */
+  readonly conceptInhoud: string;
+}
+
 export interface BriefingTraining {
   readonly itemId: string;
   readonly naam: string;
@@ -50,6 +70,17 @@ export interface BriefingTraining {
 
   readonly opdrachtgever: string;
   readonly themas: readonly string[];
+  /**
+   * De concept-inhoud van de gekoppelde thema's, samengevoegd.
+   *
+   * Meestal één thema. Zijn het er meer, dan komen de bullets achter elkaar te staan in de
+   * volgorde waarin ze gekoppeld zijn — ontdubbelen zou hier gokken zijn, en de adviseur
+   * ziet ze in de app-tab staan en gooit weg wat dubbel is.
+   *
+   * Leeg betekent dat geen van de gekoppelde thema's een skelet heeft. Dat is een geldige
+   * toestand: 65 van de 102 thema's op het bord hebben er geen.
+   */
+  readonly themaInhoud: string;
   readonly klanttitel: string;
   readonly duur: string;
   readonly datum: string;

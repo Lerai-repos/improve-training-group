@@ -18,7 +18,13 @@ import { z } from 'zod';
 import { assertCountMatches, assertNoDuplicateIds } from '@lib/monday/completeness';
 import { assertColumns } from '@lib/monday/schema-check';
 
-import { AGENDA_HISTORY_BOARDS, agendaHistoryExpectedColumns } from './agenda-columns';
+import { unionLinkedIds } from '@lib/monday/decode';
+
+import {
+  AGENDA_HISTORY_BOARDS,
+  agendaHistoryExpectedColumns,
+  trainerRelationColumns,
+} from './agenda-columns';
 
 import type { BoardMeta } from '@lib/monday/graphql-client';
 import type { AgendaHistoryColumns } from './agenda-columns';
@@ -103,7 +109,6 @@ function readPage(
     const byId = new Map(item.column_values.map((c) => [c.id, c]));
     const datum = byId.get(columns.datum);
     const ieCode = byId.get(columns.ieCode);
-    const trainers = byId.get(columns.trainerRelation);
     const themas = byId.get(columns.themaRelation);
     const klant = byId.get(columns.klantRelation);
 
@@ -119,11 +124,6 @@ function readPage(
     }
     if (ieCode === undefined) {
       throw new Error(`Agenda history: IE-code column "${columns.ieCode}" missing from ${where}`);
-    }
-    if (trainers === undefined || trainers.linked_item_ids === undefined) {
-      throw new Error(
-        `Agenda history: "${columns.trainerRelation}" is not a board relation on ${where}`
-      );
     }
     if (themas === undefined || themas.linked_item_ids === undefined) {
       throw new Error(
@@ -143,7 +143,18 @@ function readPage(
       entry: {
         trainingItemId,
         datum: datum.text === undefined || datum.text === null || datum.text === '' ? null : datum.text,
-        trainerExternalIds: trainers.linked_item_ids.map(String),
+        /**
+         * Lead én co-trainers. Alleen de leadkolom lezen zou een co-trainer stil uit zijn
+         * eigen evaluatiecijfers laten verdwijnen zodra ITG hem verplaatst — de sessie
+         * telt dan gewoon niet mee voor hem, en dat is op geen enkel scherm te zien.
+         */
+        trainerExternalIds: unionLinkedIds(
+          trainerRelationColumns(columns),
+          (id) => byId.get(id),
+          (id) => {
+            throw new Error(`Agenda history: "${id}" is not a board relation on ${where}`);
+          }
+        ),
         themaExternalIds: themas.linked_item_ids.map(String),
       },
       ref: {
@@ -171,7 +182,8 @@ async function readBoard(
 ): Promise<{ trainings: AgendaTraining[]; pages: number }> {
   const fields =
     `id column_values(ids:["${columns.datum}","${columns.ieCode}",` +
-    `"${columns.trainerRelation}","${columns.themaRelation}","${columns.klantRelation}"])` +
+    `${trainerRelationColumns(columns).map((id) => `"${id}"`).join(',')},` +
+    `"${columns.themaRelation}","${columns.klantRelation}"])` +
     `{ id text ... on BoardRelationValue { linked_item_ids } }`;
 
   const all: AgendaTraining[] = [];

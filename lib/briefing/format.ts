@@ -59,12 +59,45 @@ export function formatDateTime(datum: string, tijden: string): string {
   if (times === '') {
     return date;
   }
-  const range = /^(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})$/.exec(times);
+  const range = formatTimeRange(times);
+  return range === null ? `${date}; ${times}` : `${date}; ${range} uur`;
+}
+
+/**
+ * `9.30-12:30` en `09.30-16.30 uur` worden allebei `09:30 - 12:30`, of `null` als er geen
+ * tijdvak in staat.
+ *
+ * Apart van `formatDateTime` omdat de historie-tabel datum en tijd in **twee kolommen**
+ * zet en dus alleen het tijdvak nodig heeft. `null` en niet de ruwe tekst, zodat de
+ * aanroeper zelf kan kiezen wat er met onherkenbare tekst gebeurt: de gegevenstabel laat
+ * hem staan, de historie-tabel ook, maar dat is een keuze en geen toeval.
+ *
+ * **De afsluitende `uur` mag meedoen.** Gemeten over 721 gevulde `Tijden`-waarden: zonder
+ * die staart herkennen we er 371, mét 586. Die 215 extra trainingen kwamen ongewijzigd in
+ * het document terecht — `09.30-16.30 uur` naast `09:30 - 12:30` in dezelfde briefing. Het
+ * woord wordt hier afgeknipt en door `formatDateTime` weer toegevoegd, dus er staat nooit
+ * `uur uur`.
+ *
+ * De 135 die dan nog doorvallen zijn echt iets anders (`13:00 tot 17:00`, `n.o.t.k.`,
+ * en meerdere dagdelen met een `&` ertussen) en horen ongemoeid te blijven.
+ */
+export function formatTimeRange(tijden: string): string | null {
+  const times = tijden.trim();
+  const range = /^(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})\s*(?:uur)?\.?$/i.exec(times);
   if (range === null) {
-    return `${date}; ${times}`;
+    return null;
   }
   const pad = (h: string, m: string): string => `${h.padStart(2, '0')}:${m}`;
-  return `${date}; ${pad(range[1], range[2])} - ${pad(range[3], range[4])} uur`;
+  return `${pad(range[1], range[2])} - ${pad(range[3], range[4])}`;
+}
+
+/**
+ * `2026-01-12` wordt `12-01-2026`, de korte notatie uit de historie-tabel van ITG's
+ * voorbeeldbriefing. Onherkenbaar gaat onveranderd door.
+ */
+export function formatShortDate(datum: string): string {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(datum.trim());
+  return iso === null ? datum.trim() : `${iso[3]}-${iso[2]}-${iso[1]}`;
 }
 
 /**

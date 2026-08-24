@@ -16,19 +16,20 @@
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
 import { assertColumns } from '@lib/monday/schema-check';
 
-import { agendaBoardId } from '@lib/monday/board-config';
+import { agendaBoardId, THEMAS_BOARD } from '@lib/monday/board-config';
 
 import {
   BRIEFING_AGENDA_COLUMNS,
   CONTACT_COLUMNS,
   OPPORTUNITY_BOARD,
   OPPORTUNITY_COLUMNS,
+  THEMAS_COLUMNS,
   TRAINER_ACTEURS_GROUP,
 } from './columns';
 
 import type { ExpectedColumn } from '@lib/monday/board-config';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
-import type { BriefingTraining, BriefingTrainer, MissingField } from './types';
+import type { BriefingTraining, BriefingTrainer, MissingField, BriefingThema } from './types';
 
 const C = BRIEFING_AGENDA_COLUMNS;
 
@@ -46,6 +47,15 @@ const TRAINER_PHONE_COLUMN = 'telefoon_mkn1hbyh';
 export const BRIEFING_EXPECTED_COLUMNS: ExpectedColumn[] = [
   { id: C.themaRelation, type: 'board_relation', settingsIncludes: ['"boardIds":[5067928440]'] },
   { id: C.trainerRelation, type: 'board_relation', settingsIncludes: ['"boardIds":[1661151090]'] },
+  /**
+   * Ontbreekt deze kolom, dan leest de briefing "geen co-trainers" in plaats van te
+   * foutmelden, en mist er iemand in het document zonder dat iets dat verraadt.
+   */
+  {
+    id: C.coTrainerRelation,
+    type: 'board_relation',
+    settingsIncludes: ['"boardIds":[1661151090]'],
+  },
   { id: C.opportunity, type: 'board_relation', settingsIncludes: ['"boardIds":[1279052045]'] },
   { id: C.datum, type: 'date' },
   /**
@@ -200,19 +210,67 @@ const text = (item: RawItem, id: string): string => {
   return (value.display_value ?? value.text ?? '').trim();
 };
 
-/** Namen van gekoppelde items, in de volgorde waarin ze gekoppeld zijn. */
-async function readLinkedNames(
+/**
+ * De gekoppelde thema's: naam plus de concept-inhoud die eronder hangt.
+ *
+ * De concept-kolom komt hier vandaan en niet van het agendabord, omdat de bullets bij een
+ * **thema** horen en niet bij een training. Verbetert ITG een skelet, dan werkt dat door in
+ * elke volgende briefing over dat thema.
+ *
+ * `column_values(ids:)` en niet alles opvragen: het Themas-bord draagt ook vier
+ * relatiekolommen met honderden trainers erin, en die zouden hier bij elke briefing
+ * meekomen zonder dat iemand ze gebruikt.
+ */
+async function readThemas(
   client: MondayGraphQLClient,
   ids: readonly string[]
-): Promise<Map<string, string>> {
+): Promise<Map<string, BriefingThema>> {
   if (ids.length === 0) {
     return new Map();
   }
-  const data = await client.query<{ items: Array<{ id: string | number; name: string }> }>(
-    'query ($ids: [ID!]) { items(ids: $ids) { id name } }',
-    { ids: [...ids] }
+  /**
+   * Eerst het bord, dan de items.
+   *
+   * Wordt `itg_conceptinhoud` verwijderd of omgezet naar een ander type, dan laat Monday
+   * hem weg uit élk antwoord en leest élke briefing als "dit thema heeft geen skelet" — 85
+   * skeletten stilzwijgend weg, met een keurige `«…»`-regel eronder die zegt dat de bron nog
+   * niet is aangesloten. Dat is precies de melding die iemand ervan zou weerhouden te gaan
+   * zoeken.
+   */
+  const [themasBoard] = await client.getSchema([THEMAS_BOARD]);
+  if (themasBoard === undefined) {
+    throw new Error(`Briefing: Themas-bord ${THEMAS_BOARD} niet gevonden of niet toegankelijk.`);
+  }
+  assertColumns(themasBoard, [{ id: THEMAS_COLUMNS.conceptInhoud, type: 'long_text' }]);
+  const data = await client.query<{
+    items: Array<{
+      id: string | number;
+      name: string;
+      column_values: Array<{ id: string; text: string | null }>;
+    }>;
+  }>(
+    `query ($ids: [ID!], $cols: [String!]) {
+       items(ids: $ids) { id name column_values(ids: $cols) { id text } }
+     }`,
+    { ids: [...ids], cols: [THEMAS_COLUMNS.conceptInhoud] }
   );
-  const found = new Map((data.items ?? []).map((i) => [String(i.id), i.name]));
+  const found = new Map(
+    (data.items ?? []).map((item) => [
+      String(item.id),
+      {
+        naam: item.name,
+        /**
+         * Een lege waarde is normaal — 25 thema's op het bord hebben geen skelet. Een
+         * ontbrekende **kolom** is dat niet, en de twee zijn hier niet uit elkaar te
+         * houden: Monday laat een onbekend kolom-id gewoon weg. Vandaar dat het bordschema
+         * hierboven apart wordt getoetst; als de kolom bestaat, is leeg ook echt leeg.
+         */
+        conceptInhoud: (
+          item.column_values.find((c) => c.id === THEMAS_COLUMNS.conceptInhoud)?.text ?? ''
+        ).trim(),
+      },
+    ])
+  );
   assertAllResolved(ids, found.keys(), "thema's");
   return found;
 }
@@ -244,7 +302,8 @@ function assertAllResolved(
 /** Trainers met hun telefoonnummer; de briefing zet dat in de lead- en co-blokken. */
 async function readTrainers(
   client: MondayGraphQLClient,
-  ids: readonly string[]
+  ids: readonly string[],
+  coIds: ReadonlySet<string>
 ): Promise<BriefingTrainer[]> {
   if (ids.length === 0) {
     return [];
@@ -280,6 +339,7 @@ async function readTrainers(
       naam: found.name,
       telefoon: (cell(found, TRAINER_PHONE_COLUMN).text ?? '').trim(),
       isActeur: found.group?.id === TRAINER_ACTEURS_GROUP,
+      isCoTrainer: coIds.has(id),
     };
   });
 }
@@ -466,15 +526,25 @@ export async function readBriefingTraining(
   }
 
   const themaIds = linkedIds(item, C.themaRelation);
-  const trainerIds = linkedIds(item, C.trainerRelation);
+  /**
+   * Beide trainerkolommen, lead eerst.
+   *
+   * Iemand die per ongeluk in allebei staat telt één keer mee, en dan als lead — de
+   * leadkolom komt eerst en `Set` houdt de eerste. Twee keer in de lijst zou twee
+   * briefings voor dezelfde persoon opleveren.
+   */
+  const leadIds = linkedIds(item, C.trainerRelation);
+  const coIds = linkedIds(item, C.coTrainerRelation).filter((id) => !leadIds.includes(id));
+  const trainerIds = [...leadIds, ...coIds];
+  const coSet = new Set(coIds);
   const oppIds = linkedIds(item, C.opportunity);
   const opportunityItemId = oppIds[0] ?? null;
   const people = cell(item, C.accountmanager).persons_and_teams ?? [];
   const amId = people.length > 0 ? String(people[0].id) : null;
 
-  const [themaNames, trainers, accountmanager, opportunity] = await Promise.all([
-    readLinkedNames(client, themaIds),
-    readTrainers(client, trainerIds),
+  const [themaItems, trainers, accountmanager, opportunity] = await Promise.all([
+    readThemas(client, themaIds),
+    readTrainers(client, trainerIds, coSet),
     readAccountmanager(client, amId),
     readContact(client, opportunityItemId, text(item, C.contactpersoonNaam)),
   ]);
@@ -487,7 +557,11 @@ export async function readBriefingTraining(
     label: text(item, C.label),
     brie: text(item, C.brie),
     opdrachtgever: text(item, C.opdrachtgever),
-    themas: themaIds.map((id) => themaNames.get(id) ?? id),
+    themas: themaIds.map((id) => themaItems.get(id)?.naam ?? id),
+    themaInhoud: themaIds
+      .map((id) => themaItems.get(id)?.conceptInhoud ?? '')
+      .filter((t) => t !== '')
+      .join('\n'),
     klanttitel: text(item, C.klanttitel),
     duur: text(item, C.duurTekst),
     datum: (cell(item, C.datum).date ?? '').trim() || text(item, C.datum),

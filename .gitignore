@@ -72,3 +72,4 @@ briefing-demo/
 # Python-bytecode van de sjabloontools
 __pycache__/
 *.py[cod]
+.briefings-create.json

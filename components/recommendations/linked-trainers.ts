@@ -105,7 +105,18 @@ function readLinkedIds(data: unknown, columnId: string): string[] {
   return linked;
 }
 
-export async function readLinkedTrainers(
+/**
+ * Wie er in de **leadkolom** staat — bewust niet in beide trainerkolommen.
+ *
+ * Dit voedt de append in `pick-trainer`: die leest de huidige lijst, telt de gekozen trainer
+ * erbij op, en schrijft de vereniging terug naar dezelfde kolom. Zou hier ook
+ * `itg_cotrainers` gelezen worden, dan **verhuist elke co-trainer bij de eerstvolgende
+ * keuze stilletjes naar de leadkolom** — een schrijfactie die niemand heeft gevraagd en die
+ * de rolverdeling wist die ITG net heeft vastgelegd.
+ *
+ * Voor het tónen is dit juist de verkeerde lijst; zie `readInvolvedTrainers`.
+ */
+export async function readLeadTrainers(
   monday: MondayBridge,
   mondayItemId: string
 ): Promise<string[]> {
@@ -114,4 +125,65 @@ export async function readLinkedTrainers(
     columnIds: [AGENDA_2026_COLUMNS.trainerRelation],
   });
   return readLinkedIds(data, AGENDA_2026_COLUMNS.trainerRelation);
+}
+
+/**
+ * Wie er in de **co-trainerkolom** staat.
+ *
+ * Rolspecifiek, net als `readLeadTrainers`, en om dezelfde reden: een relatieschrijfactie
+ * vervangt de hele lijst van één kolom, dus wie eraan toevoegt moet precies díé kolom
+ * gelezen hebben en geen andere.
+ *
+ * Levert een lege lijst op een bord zonder co-trainerkolom — die bestaat alleen op Agenda
+ * 2026, en op oudere jaargangen wordt er ook niet naartoe geschreven.
+ */
+export async function readCoTrainers(
+  monday: MondayBridge,
+  mondayItemId: string
+): Promise<string[]> {
+  const columnId = AGENDA_2026_COLUMNS.coTrainerRelation;
+  if (columnId === undefined) {
+    return [];
+  }
+  const data = await monday.api(LINKED_QUERY, { ids: [mondayItemId], columnIds: [columnId] });
+  return readLinkedIds(data, columnId);
+}
+
+/**
+ * Iedereen die al aan deze training hangt: lead **en** co-trainers.
+ *
+ * Dit is wat de lijst moet tonen. Met alleen de leadkolom staat een co-trainer er als
+ * "nog niet gekozen" bij, is zijn `Kies`-knop actief, en levert één klik hem een tweede
+ * koppeling op — nu óók als lead. Dat is dezelfde vervuiling als hierboven, alleen langs
+ * de voorkant in plaats van langs de append.
+ *
+ * **Nooit gebruiken om te schrijven.** `pick-trainer` schrijft de vereniging terug naar de
+ * kolom waaruit `readLeadTrainers` las; deze lijst daarin stoppen verplaatst de co-trainers.
+ *
+ * Wat dit bewust níét doet: een co-trainer alsnog tot lead promoveren. Zijn rij staat op
+ * "Gekozen" en is uitgeschakeld. Dat is een beperking, geen fout — welke rol een keuze
+ * krijgt is een productvraag aan ITG en geen gok die de popup zelf moet maken.
+ */
+export async function readInvolvedTrainers(
+  monday: MondayBridge,
+  mondayItemId: string
+): Promise<string[]> {
+  const columnIds = [
+    AGENDA_2026_COLUMNS.trainerRelation,
+    ...(AGENDA_2026_COLUMNS.coTrainerRelation === undefined
+      ? []
+      : [AGENDA_2026_COLUMNS.coTrainerRelation]),
+  ];
+  const data = await monday.api(LINKED_QUERY, { ids: [mondayItemId], columnIds });
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const columnId of columnIds) {
+    for (const id of readLinkedIds(data, columnId)) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    }
+  }
+  return out;
 }

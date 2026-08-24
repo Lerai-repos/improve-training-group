@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -19,6 +20,7 @@ import {
   resolveRecipients,
   sessionFacts,
 } from '@lib/briefing/compose';
+import { readHistorie } from '@lib/briefing/historie';
 import { readBriefingTraining } from '@lib/briefing/read';
 import { readExtraInfo } from '@lib/briefing/updates';
 import { briefingFilename, renderBriefing } from '@lib/briefing/render';
@@ -34,6 +36,7 @@ import { BRIE } from '@lib/briefing/types';
  *   pnpm briefing:generate <itemId>
  *   pnpm briefing:generate <itemId> --cyclus --huiswerk
  *   pnpm briefing:generate <itemId> --uit ./ergens-anders
+ *   pnpm briefing:generate <itemId> --concept ./eigen-bullets.txt
  *
  * Checklistvlaggen: --eigen-groep --zelfde-groep --cyclus --huiswerk --voorbereidend --challenge
  * --acteur-is <itemId> wijst een gekoppelde persoon aan als acteur (mag meerdere keren).
@@ -53,6 +56,59 @@ const DEFAULT_OUTPUT_DIR = 'briefing-demo';
  * als checklistvraag, niet als afleiding. Dit is de opdrachtregelversie van dat vinkje; in
  * de app wordt het een radioknop met dezelfde voorinvulling.
  */
+/**
+ * `--concept <bestand>`: de concept-inhoud die de adviseur zelf heeft geschreven.
+ *
+ * In de app-tab wordt dit een tekstvak dat is voorgevuld met het skelet van het thema. Dat
+ * tabblad bestaat nog niet, en tot die tijd is dit de enige manier om de afwijkende versie
+ * te beproeven — zonder dit gedraagt de keten zich als een doorgeefluik en is precies het
+ * stuk dat we wilden bouwen niet te zien.
+ *
+ * Een bestand en geen argument op de opdrachtregel: het zijn twaalf regels tekst met
+ * accenten en aanhalingstekens erin.
+ */
+function readConceptOverride(argv: readonly string[]): string | undefined {
+  const at = argv.indexOf('--concept');
+  if (at === -1) {
+    return undefined;
+  }
+  const path = argv[at + 1];
+  if (path === undefined || path.startsWith('--')) {
+    throw new Error('--concept verwacht een bestandsnaam: --concept ./mijn-bullets.txt');
+  }
+  if (!existsSync(path)) {
+    throw new Error(`--concept: bestand niet gevonden: ${path}`);
+  }
+  const text = readFileSync(path, 'utf-8');
+  if (text.trim() === '') {
+    throw new Error(
+      `--concept: ${path} is leeg. Laat de vlag weg om het skelet van het thema te gebruiken; ` +
+        'een leeg bestand zou stilzwijgend hetzelfde doen en dat is niet te zien in het document.'
+    );
+  }
+  return text;
+}
+
+/**
+ * `--historie-max <n>`: hoeveel rijen de tabel hoogstens krijgt.
+ *
+ * Een vlag en geen constante omdat **nog niet aan Dirkje gevraagd is** hoe lang de tabel mag
+ * worden. CNV heeft 32 sessies, DAS 28. Zonder vlag komt alles erin, zodat je meteen ziet
+ * hoe erg dat is.
+ */
+function readHistorieLimit(argv: readonly string[]): number | undefined {
+  const at = argv.indexOf('--historie-max');
+  if (at === -1) {
+    return undefined;
+  }
+  const raw = argv[at + 1];
+  const value = Number(raw);
+  if (raw === undefined || !Number.isInteger(value) || value < 1) {
+    throw new Error('--historie-max verwacht een positief geheel getal: --historie-max 10');
+  }
+  return value;
+}
+
 function readChecklist(argv: readonly string[], voorstel: boolean): BriefingChecklist {
   const ja = argv.includes('--acteur');
   const nee = argv.includes('--geen-acteur');
@@ -73,6 +129,7 @@ function readChecklist(argv: readonly string[], voorstel: boolean): BriefingChec
     homework: argv.includes('--huiswerk'),
     preparatoryAssignment: argv.includes('--voorbereidend'),
     trainingActor: ja,
+    conceptInhoud: readConceptOverride(argv),
   };
 }
 
@@ -168,7 +225,22 @@ async function main(): Promise<void> {
   }
 
   const extraInfo = await readExtraInfo(client, [training.itemId, training.opportunityItemId]);
+  /**
+   * De historie hoort bij het blok `Vaste klant`, en dat blok komt er alleen als de
+   * checklist erom vraagt. Toch wordt hij altijd gelezen: de adviseur moet in de app-tab
+   * kunnen zien dát er eerdere sessies zijn voordat hij het vinkje zet, anders moet hij dat
+   * zelf in de agenda opzoeken — precies het werk dat dit blok hoort weg te nemen.
+   */
+  const historie = await readHistorie(client, {
+    bedrijf: training.opdrachtgever,
+    excludeItemId: training.itemId,
+    limit: readHistorieLimit(argv),
+  });
+  if (historie.length > 0) {
+    console.log(`  Historie: ${historie.length} eerdere/komende sessie(s) bij ${training.opdrachtgever}`);
+  }
   const data = composeBriefing(training, checklist, {
+    historie,
     extraInfo: extraInfo.lines,
     mondayChallenge: argv.includes('--challenge'),
     roles: sessionFacts(training, checklist, overrides),

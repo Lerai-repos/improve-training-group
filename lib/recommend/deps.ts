@@ -10,6 +10,7 @@ import {
   RECOMMENDATION_STATUS_LABELS,
   triggerGroupIds,
 } from '@lib/monday/board-config';
+import { trainerRelationIds } from '@lib/monday/decode';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createSettingsLoader, provenanceOf } from '@lib/settings';
 import type { SettingsProvenance } from '@lib/settings';
@@ -371,7 +372,7 @@ export function buildViewDeps(): {
             {
               boardId: board,
               dateColumnId: AGENDA_2026_COLUMNS.datum,
-              trainerColumnId: AGENDA_2026_COLUMNS.trainerRelation,
+              trainerColumnIds: trainerRelationIds(AGENDA_2026_COLUMNS),
             }
           );
         },

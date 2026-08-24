@@ -55,6 +55,113 @@ export interface BriefingBlock {
 const CYCLE_DIAGRAM = 'cyclusschema.png';
 
 /**
+ * De vier rolafhankelijke teksten, woordelijk uit `ITG Briefingteksten bij bijzonderheden.docx`.
+ *
+ * Twee paren, en binnen elk paar beweren de twee varianten het **tegenovergestelde** over wie
+ * het klantcontact doet. De verkeerde variant sturen is daarom geen schoonheidsfoutje: dan
+ * leest een co-trainer dat híj de klant belt terwijl de lead dat ook denkt, of leest niemand
+ * het en belt er niemand.
+ *
+ * `{anderen}` wordt gevuld met de overige gekoppelde personen in de vorm `Naam (06-…)`, wat
+ * exact ITG's eigen `Naam (tel nr)` is.
+ *
+ * **Twee typefouten staan er met opzet in**: `Kantcontact` en `trainingscacteur` komen zo uit
+ * hun bronbestand. Wij verzinnen niets en verbeteren niets — `verify-blocks.py` toetst deze
+ * regels letterlijk tegen dat document, dus een stille correctie hier laat de controle
+ * omvallen. Melden aan ITG mag; zelf wijzigen niet.
+ */
+const LEAD_RESPONSIBILITIES: readonly string[] = [
+  'Klantcontact vooraf via Teams/telefonisch',
+  'Ontwikkelen van training',
+  'De terugkoppeling en nabespreking met de klant en mij',
+];
+
+const ACTOR_SHARED: readonly string[] = [
+  'Belangrijk: de trainingsacteur is geen co-trainer of inhoudsdeskundige, tenzij dit ' +
+    'specifiek is afgesproken. De trainer blijft eindverantwoordelijk.',
+  'De (lead) trainer is verantwoordelijk voor',
+  'Kantcontact vooraf via Teams/telefonisch',
+  'Ontwikkelen van inhoud van de training',
+  'Afstemmen met de trainingsacteur en evt. co-trainer(s) over de definitieve opzet en ' +
+    'uitvoering van de training',
+  'De aansturing van de inzet van de acteur, inclusief duidelijke instructies over het ' +
+    'gewenste gedrag of de context waarin de acteur acteert',
+];
+
+const ACTOR_TASKS: readonly string[] = [
+  'Het tot leven brengen van de praktijk',
+  'Het afstemmen van zijn/haar spel op het niveau van de deelnemer & het leerdoel. Dit ' +
+    'gebeurt in overleg met de trainer, al dan niet op aanvraag van de deelnemer',
+];
+
+/** De tekst voor de ontvanger die leadtrainer is. */
+function leadTrainerBlock(anderen: string): BriefingBlock {
+  return {
+    titel: 'Leadtrainer',
+    regels: [
+      `Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: ${anderen}.` +
+        'Jij bent de leadtrainer en dus verantwoordelijk voor:',
+      LEAD_RESPONSIBILITIES[0] ?? '',
+      LEAD_RESPONSIBILITIES[1] ?? '',
+      'Afstemmen met de co-trainer(s)Alle trainers (jij en de co-trainers) krijgen deze ' +
+        'briefing, maar jij bent verantwoordelijk voor het duidelijk briefen van de trainers ' +
+        'over de definitieve opzet en uitvoering van de training.',
+      LEAD_RESPONSIBILITIES[2] ?? '',
+    ],
+  };
+}
+
+/** De tekst voor de ontvanger die co-trainer is. */
+function coTrainerBlock(anderen: string): BriefingBlock {
+  return {
+    titel: 'Co-trainer',
+    regels: [
+      `Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: ${anderen}.` +
+        'Jij bent ingedeeld als co-trainer. De leadtrainer is verantwoordelijk voor:',
+      LEAD_RESPONSIBILITIES[0] ?? '',
+      LEAD_RESPONSIBILITIES[1] ?? '',
+      'Afstemmen met de co-trainer(s)Alle trainers (jij en de lead trainer) krijgen deze ' +
+        'briefing, maar de lead trainer is verantwoordelijk voor het duidelijk briefen van de ' +
+        'co-trainer(s) over de definitieve opzet en uitvoering van de training.',
+      LEAD_RESPONSIBILITIES[2] ?? '',
+      'Als je wilt, kun je alvast contact opnemen met de leadtrainer.',
+    ],
+  };
+}
+
+/** De tekst voor een trainer die mét een acteur werkt. */
+function withActorBlock(acteurs: string): BriefingBlock {
+  return {
+    titel: 'Werken met een trainingsacteur',
+    regels: [
+      `Voor deze opdracht werk je met een trainingsacteur: ${acteurs}. Om een zo hoog ` +
+        'mogelijk leerrendement te realiseren is er een duidelijke taakverdeling binnen de ' +
+        'samenwerking met de (lead) trainer en trainingsacteur.',
+      ...ACTOR_SHARED,
+      'De trainingscacteur is verantwoordelijk het',
+      ...ACTOR_TASKS,
+      'Geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)',
+    ],
+  };
+}
+
+/** De tekst voor de ontvanger die zélf de acteur is. */
+function asActorBlock(trainers: string): BriefingBlock {
+  return {
+    titel: 'Werken als trainingsacteur',
+    regels: [
+      `Voor deze opdracht word je ingezet als trainingsacteur, naast de (lead) trainer: ` +
+        `${trainers}. Om een zo hoog mogelijk leerrendement te realiseren is er een duidelijke ` +
+        'taakverdeling binnen de samenwerking met de (lead) trainer en trainingsacteur.',
+      ...ACTOR_SHARED,
+      'De trainingscacteur is verantwoordelijk voor',
+      ...ACTOR_TASKS,
+      'Het geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)',
+    ],
+  };
+}
+
+/**
  * Wat de training zélf zegt over wie er voor de groep staat.
  *
  * Dit komt uit Monday en niet uit de checklist, want het zijn de twee gevallen waarin een
@@ -141,6 +248,21 @@ export interface BriefingChecklist {
    * bevestigt het.
    */
   readonly trainingActor: boolean;
+  /**
+   * De concept-inhoud zoals de adviseur hem heeft achtergelaten, of `undefined` als hij
+   * hem niet heeft aangeraakt.
+   *
+   * **Alleen opslaan als er echt getypt is.** Onaangeraakt betekent "gebruik het skelet van
+   * het thema", en dan bereikt een verbeterd skelet elke volgende briefing. Zouden wij het
+   * skelet bij het openen van de tab meteen wegschrijven, dan bevriest elke training een
+   * kopie op de dag dat iemand hem toevallig opendeed.
+   *
+   * Het staat hier en niet in `BriefingExtras` omdat het een antwoord van de adviseur is,
+   * net als de vinkjes: `06-briefing.md` stelt het als checklistvraag *"Standaard
+   * bulletpoints (conceptprogramma)? ja/nee → Nee, tekstveld, de adviseur typt zelf"*.
+   * Eén tekstveld beantwoordt die vraag: leeg is ja, gevuld is nee.
+   */
+  readonly conceptInhoud?: string;
 }
 
 /** Alles op nee: de basis waar de checklist bovenop komt. */

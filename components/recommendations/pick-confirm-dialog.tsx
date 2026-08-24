@@ -28,6 +28,20 @@ import type { PickMode } from './pick-trainer';
  * **Toevoegen is the confirming action; Vervangen is marked destructive.** Only one of the
  * two can lose work, and if a planner dismisses this dialog on autopilot the safe branch
  * is the one that should be under their thumb.
+ *
+ * ## Vervangen raakt alleen de leadtrainer
+ *
+ * Sinds de kolomsplitsing van 21-Aug-2026 schrijft `replace` naar de leadkolom en blijven
+ * `itg_cotrainers` staan. De tekst zei tot 24-Aug *"de huidige koppelingen vervangen"* en
+ * noemde de co-trainers bij naam in dezelfde zin — een belofte die de knop niet waarmaakte.
+ *
+ * Het alternatief was de co-trainers meewissen. Dat is bewust niet gedaan: dat zou een
+ * **nieuwe** vernietigende schrijfactie zijn die niemand heeft gevraagd, op een knop die is
+ * bedacht toen er nog één kolom en één rol was. Een planner die van lead wisselt bedoelt
+ * bijna altijd "verkeerde lead", niet "gooi de hele bezetting weg".
+ *
+ * Gevolg, en het staat er met opzet niet als knop: een co-trainer verwijderen kan hier niet.
+ * Dat gebeurt op het bord in Monday.
  */
 
 export interface PendingPick {
@@ -84,7 +98,8 @@ export const PickConfirmDialog = ({
           <AlertDialogDescription>
             Aan deze training {plural ? 'zijn' : 'is'} al gekoppeld:{' '}
             <strong>{linkedLabels.join(', ')}</strong>. Wil je <strong>{chosen}</strong> daarnaast
-            koppelen, of {plural ? 'de huidige koppelingen' : 'de huidige koppeling'} vervangen?
+            koppelen, of de leadtrainer vervangen? Co-trainers blijven in beide gevallen staan;
+            die haal je weg op het bord.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -94,7 +109,7 @@ export const PickConfirmDialog = ({
             onClick={handleReplace}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Vervangen
+            Leadtrainer vervangen
           </AlertDialogAction>
           <AlertDialogAction onClick={handleAppend}>Toevoegen</AlertDialogAction>
         </AlertDialogFooter>

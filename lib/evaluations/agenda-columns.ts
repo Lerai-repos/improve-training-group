@@ -31,7 +31,16 @@ const KLANTEN_BOARD = '1279052045';
 export interface AgendaHistoryColumns {
   readonly boardId: string;
   readonly jaargang: '2026' | '2025';
+  /** De **leadtrainer**-relatie; sinds 21-Aug-2026 betekent deze kolom alleen de lead. */
   readonly trainerRelation: string;
+  /**
+   * De co-trainerrelatie, als de jaargang hem heeft.
+   *
+   * Zonder dit schrijft de evaluatiejoin een sessie alléén toe aan de lead, en verdwijnt
+   * een co-trainer stil uit zijn eigen cijfers zodra ITG hem verplaatst. Agenda 2025 heeft
+   * geen co-trainerkolom, dus daar blijft dit leeg.
+   */
+  readonly coTrainerRelation?: string;
   readonly themaRelation: string;
   /**
    * The klant link — the RELATION, not the `lookup_mkszzfvr` mirror.
@@ -62,6 +71,7 @@ export const AGENDA_2026_HISTORY: AgendaHistoryColumns = {
   boardId: AGENDA_2026_PRODUCTION_BOARD,
   jaargang: '2026',
   trainerRelation: 'board_relation_mkz4y7tb',
+  coTrainerRelation: 'itg_cotrainers',
   themaRelation: 'board_relation_mkz4920y',
   klantRelation: 'board_relation',
   ieCode: 'tekst_mkn58pt6',
@@ -92,6 +102,21 @@ export const AGENDA_HISTORY_BOARDS: readonly AgendaHistoryColumns[] = [
 ];
 
 /**
+ * De trainerkolommen van deze jaargang, lead eerst.
+ *
+ * Eén plek, zodat de query en de decodeerstap niet uit elkaar kunnen lopen: vraagt de query
+ * de co-trainerkolom niet op, dan meldt Monday niets en leest de decodeerstap hem als
+ * "geen co-trainers".
+ */
+export function trainerRelationColumns(
+  columns: AgendaHistoryColumns
+): readonly string[] {
+  return columns.coTrainerRelation === undefined
+    ? [columns.trainerRelation]
+    : [columns.trainerRelation, columns.coTrainerRelation];
+}
+
+/**
  * What `assertColumns` should insist on.
  *
  * `settingsIncludes` is the load-bearing part: a missing column is caught by the id, but
@@ -107,6 +132,15 @@ export function agendaHistoryExpectedColumns(
       type: 'board_relation',
       settingsIncludes: [`"boardIds":[${TRAINERS_BOARD}]`],
     },
+    ...(columns.coTrainerRelation === undefined
+      ? []
+      : [
+          {
+            id: columns.coTrainerRelation,
+            type: 'board_relation',
+            settingsIncludes: [`"boardIds":[${TRAINERS_BOARD}]`],
+          },
+        ]),
     {
       id: columns.themaRelation,
       type: 'board_relation',

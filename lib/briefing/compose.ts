@@ -44,6 +44,7 @@ import {
   type SessionFacts,
 } from './blocks';
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
+import { resolveConceptInhoud } from './concept';
 
 import type { BriefingTrainer, BriefingTraining } from './types';
 
@@ -65,7 +66,13 @@ export interface BriefingExtras {
   readonly achtergrond?: readonly string[];
   /** Uit de Monday-updates met het voorvoegsel `voor in briefing:`. */
   readonly extraInfo?: readonly string[];
-  /** De concept-inhoud per thema. */
+  /**
+   * De concept-inhoud, als de aanroeper hem al heeft samengesteld.
+   *
+   * Normaal blijft dit leeg en komt hij uit het thema plus de checklist — zie
+   * `resolveConceptInhoud`. Dit is de ontsnapping voor een aanroeper die hem elders al
+   * heeft uitgerekend.
+   */
   readonly bullets?: readonly string[];
   /** Uit het Google Form van het label. */
   readonly inventarisatie?: readonly InventoryAnswer[];
@@ -168,7 +175,13 @@ export function composeBriefing(
     achtergrond: achtergrondAlineas(training, extras),
     extraInfo: extras.extraInfo ?? [MISSING.extraInfo],
     mondayChallenge: extras.mondayChallenge ?? false,
-    bullets: extras.bullets ?? [MISSING.bullets],
+    bullets:
+      extras.bullets ??
+      resolveConceptInhoud({
+        themaTekst: training.themaInhoud,
+        adviseurTekst: checklist.conceptInhoud,
+        organisatie: training.opdrachtgever,
+      }) ?? [MISSING.bullets],
     blokken: selectBlocks(checklist, extras.historie, extras.roles ?? sessionFacts(training, checklist)),
     inventarisatie:
       extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],

@@ -46,6 +46,7 @@ export const THEMAS_BOARD = '5067928440';
 
 export const AGENDA_2026_COLUMNS: TrainingColumnMap = {
   trainerRelation: 'board_relation_mkz4y7tb',
+  coTrainerRelation: 'itg_cotrainers',
   themaRelation: 'board_relation_mkz4920y',
   companyMirror: 'lookup_mkszzfvr',
   datum: 'datum_1',
@@ -107,6 +108,20 @@ export interface ExpectedColumn {
 export const AGENDA_EXPECTED_COLUMNS: ExpectedColumn[] = [
   {
     id: 'board_relation_mkz4y7tb',
+    type: 'board_relation',
+    settingsIncludes: ['"boardIds":[1661151090]'],
+  },
+  /**
+   * De co-trainerkolom, aangemaakt 21-Aug-2026 met `pnpm agenda:cotrainer`.
+   *
+   * Hij staat hier als **harde** eis en niet als optionele: zodra ITG een co-trainer uit de
+   * leadkolom haalt en deze kolom ontbreekt of is hernoemd, telt die persoon nergens meer
+   * mee — niet in de werklast, niet in zijn eigen evaluatiecijfers, niet in de briefing.
+   * Monday laat een onbekend kolom-id stilzwijgend weg, dus zonder deze controle is dat
+   * niet te onderscheiden van "er is geen co-trainer".
+   */
+  {
+    id: 'itg_cotrainers',
     type: 'board_relation',
     settingsIncludes: ['"boardIds":[1661151090]'],
   },
@@ -327,8 +342,16 @@ export function recommendableGroups(): string[] {
 export const RECOMMENDATION_STATUS_COLUMN = 'color_mkzwfy42';
 /** The "Aanbevelingen" button that triggers a manual run (sets the status to RUN). */
 export const RECOMMENDATION_BUTTON_COLUMN = 'button_mkzw7xx2';
-/** "Trainers contactgegevens" board_relation (the confirmed-trainer link, flow-7). */
+/**
+ * "Trainers contactgegevens" board_relation (the confirmed-trainer link, flow-7).
+ *
+ * Sinds 21-Aug-2026 betekent deze kolom **de leadtrainer**; co-trainers staan in
+ * `itg_cotrainers`. Dit blijft de kolom waar de aanbevelingspopup naartoe schrijft — een
+ * gekozen trainer is de lead. Lezen wie er allemaal bij de sessie hoort gebeurt over
+ * **beide** kolommen; zie `trainerRelationIds`.
+ */
 export const TRAINER_LINK_COLUMN = 'board_relation_mkz4y7tb';
+
 /** The "Inplannen" group (verified live) — moving a training here triggers a run. */
 export const INPLANNEN_GROUP_ID = 'group_mkwtj07a';
 /**

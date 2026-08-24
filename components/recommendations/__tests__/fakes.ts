@@ -25,6 +25,12 @@ export function fakeMonday(
   let apiCalls = 0;
   /** The trainer relation, as this fake Monday holds it. Mutations update it. */
   let relation: string[] = [];
+  /**
+   * De co-trainerkolom. Leeg, maar hij moet er wél zijn: de weergavelezer vraagt beide
+   * kolommen op en weigert terecht een antwoord waarin er één ontbreekt — dat is niet te
+   * onderscheiden van de drift die van een append een replace maakt.
+   */
+  const coRelation: string[] = [];
 
   const bridge = {
     context: () => Promise.resolve(initial),
@@ -63,6 +69,7 @@ export function fakeMonday(
               id: '111',
               column_values: [
                 { id: AGENDA_2026_COLUMNS.trainerRelation, linked_item_ids: [...relation] },
+                { id: AGENDA_2026_COLUMNS.coTrainerRelation, linked_item_ids: [...coRelation] },
               ],
             },
           ],

@@ -26,6 +26,7 @@ function agendaItem(overrides: Record<string, unknown> = {}) {
     [C.ieCode]: { text: '260818' },
     [C.label]: { text: 'IT' },
     [C.trainerRelation]: { linked_item_ids: ['500'] },
+    [C.coTrainerRelation]: { linked_item_ids: [] },
     [C.brie]: { text: 'Aanmaken' },
     [C.acteuraantal]: { text: '' },
     [C.opportunity]: { linked_item_ids: ['300'] },
@@ -53,6 +54,11 @@ interface FakeOpts {
   dropTrainer?: string;
   /** Idem voor een contactpersoon. */
   dropContact?: string;
+  dropThema?: string;
+  /** Bootst een verwijderde of omgezette concept-kolom op het Themas-bord na. */
+  dropConceptColumn?: boolean;
+  conceptColumnType?: string;
+  conceptInhoud?: Record<string, string>;
   /** Bootst een hernoemde/verwijderde telefoonkolom op het trainersbord na. */
   dropPhoneColumn?: boolean;
   /** Draait het antwoord van items(ids:) om, zoals Monday mag doen. */
@@ -136,17 +142,44 @@ function client(item: unknown, opts: FakeOpts = {}) {
           })),
       } as T);
     }
-    if (doc.includes('items(ids: $ids) { id name }')) {
+    // De kolom-id reist als GraphQL-variabele en staat dus niet in de querytekst.
+    if (Array.isArray(vars?.cols) && (vars.cols as string[]).includes('itg_conceptinhoud')) {
       const asked = ((vars?.ids as string[]) ?? []).map(String);
       return Promise.resolve({
-        items: asked.map((id) => ({ id, name: id === '900' ? 'Verbindend communiceren' : `Thema ${id}` })),
+        items: asked
+          .filter((id) => id !== opts.dropThema)
+          .map((id) => ({
+            id,
+            name: id === '900' ? 'Verbindend communiceren' : `Thema ${id}`,
+            column_values: [
+              { id: 'itg_conceptinhoud', text: opts.conceptInhoud?.[id] ?? null },
+            ],
+          })),
       } as T);
     }
     return Promise.resolve({ items: [item] } as T);
   };
   const getSchema = (ids: string[]) =>
     Promise.resolve(
-      ids[0] === '1279052045'
+      ids[0] === '5067928440'
+      ? [
+          {
+            id: '5067928440',
+            name: "Thema's",
+            groups: [],
+            columns: opts.dropConceptColumn
+              ? []
+              : [
+                  {
+                    id: 'itg_conceptinhoud',
+                    title: 'Concept inhoud',
+                    type: opts.conceptColumnType ?? 'long_text',
+                    settings_str: null,
+                  },
+                ],
+          },
+        ]
+      : ids[0] === '1279052045'
         ? [
             {
               id: '1279052045',
@@ -182,7 +215,13 @@ describe('readBriefingTraining', () => {
     expect(t.accountmanager).toEqual({ naam: 'Dirkje Pril', mobiel: '+31648431025' });
     expect(t.contactpersoon).toEqual({ naam: 'Paula Hollander', telefoon: '+31 6 42085076' });
     expect(t.trainers).toEqual([
-      { itemId: '500', naam: 'Lennart Bosschaart', telefoon: '06-11111111', isActeur: false },
+      {
+        itemId: '500',
+        naam: 'Lennart Bosschaart',
+        telefoon: '06-11111111',
+        isActeur: false,
+        isCoTrainer: false,
+      },
     ]);
     expect(t.missing).toEqual([]);
   });
@@ -564,5 +603,91 @@ describe('readBriefingTraining', () => {
       getSchema: () => Promise.resolve(schema({})),
     } as unknown as MondayGraphQLClient;
     await expect(readBriefingTraining(empty, '99')).rejects.toThrow(/niet gevonden/);
+  });
+
+  /**
+   * De concept-inhoud hangt aan het thema en niet aan de training, zodat een verbeterd
+   * skelet in Monday elke volgende briefing over dat thema bereikt.
+   */
+  it('leest de concept-inhoud van het gekoppelde thema mee', async () => {
+    const training = await readBriefingTraining(
+      client(agendaItem(), { conceptInhoud: { '900': 'Plenaire opening.\nNext step.' } }),
+      '1'
+    );
+    expect(training.themaInhoud).toBe('Plenaire opening.\nNext step.');
+  });
+
+  /**
+   * 65 van de 102 thema's op het bord hebben geen skelet. Dat is een geldige toestand en
+   * geen fout: het document krijgt dan een zichtbare «…»-regel, geen uitzondering.
+   */
+  it('laat themaInhoud leeg als het thema nog geen skelet heeft', async () => {
+    const training = await readBriefingTraining(client(agendaItem()), '1');
+    expect(training.themaInhoud).toBe('');
+    expect(training.themas).toEqual(['Verbindend communiceren']);
+  });
+
+  /**
+   * Sinds 21-Aug-2026 draagt de bestaande relatie de leadtrainer en staan co-trainers in
+   * `itg_cotrainers`. Alleen de leadkolom lezen zou een co-trainer stil uit de briefing
+   * laten verdwijnen — het document ziet er dan compleet uit, met één persoon te weinig.
+   */
+  it('leest de co-trainers uit de tweede kolom, achter de lead', async () => {
+    const training = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.trainerRelation]: { linked_item_ids: ['500'] },
+          [C.coTrainerRelation]: { linked_item_ids: ['501'] },
+        })
+      ),
+      '1'
+    );
+    expect(training.trainers.map((t) => [t.naam, t.isCoTrainer])).toEqual([
+      ['Lennart Bosschaart', false],
+      ['Tessa de Haas', true],
+    ]);
+  });
+
+  /**
+   * Iemand die per ongeluk in allebei de kolommen staat mag maar één keer meetellen, en dan
+   * als lead. Twee keer in de lijst zou twee briefings voor dezelfde persoon opleveren.
+   */
+  it('telt iemand die in beide kolommen staat één keer, als lead', async () => {
+    const training = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.trainerRelation]: { linked_item_ids: ['500'] },
+          [C.coTrainerRelation]: { linked_item_ids: ['500'] },
+        })
+      ),
+      '1'
+    );
+    expect(training.trainers).toHaveLength(1);
+    expect(training.trainers[0]?.isCoTrainer).toBe(false);
+  });
+
+  /** Een ontbrekende co-trainerkolom is drift, geen lege waarde. */
+  it('werpt als de co-trainerkolom ontbreekt in plaats van niemand te lezen', async () => {
+    const item = agendaItem();
+    item.column_values = item.column_values.filter((c) => c.id !== C.coTrainerRelation);
+    await expect(readBriefingTraining(client(item), '1')).rejects.toThrow(/ontbreekt/);
+  });
+
+  /**
+   * 25 thema's op het bord hebben geen skelet, dus leeg is normaal. De kolom die *weg* is,
+   * is dat niet — en Monday levert die twee identiek af. Zonder deze controle verdwijnen
+   * alle 85 skeletten stilzwijgend, met een «…»-regel eronder die zegt dat de bron nog niet
+   * is aangesloten: precies de melding die iemand ervan weerhoudt te gaan zoeken.
+   */
+  it('werpt als de concept-kolom van het Themas-bord verdwenen is', async () => {
+    await expect(
+      readBriefingTraining(client(agendaItem(), { dropConceptColumn: true }), '1')
+    ).rejects.toThrow(/missing column itg_conceptinhoud/);
+  });
+
+  it('werpt als de concept-kolom een ander type heeft gekregen', async () => {
+    await expect(
+      readBriefingTraining(client(agendaItem(), { conceptColumnType: 'text' }), '1')
+    ).rejects.toThrow(/expected 'long_text'/);
   });
 });

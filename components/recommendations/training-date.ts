@@ -60,7 +60,7 @@ export function formatTrainingDate(iso: string | null): string | null {
  * The `date` field of the requested column, walked out of whatever came back.
  *
  * Fails to null rather than throwing, and that is the whole difference with
- * `readLinkedTrainers`: nothing is written on the strength of this value. A drifted or
+ * `readLeadTrainers`: nothing is written on the strength of this value. A drifted or
  * unreadable column costs one line in the header, while a throw would take a working
  * list down over a decoration.
  */
