@@ -55,32 +55,73 @@ export interface BriefingBlock {
 const CYCLE_DIAGRAM = 'cyclusschema.png';
 
 /**
- * De vier rolafhankelijke teksten, woordelijk uit `ITG Briefingteksten bij bijzonderheden.docx`.
+ * De vier rolafhankelijke teksten, uit `ITG Briefingteksten bij bijzonderheden.docx`.
  *
- * Twee paren, en binnen elk paar beweren de twee varianten het **tegenovergestelde** over wie
- * het klantcontact doet. De verkeerde variant sturen is daarom geen schoonheidsfoutje: dan
- * leest een co-trainer dat híj de klant belt terwijl de lead dat ook denkt, of leest niemand
- * het en belt er niemand.
+ * Twee paren, en binnen elk paar beweren de varianten het **tegenovergestelde** over wie het
+ * klantcontact doet. De verkeerde variant sturen is daarom geen schoonheidsfoutje: dan leest
+ * een co-trainer dat híj de klant belt terwijl de lead dat ook denkt, of leest niemand het.
  *
- * `{anderen}` wordt gevuld met de overige gekoppelde personen in de vorm `Naam (06-…)`, wat
- * exact ITG's eigen `Naam (tel nr)` is.
+ * De alinea's staan hier **exact zoals ITG ze schreef**, inclusief hun plaatshouder
+ * `Naam (tel nr)` en inclusief het ontbrekende spatie na de punt. Dat is met opzet: zo kan
+ * `verify-blocks.py` juist de zinnen die ertoe doen letterlijk vergelijken met hun document.
+ * De namen worden er bij het samenstellen ingezet.
  *
- * **Twee typefouten staan er met opzet in**: `Kantcontact` en `trainingscacteur` komen zo uit
- * hun bronbestand. Wij verzinnen niets en verbeteren niets — `verify-blocks.py` toetst deze
- * regels letterlijk tegen dat document, dus een stille correctie hier laat de controle
- * omvallen. Melden aan ITG mag; zelf wijzigen niet.
+ * **Twee typefouten zijn wél gecorrigeerd**, omdat `06-briefing.md` dat uitdrukkelijk
+ * voorschrijft: *"in de brontekst staan twee typefouten (`Kantcontact` in plaats van
+ * Klantcontact, en `trainingscacteur`). Neem ze **niet** over — meld ze aan Dirkje en gebruik
+ * de correcte spelling."* Ze staan als bewuste afwijking in `CORRECTIONS` in de verifier, dus
+ * ze blijven bewaakt in plaats van een gat te slaan.
  */
-const LEAD_RESPONSIBILITIES: readonly string[] = [
-  'Klantcontact vooraf via Teams/telefonisch',
-  'Ontwikkelen van training',
-  'De terugkoppeling en nabespreking met de klant en mij',
-];
 
+/** ITG's eigen plaatshouder voor meerdere personen, letterlijk uit hun bronbestand. */
+const TWO_NAMES = 'Naam (tel nr), Naam (tel nr)';
+/** Idem voor één persoon. */
+const ONE_NAME = 'Naam (tel nr)';
+
+const LEAD_INTRO =
+  'Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), ' +
+  'Naam (tel nr).Jij bent de leadtrainer en dus verantwoordelijk voor:';
+
+const CO_INTRO =
+  'Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), ' +
+  'Naam (tel nr).Jij bent ingedeeld als co-trainer. De leadtrainer is verantwoordelijk voor:';
+
+const LEAD_ALIGN =
+  'Afstemmen met de co-trainer(s)Alle trainers (jij en de co-trainers) krijgen deze briefing, ' +
+  'maar jij bent verantwoordelijk voor het duidelijk briefen van de trainers over de ' +
+  'definitieve opzet en uitvoering van de training.';
+
+const CO_ALIGN =
+  'Afstemmen met de co-trainer(s)Alle trainers (jij en de lead trainer) krijgen deze briefing, ' +
+  'maar de lead trainer is verantwoordelijk voor het duidelijk briefen van de co-trainer(s) ' +
+  'over de definitieve opzet en uitvoering van de training.';
+
+const WITH_ACTOR_INTRO =
+  'Voor deze opdracht werk je met een trainingsacteur: Naam (tel nr). Om een zo hoog mogelijk ' +
+  'leerrendement te realiseren is er een duidelijke taakverdeling binnen de samenwerking met ' +
+  'de (lead) trainer en trainingsacteur.';
+
+const AS_ACTOR_INTRO =
+  'Voor deze opdracht word je ingezet als trainingsacteur, naast de (lead) trainer: ' +
+  'Naam (tel nr). Om een zo hoog mogelijk leerrendement te realiseren is er een duidelijke ' +
+  'taakverdeling binnen de samenwerking met de (lead) trainer en trainingsacteur.';
+
+/**
+ * Staat in álle vier de blokken. Eén constante en geen vier kopieën, want een gedupliceerde
+ * regel verstopt een wijziging: `verify-blocks.py` vraagt of er *een* alinea met deze tekst
+ * bestaat, dus met twee kopieën blijft één gewijzigde kopie onzichtbaar. Gemeten.
+ *
+ * `Klantcontact` is hier de **gecorrigeerde** spelling; ITG's bron schrijft in de
+ * acteurblokken `Kantcontact`. Zie `CORRECTIONS` in de verifier.
+ */
+const CLIENT_CONTACT = 'Klantcontact vooraf via Teams/telefonisch';
+
+/** Gedeeld door beide acteurblokken. */
 const ACTOR_SHARED: readonly string[] = [
   'Belangrijk: de trainingsacteur is geen co-trainer of inhoudsdeskundige, tenzij dit ' +
     'specifiek is afgesproken. De trainer blijft eindverantwoordelijk.',
   'De (lead) trainer is verantwoordelijk voor',
-  'Kantcontact vooraf via Teams/telefonisch',
+  CLIENT_CONTACT,
   'Ontwikkelen van inhoud van de training',
   'Afstemmen met de trainingsacteur en evt. co-trainer(s) over de definitieve opzet en ' +
     'uitvoering van de training',
@@ -94,19 +135,19 @@ const ACTOR_TASKS: readonly string[] = [
     'gebeurt in overleg met de trainer, al dan niet op aanvraag van de deelnemer',
 ];
 
+const LEAD_DUTIES: readonly string[] = [CLIENT_CONTACT, 'Ontwikkelen van training'];
+
+const LEAD_CLOSING = 'De terugkoppeling en nabespreking met de klant en mij';
+
 /** De tekst voor de ontvanger die leadtrainer is. */
 function leadTrainerBlock(anderen: string): BriefingBlock {
   return {
     titel: 'Leadtrainer',
     regels: [
-      `Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: ${anderen}.` +
-        'Jij bent de leadtrainer en dus verantwoordelijk voor:',
-      LEAD_RESPONSIBILITIES[0] ?? '',
-      LEAD_RESPONSIBILITIES[1] ?? '',
-      'Afstemmen met de co-trainer(s)Alle trainers (jij en de co-trainers) krijgen deze ' +
-        'briefing, maar jij bent verantwoordelijk voor het duidelijk briefen van de trainers ' +
-        'over de definitieve opzet en uitvoering van de training.',
-      LEAD_RESPONSIBILITIES[2] ?? '',
+      LEAD_INTRO.replace(TWO_NAMES, anderen),
+      ...LEAD_DUTIES,
+      LEAD_ALIGN,
+      LEAD_CLOSING,
     ],
   };
 }
@@ -116,14 +157,10 @@ function coTrainerBlock(anderen: string): BriefingBlock {
   return {
     titel: 'Co-trainer',
     regels: [
-      `Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: ${anderen}.` +
-        'Jij bent ingedeeld als co-trainer. De leadtrainer is verantwoordelijk voor:',
-      LEAD_RESPONSIBILITIES[0] ?? '',
-      LEAD_RESPONSIBILITIES[1] ?? '',
-      'Afstemmen met de co-trainer(s)Alle trainers (jij en de lead trainer) krijgen deze ' +
-        'briefing, maar de lead trainer is verantwoordelijk voor het duidelijk briefen van de ' +
-        'co-trainer(s) over de definitieve opzet en uitvoering van de training.',
-      LEAD_RESPONSIBILITIES[2] ?? '',
+      CO_INTRO.replace(TWO_NAMES, anderen),
+      ...LEAD_DUTIES,
+      CO_ALIGN,
+      LEAD_CLOSING,
       'Als je wilt, kun je alvast contact opnemen met de leadtrainer.',
     ],
   };
@@ -134,11 +171,9 @@ function withActorBlock(acteurs: string): BriefingBlock {
   return {
     titel: 'Werken met een trainingsacteur',
     regels: [
-      `Voor deze opdracht werk je met een trainingsacteur: ${acteurs}. Om een zo hoog ` +
-        'mogelijk leerrendement te realiseren is er een duidelijke taakverdeling binnen de ' +
-        'samenwerking met de (lead) trainer en trainingsacteur.',
+      WITH_ACTOR_INTRO.replace(ONE_NAME, acteurs),
       ...ACTOR_SHARED,
-      'De trainingscacteur is verantwoordelijk het',
+      'De trainingsacteur is verantwoordelijk het',
       ...ACTOR_TASKS,
       'Geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)',
     ],
@@ -150,11 +185,9 @@ function asActorBlock(trainers: string): BriefingBlock {
   return {
     titel: 'Werken als trainingsacteur',
     regels: [
-      `Voor deze opdracht word je ingezet als trainingsacteur, naast de (lead) trainer: ` +
-        `${trainers}. Om een zo hoog mogelijk leerrendement te realiseren is er een duidelijke ` +
-        'taakverdeling binnen de samenwerking met de (lead) trainer en trainingsacteur.',
+      AS_ACTOR_INTRO.replace(ONE_NAME, trainers),
       ...ACTOR_SHARED,
-      'De trainingscacteur is verantwoordelijk voor',
+      'De trainingsacteur is verantwoordelijk voor',
       ...ACTOR_TASKS,
       'Het geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)',
     ],
