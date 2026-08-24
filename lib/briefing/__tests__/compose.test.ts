@@ -8,7 +8,7 @@ import {
   type HistoryRow,
   type SessionFacts,
 } from '../blocks';
-import { composeBriefing, openIssues, resolveRecipients, sessionFacts } from '../compose';
+import { composeBriefing, openIssues, sessionFacts } from '../compose';
 import { briefingFilename, templatePath } from '../render';
 
 import type { BriefingTraining } from '../types';
@@ -397,125 +397,6 @@ describe('sessionFacts', () => {
   });
 });
 
-describe('resolveRecipients', () => {
-  const trainer = (id: string, naam: string, isActeur: boolean, isCoTrainer = false) => ({
-    itemId: id,
-    naam,
-    telefoon: '',
-    isActeur,
-    isCoTrainer,
-  });
-
-  /**
-   * De bestandsnaam noemt de trainer die de briefing ontvangt. Een herkende acteur hoort daar
-   * niet tussen.
-   */
-  it('laat een herkende acteur uit de ontvangers', () => {
-    const uit = resolveRecipients(
-      {
-        ...PROBIBLIO,
-        acteuraantal: 1,
-        trainers: [trainer('1', 'Lennart', false), trainer('2', 'Elke', true)],
-      },
-      { ...EMPTY_CHECKLIST, trainingActor: true }
-    );
-    expect(uit.kind).toBe('resolved');
-    expect(uit.kind === 'resolved' && uit.trainers.map((t) => t.naam)).toEqual(['Lennart']);
-  });
-
-  /**
-   * Het gemeten randgeval: `Acteuraantal=1`, twee gekoppelde personen, geen van beiden in de
-   * groep `Acteurs` — 8 keer op het bord. Eén van de twee is de acteur en welke staat nergens,
-   * dus béíde namen op het bestand zetten is een verkeerde levering en geen schoonheidsfout.
-   */
-  it('weigert ontvangers aan te wijzen als de rol onbeslist is', () => {
-    const uit = resolveRecipients(
-      {
-        ...PROBIBLIO,
-        acteuraantal: 1,
-        trainers: [trainer('1', 'Lennart', false), trainer('2', 'Elke', false)],
-      },
-      { ...EMPTY_CHECKLIST, trainingActor: true }
-    );
-    expect(uit.kind).toBe('ambiguous');
-    expect(uit.kind === 'ambiguous' && uit.candidates.map((t) => t.naam)).toEqual([
-      'Lennart',
-      'Elke',
-    ]);
-    expect(uit.kind === 'ambiguous' && uit.actorsUnaccounted).toBe(1);
-  });
-
-  /** De adviseur wijst de acteur aan, en dan staat het weer vast. */
-  it('lost de twijfel op zodra de adviseur de acteur aanwijst', () => {
-    const training = {
-      ...PROBIBLIO,
-      acteuraantal: 1,
-      trainers: [trainer('1', 'Lennart', false), trainer('2', 'Elke', false)],
-    };
-    const checklist = { ...EMPTY_CHECKLIST, trainingActor: true };
-    const uit = resolveRecipients(training, checklist, { actorItemIds: ['2'] });
-    expect(uit.kind).toBe('resolved');
-    expect(uit.kind === 'resolved' && uit.trainers.map((t) => t.naam)).toEqual(['Lennart']);
-    // en de blokken tellen hem dan ook niet meer als onbekende rol
-    expect(sessionFacts(training, checklist, { actorItemIds: ['2'] })).toEqual({
-      certainTrainers: 1,
-      identifiedActors: 1,
-      unknownRole: 0,
-    });
-  });
-
-  /** Geen acteur volgens de checklist: dan is er niets onbeslist en ontvangt iedereen. */
-  it('twijfelt niet als er geen acteur is', () => {
-    const uit = resolveRecipients(
-      {
-        ...PROBIBLIO,
-        acteuraantal: 1,
-        trainers: [trainer('1', 'Lennart', false), trainer('2', 'Tessa', false)],
-      },
-      EMPTY_CHECKLIST
-    );
-    expect(uit.kind === 'resolved' && uit.trainers).toHaveLength(2);
-  });
-
-  /**
-   * De groep `Acteurs` zegt wat iemand meestal doet, niet welke rol hij in déze sessie heeft.
-   * Zegt de adviseur `--geen-acteur`, dan is die persoon hier trainer en hoort hij gewoon bij
-   * de ontvangers. Zonder die voorrang zou het antwoord van de adviseur genegeerd worden en
-   * viel er stilzwijgend een naam van het bestand.
-   */
-  it('laat het antwoord van de adviseur winnen van de groep Acteurs', () => {
-    const training = {
-      ...PROBIBLIO,
-      acteuraantal: 1,
-      trainers: [trainer('1', 'Lennart', false), trainer('2', 'Elke', true)],
-    };
-    const uit = resolveRecipients(training, EMPTY_CHECKLIST);
-    expect(uit.kind).toBe('resolved');
-    expect(uit.kind === 'resolved' && uit.trainers.map((t) => t.naam)).toEqual([
-      'Lennart',
-      'Elke',
-    ]);
-    expect(sessionFacts(training, EMPTY_CHECKLIST)).toEqual({
-      certainTrainers: 2,
-      identifiedActors: 0,
-      unknownRole: 0,
-    });
-  });
-
-  /** En met de acteurvraag op ja telt diezelfde persoon wél als acteur. */
-  it('telt hem wél als acteur zodra de adviseur ja zegt', () => {
-    const training = {
-      ...PROBIBLIO,
-      acteuraantal: 1,
-      trainers: [trainer('1', 'Lennart', false), trainer('2', 'Elke', true)],
-    };
-    expect(sessionFacts(training, { ...EMPTY_CHECKLIST, trainingActor: true })).toEqual({
-      certainTrainers: 1,
-      identifiedActors: 1,
-      unknownRole: 0,
-    });
-  });
-});
 
 describe('briefingFilename', () => {
   it('schrijft de naam zoals ITG hem zelf schrijft', () => {

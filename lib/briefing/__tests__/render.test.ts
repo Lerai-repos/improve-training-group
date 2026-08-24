@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST, type BriefingChecklist, type HistoryRow } from '../blocks';
+import { resolveRecipientRoles } from '../recipients';
 import { composeBriefing } from '../compose';
 import { renderBriefing } from '../render';
 import { zipNames, zipReadText } from './zip-reader';
@@ -195,6 +196,84 @@ describe('renderBriefing', () => {
     );
     expect(xml).toContain('De versie van de adviseur.');
     expect(xml).not.toContain('Het standaardskelet.');
+  });
+
+  /**
+   * De rolblokken tot in het Word-document. De lead- en co-tekst beweren het
+   * tegenovergestelde over wie het klantcontact doet, dus dit is de plek waar het echt
+   * misgaat als de verkeerde variant wordt gekozen.
+   */
+  describe('rolblokken per ontvanger', () => {
+    const LENNART = { itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false };
+    const TESSA = { itemId: '2', naam: 'Tessa de Haas', telefoon: '0624118840', isActeur: false, isCoTrainer: true };
+    const ELKE = { itemId: '3', naam: 'Elke Jansen', telefoon: '0611111111', isActeur: true, isCoTrainer: false };
+
+    const renderFor = async (
+      trainers: BriefingTraining['trainers'],
+      naam: string,
+      checklist: BriefingChecklist = EMPTY_CHECKLIST
+    ) => {
+      const training: BriefingTraining = { ...TRAINING, trainers, acteuraantal: 1 };
+      const uit = resolveRecipientRoles(training, checklist);
+      if (uit.kind !== 'resolved') {
+        throw new Error(`rollen niet opgelost: ${uit.kind}`);
+      }
+      const recipient = uit.recipients.find((r) => r.trainer.naam === naam);
+      if (recipient === undefined) {
+        throw new Error(`${naam} is geen ontvanger`);
+      }
+      return documentXml(
+        await renderBriefing('IT', composeBriefing(training, checklist, { historie: [], recipient }))
+      );
+    };
+
+    it('geeft de lead de leadtekst, met de co-trainer erin genoemd', async () => {
+      const xml = await renderFor([LENNART, TESSA], 'Lennart Bosschaart');
+      expect(xml).toContain('Jij bent de leadtrainer');
+      expect(xml).not.toContain('Jij bent ingedeeld als co-trainer');
+      expect(xml).toContain('Tessa de Haas (06-24118840)');
+      expect(xml).not.toContain('Naam (tel nr)');
+    });
+
+    it('geeft de co-trainer de co-tekst, met de lead erin genoemd', async () => {
+      const xml = await renderFor([LENNART, TESSA], 'Tessa de Haas');
+      expect(xml).toContain('Jij bent ingedeeld als co-trainer');
+      expect(xml).not.toContain('Jij bent de leadtrainer');
+      expect(xml).toContain('Lennart Bosschaart (06-18683139)');
+    });
+
+    /** Klantcontactmoment verschilt per rol; dit is Dirkje's eigen tweede voorstel. */
+    it('zet Klantcontactmoment op n.v.t. voor de co-trainer', async () => {
+      const xml = await renderFor([LENNART, TESSA], 'Tessa de Haas');
+      expect(xml).toContain('n.v.t., door lead trainer');
+    });
+
+    it('laat Klantcontactmoment staan voor de lead', async () => {
+      const xml = await renderFor([LENNART, TESSA], 'Lennart Bosschaart');
+      expect(xml).not.toContain('n.v.t., door lead trainer');
+    });
+
+    it('geeft de acteur de acteurtekst, met de trainer erin genoemd', async () => {
+      const met = { ...EMPTY_CHECKLIST, trainingActor: true };
+      const xml = await renderFor([LENNART, ELKE], 'Elke Jansen', met);
+      expect(xml).toContain('word je ingezet als trainingsacteur');
+      expect(xml).not.toContain('werk je met een trainingsacteur');
+      expect(xml).toContain('Lennart Bosschaart (06-18683139)');
+    });
+
+    it('geeft de trainer op diezelfde sessie het "werken met" blok', async () => {
+      const met = { ...EMPTY_CHECKLIST, trainingActor: true };
+      const xml = await renderFor([LENNART, ELKE], 'Lennart Bosschaart', met);
+      expect(xml).toContain('werk je met een trainingsacteur');
+      expect(xml).toContain('Elke Jansen (06-11111111)');
+    });
+
+    /** Eén trainer, geen acteur: er valt niets af te stemmen, dus geen rolblok. */
+    it('geeft een enkele trainer geen rolblok', async () => {
+      const xml = await renderFor([LENNART], 'Lennart Bosschaart');
+      expect(xml).not.toContain('Jij bent de leadtrainer');
+      expect(xml).not.toContain('trainingsacteur');
+    });
   });
 
   it('weigert een label zonder sjabloon in plaats van er een te kiezen', async () => {

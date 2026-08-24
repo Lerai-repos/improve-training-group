@@ -46,6 +46,7 @@ import {
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
 import { resolveConceptInhoud } from './concept';
 
+import { classify, type Recipient, type RoleOverrides } from './recipients';
 import type { BriefingTrainer, BriefingTraining } from './types';
 
 /** Eén vraag en antwoord uit het inventarisatieformulier. */
@@ -90,6 +91,18 @@ export interface BriefingExtras {
    * Monday en de checklist.
    */
   readonly roles?: SessionFacts;
+  /**
+   * Voor wie dit exemplaar is.
+   *
+   * Eén sessie levert meerdere documenten op — Dirkje: *"De briefing gaat naar mensen
+   * persoonlijk (staan ook hun eigen km's bijv in). Dus ze krijgen de tekst idd obv hun
+   * rol."* Twee dingen hangen eraan: welk rolblok erin komt, en wat er bij
+   * Klantcontactmoment staat.
+   *
+   * Optioneel, omdat samenstellen zonder ontvanger een geldige tussenstap is. Dan blijven de
+   * rolblokken een zichtbare `«…»`-regel in plaats van een gok.
+   */
+  readonly recipient?: Recipient;
 }
 
 /** Precies de velden die de negen sjablonen aanroepen. */
@@ -168,7 +181,7 @@ export function composeBriefing(
       training.contactpersoon === null
         ? ''
         : formatContact(training.contactpersoon.naam, training.contactpersoon.telefoon),
-    klantcontactmoment: formatClientContact(training.klantcontactmoment),
+    klantcontactmoment: clientContactFor(training, extras.recipient),
     evaluatie: formatEvaluation(training.evaluatie),
     iecode: formatIeCode(training.ieCode),
     trainingscodeMc: extras.trainingscodeMc ?? MISSING.trainingscodeMc,
@@ -182,10 +195,42 @@ export function composeBriefing(
         adviseurTekst: checklist.conceptInhoud,
         organisatie: training.opdrachtgever,
       }) ?? [MISSING.bullets],
-    blokken: selectBlocks(checklist, extras.historie, extras.roles ?? sessionFacts(training, checklist)),
+    blokken: selectBlocks(
+      checklist,
+      extras.historie,
+      extras.roles ?? sessionFacts(training, checklist),
+      extras.recipient === undefined
+        ? undefined
+        : { recipient: extras.recipient, format: formatContact }
+    ),
     inventarisatie:
       extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
   };
+}
+
+/**
+ * Wat er bij `Klantcontactmoment` komt te staan, en dat verschilt per rol.
+ *
+ * Dirkje, 21-Aug-2026: *"Yes ik denk eigenlijk alleen soort klantcontact. Dus lead trainer
+ * neemt contact op, dat is dan allemaal zoals het is. … maar bij co-trainer & acteur mag
+ * erachter (niet door jou, door lead trainer). of misschien makkelijker n.v.t., door lead
+ * trainer"*. Haar tweede voorstel is gekozen: de originele tekst laten staan met een
+ * toevoeging erachter nodigt uit tot fout lezen, want dan staat er nog steeds
+ * "gebruik ITG-account".
+ *
+ * **Geen uitzondering voor `Niet nodig`.** Bij 136 van de 823 trainingen staat de kolom
+ * daarop, en dan beweert deze regel dat de lead iets doet wat niet gebeurt. Tim, 21-Aug-2026:
+ * *"de niet nodig is iets dat ze handmatig kunnen verwijderen als het onnodig is."* Bewust
+ * één regel minder in de code in plaats van een randgeval dat de helft van de tijd toch
+ * verkeerd geraden wordt.
+ */
+const NOT_APPLICABLE_CLIENT_CONTACT = 'n.v.t., door lead trainer';
+
+function clientContactFor(training: BriefingTraining, recipient?: Recipient): string {
+  if (recipient !== undefined && recipient.role !== 'lead') {
+    return NOT_APPLICABLE_CLIENT_CONTACT;
+  }
+  return formatClientContact(training.klantcontactmoment);
 }
 
 /**
@@ -216,46 +261,6 @@ export function countLinkedActors(training: BriefingTraining): number {
   return training.trainers.filter((t) => t.isActeur).length;
 }
 
-/** Wie de adviseur zelf als acteur heeft aangewezen, per item-id op het trainersbord. */
-export interface RoleOverrides {
-  readonly actorItemIds?: readonly string[];
-}
-
-/**
- * De gekoppelde personen ingedeeld naar rol, met de onbeslisbare gevallen apart.
- *
- * **De checklist wint van Monday.** Zegt de adviseur dat er geen acteur meewerkt, dan is
- * iedereen trainer — ook iemand die in de groep `Acteurs` staat. Die groep zegt wat iemand
- * meestal doet, niet welke rol hij in déze sessie heeft, en het is de adviseur die de sessie
- * kent. Zonder deze voorrang zou `--geen-acteur` een gekoppelde trainer alsnog uit de
- * ontvangers en uit de bestandsnaam laten vallen, precies tegen het antwoord in dat net
- * gegeven is.
- *
- * Zegt de adviseur wél dat er een acteur is, dan wijzen twee bronnen er een aan, en pas samen
- * zijn ze compleet genoeg: de groep `Acteurs` op het trainersbord, en wat de adviseur zelf
- * opgeeft. Blijft er daarna een acteur over die `Acteuraantal` wél belooft maar die nergens
- * is aan te wijzen, dan is van álle overgebleven personen de rol onbeslist — niet van een
- * specifieke.
- */
-function classify(
-  training: BriefingTraining,
-  checklist: BriefingChecklist,
-  overrides: RoleOverrides
-): { actors: BriefingTrainer[]; others: BriefingTrainer[]; unaccounted: number } {
-  if (!checklist.trainingActor) {
-    return { actors: [], others: [...training.trainers], unaccounted: 0 };
-  }
-  const aangewezen = new Set(overrides.actorItemIds ?? []);
-  const actors = training.trainers.filter((t) => t.isActeur || aangewezen.has(t.itemId));
-  const others = training.trainers.filter((t) => !actors.includes(t));
-  const expected = Math.max(training.acteuraantal ?? 1, 1);
-  return {
-    actors,
-    others,
-    unaccounted: Math.min(Math.max(0, expected - actors.length), others.length),
-  };
-}
-
 /**
  * De rolverdeling als **aantallen**, voor de blokkeuze.
  *
@@ -278,40 +283,6 @@ export function sessionFacts(
     identifiedActors: actors.length,
     unknownRole: unaccounted,
   };
-}
-
-/**
- * Wie de briefing ontvangt, of het antwoord dat dat niet vaststaat.
- *
- * Dit is bewust géén lijst met een vraagteken erbij. De ontvangers bepalen de bestandsnaam en
- * straks bij wie het document terechtkomt, en dat zijn **identiteiten**, geen aantallen.
- * Weten dat één van twee mensen de trainer is, is genoeg om te weten dát er één trainer is,
- * en niet genoeg om zijn naam op het bestand te zetten.
- *
- * Precies dat gebeurde: `Acteuraantal=1` met twee gekoppelde personen die geen van beiden in
- * de groep `Acteurs` staan — 8 keer gemeten — leverde een bestandsnaam op met de acteur
- * erin. `ambiguous` dwingt de aanroeper om eerst te vragen wie wie is.
- */
-export type Recipients =
-  | { readonly kind: 'resolved'; readonly trainers: readonly BriefingTrainer[] }
-  | {
-      readonly kind: 'ambiguous';
-      /** Iedereen die trainer óf acteur kan zijn; welke van de twee staat nergens. */
-      readonly candidates: readonly BriefingTrainer[];
-      /** Hoeveel van die kandidaten volgens `Acteuraantal` acteur zijn. */
-      readonly actorsUnaccounted: number;
-    };
-
-export function resolveRecipients(
-  training: BriefingTraining,
-  checklist: BriefingChecklist,
-  overrides: RoleOverrides = {}
-): Recipients {
-  const { others, unaccounted } = classify(training, checklist, overrides);
-  if (unaccounted > 0) {
-    return { kind: 'ambiguous', candidates: others, actorsUnaccounted: unaccounted };
-  }
-  return { kind: 'resolved', trainers: others };
 }
 
 /**

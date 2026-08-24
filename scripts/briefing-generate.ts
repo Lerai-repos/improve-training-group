@@ -17,9 +17,9 @@ import {
   composeBriefing,
   countLinkedActors,
   openIssues,
-  resolveRecipients,
   sessionFacts,
 } from '@lib/briefing/compose';
+import { resolveRecipientRoles } from '@lib/briefing/recipients';
 import { readHistorie } from '@lib/briefing/historie';
 import { readBriefingTraining } from '@lib/briefing/read';
 import { readExtraInfo } from '@lib/briefing/updates';
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
     );
   }
   const overrides = { actorItemIds };
-  const ontvangers = resolveRecipients(training, checklist, overrides);
+  const ontvangers = resolveRecipientRoles(training, checklist, overrides);
   if (ontvangers.kind === 'ambiguous') {
     const namen = ontvangers.candidates.map((t) => `${t.naam} (${t.itemId})`).join(', ');
     throw new Error(
@@ -221,6 +221,29 @@ async function main(): Promise<void> {
         `Acteurs staan, dus van deze gekoppelde personen is de rol onbekend: ${namen}.\n` +
         '  Wijs de acteur(s) aan met --acteur-is <itemId>, of zet de acteurvraag op ' +
         '--geen-acteur als er geen acteur meewerkt.'
+    );
+  }
+  /**
+   * Twee mensen in de leadkolom: de legacy-toestand van vóór de kolomsplitsing. Er valt niet
+   * te zeggen wie leidt, en het lead- en het co-blok beweren het tegenovergestelde over wie
+   * het klantcontact doet. Dus geen document met een gok erin.
+   */
+  if (ontvangers.kind === 'no_single_lead') {
+    if (ontvangers.leadCandidates.length === 0) {
+      throw new Error(
+        'Er is geen leadtrainer: iedereen staat in de kolom Co-trainer(s), of de enige ' +
+          'persoon in de leadkolom is als acteur aangemerkt.\n' +
+          '  Elk document zou dan verwijzen naar een leadtrainer die niet bestaat — de ' +
+          'co-trainer en de acteur krijgen "n.v.t., door lead trainer" bij ' +
+          'Klantcontactmoment.\n' +
+          '  Zet één trainer in de kolom Trainers contactgegevens en draai opnieuw.'
+      );
+    }
+    const namen = ontvangers.leadCandidates.map((t) => `${t.naam} (${t.itemId})`).join(', ');
+    throw new Error(
+      `Er staan ${ontvangers.leadCandidates.length} mensen in de leadkolom, dus wie de ` +
+        `leadtrainer is staat nergens: ${namen}.\n` +
+        '  Zet de co-trainer(s) in de kolom Co-trainer(s) op het agendabord en draai opnieuw.'
     );
   }
 
@@ -239,12 +262,22 @@ async function main(): Promise<void> {
   if (historie.length > 0) {
     console.log(`  Historie: ${historie.length} eerdere/komende sessie(s) bij ${training.opdrachtgever}`);
   }
-  const data = composeBriefing(training, checklist, {
+  const gedeeld = {
     historie,
     extraInfo: extraInfo.lines,
     mondayChallenge: argv.includes('--challenge'),
     roles: sessionFacts(training, checklist, overrides),
-  });
+  };
+  /**
+   * De gegevenstabel is voor iedereen bijna gelijk, dus die wordt één keer getoond — met de
+   * eerste ontvanger als voorbeeld. Wat per persoon verschilt (Klantcontactmoment, straks de
+   * km's) staat per document eronder.
+   */
+  const eerste = ontvangers.recipients[0];
+  if (eerste === undefined) {
+    throw new Error('Geen ontvangers: er hangt niemand aan deze training.');
+  }
+  const data = composeBriefing(training, checklist, { ...gedeeld, recipient: eerste });
 
   console.log('  Gegevenstabel');
   const rows: Array<[string, string]> = [
@@ -277,11 +310,6 @@ async function main(): Promise<void> {
     console.log('    LET OP: Monday heeft de updateslijst afgekapt; er kan tekst missen.');
   }
 
-  console.log(`\n  Blokken                  ${data.blokken.length === 0 ? '—' : ''}`);
-  for (const block of data.blokken) {
-    console.log(`    ${block.titel} (${block.regels.length} alinea's)`);
-  }
-
   if (training.missing.length > 0) {
     console.log(`\n  ${training.missing.length} verplicht veld(en) leeg → Brie zou op "${BRIE.onvolledig}" komen:`);
     for (const field of training.missing) {
@@ -289,28 +317,46 @@ async function main(): Promise<void> {
     }
   }
 
-  const open = openIssues(data);
-  if (open.length > 0) {
-    console.log(`\n  ${open.length} bron(nen) nog niet aangesloten; die staan zichtbaar in het document:`);
-    for (const line of open) {
-      console.log(`    ${line}`);
-    }
-  }
-
-  const buffer = await renderBriefing(training.label, data);
-  const filename = briefingFilename({
-    opdrachtgever: data.opdrachtgever,
-    thema: data.thema,
-    isoDatum: training.datum,
-    // Acteurs horen niet in de bestandsnaam: die noemt de trainer(s) die hem ontvangen.
-    trainers: ontvangers.trainers.map((t) => t.naam),
-  });
+  /**
+   * Eén document per ontvanger. Dirkje: *"De briefing gaat naar mensen persoonlijk (staan ook
+   * hun eigen km's bijv in). Dus ze krijgen de tekst idd obv hun rol."*
+   */
   const outputDir = readOutputDir(argv);
   await mkdir(outputDir, { recursive: true });
-  const target = path.join(outputDir, filename);
-  await writeFile(target, buffer);
+  const rol = { lead: 'Leadtrainer', co: 'Co-trainer', acteur: 'Trainingsacteur' } as const;
 
-  console.log(`\n  Geschreven: ${target}\n`);
+  console.log(`\n  ${ontvangers.recipients.length} ontvanger(s)`);
+  for (const ontvanger of ontvangers.recipients) {
+    const eigen = composeBriefing(training, checklist, { ...gedeeld, recipient: ontvanger });
+
+    console.log(`\n  ── ${ontvanger.trainer.naam} — ${rol[ontvanger.role]}`);
+    console.log(`     Klantcontactmoment  ${eigen.klantcontactmoment === '' ? '—' : eigen.klantcontactmoment}`);
+    console.log(`     Blokken             ${eigen.blokken.length === 0 ? '—' : ''}`);
+    for (const block of eigen.blokken) {
+      console.log(`       ${block.titel} (${block.regels.length} alinea's)`);
+    }
+
+    const open = openIssues(eigen);
+    if (open.length > 0) {
+      console.log(`     ${open.length} bron(nen) nog niet aangesloten; zichtbaar in het document:`);
+      for (const line of open) {
+        console.log(`       ${line}`);
+      }
+    }
+
+    const buffer = await renderBriefing(training.label, eigen);
+    const filename = briefingFilename({
+      opdrachtgever: eigen.opdrachtgever,
+      thema: eigen.thema,
+      isoDatum: training.datum,
+      // Eén naam: dit exemplaar is van deze persoon, ook als het een acteur is.
+      trainers: [ontvanger.trainer.naam],
+    });
+    const target = path.join(outputDir, filename);
+    await writeFile(target, buffer);
+    console.log(`     Geschreven: ${target}`);
+  }
+  console.log('');
 }
 
 main().catch((error: unknown) => {

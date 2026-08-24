@@ -11,17 +11,22 @@
  * Dus: hier niets bijschrijven, en niets herformuleren. Wijzigt ITG een tekst, dan wijzigt
  * dit bestand mee — met de bron erbij, niet uit het hoofd.
  *
- * ## Wat hier (nog) niet in staat
+ * ## De rolafhankelijke blokken
  *
- * De **rolafhankelijke** blokken — `Leadtrainer` versus `Co-trainer`, en `Werken met een
- * trainingsacteur` versus `Werken als trainingsacteur` — staan wel in het bronbestand maar
- * niet hier. Reden: één briefing gaat naar álle trainers van de sessie, en welke variant
- * iemand moet lezen hangt af van zijn rol. Monday legt die rol nergens vast. Dat is een
- * openstaande vraag aan Dirkje, en tot die beantwoord is zou elke keuze hier de helft van
- * de trainers de verkeerde tekst geven.
+ * `Leadtrainer` versus `Co-trainer`, en `Werken met een trainingsacteur` versus `Werken als
+ * trainingsacteur`. Ze stonden hier lang niet in, omdat één briefing naar álle trainers ging
+ * en Monday nergens vastlegde wie de lead was. Sinds 21-Aug-2026 is dat wél zo — de
+ * co-trainerkolom — en gaat er één document per ontvanger uit. Zie `recipientBlocks`.
+ *
+ * Zonder ontvanger blijft `roleBlocks` de zichtbare `«…»`-variant leveren: samenstellen
+ * zonder te weten voor wie is een geldige tussenstap, en gokken is dat niet.
  */
 
 import { notConnected, notDecided } from './open-issues';
+
+import { nameList } from './recipients';
+
+import type { Recipient } from './recipients';
 
 /**
  * Eén blok zoals het sjabloon het invult: een kop, alinea's, en soms een afbeelding.
@@ -482,6 +487,75 @@ export function recurringClientBlock(rows: readonly HistoryRow[] | undefined): B
  * een lead is, en waarin een acteur nergens leest wat er van hem verwacht wordt — zonder dat
  * iets erop wijst dat er iets ontbreekt. Er komt dus een zichtbaar blok in het document.
  */
+/**
+ * De rolblokken voor één ontvanger, nu de rol een feit van het bord is.
+ *
+ * Vier teksten, twee paren, en binnen elk paar het tegenovergestelde over wie het
+ * klantcontact doet. Welke iemand krijgt volgt uit zijn rol plus de samenstelling van de
+ * sessie:
+ *
+ * | Ontvanger | Blokken |
+ * |---|---|
+ * | lead, met andere trainers | `Leadtrainer` |
+ * | co-trainer | `Co-trainer` |
+ * | trainer op een sessie mét acteur | **plus** `Werken met een trainingsacteur` |
+ * | de acteur zelf | `Werken als trainingsacteur` |
+ * | enige trainer, geen acteur | geen — er valt niets af te stemmen |
+ *
+ * Het lead/co-paar komt er alleen bij **twee of meer trainers**, want de tekst opent met
+ * *"Naast jou zijn er ook andere trainers ingedeeld op deze opdracht"*. Een acteur is geen
+ * trainer, dus één trainer plus een acteur krijgt alléén het acteurblok.
+ *
+ * Een trainer op een sessie mét acteur krijgt er **twee**: zijn eigen lead- of co-tekst en
+ * het acteurblok. Zo staat het in ITG's bronbestand, waar het twee losse kopjes zijn.
+ */
+export function recipientBlocks(
+  recipient: Recipient,
+  checklist: BriefingChecklist,
+  format: (naam: string, telefoon: string) => string
+): BriefingBlock[] {
+  if (recipient.role === 'acteur') {
+    return [asActorBlock(nameList(recipient.otherTrainers, format))];
+  }
+
+  const blocks: BriefingBlock[] = [];
+  if (recipient.otherTrainers.length > 0) {
+    const anderen = nameList(recipient.otherTrainers, format);
+    blocks.push(recipient.role === 'lead' ? leadTrainerBlock(anderen) : coTrainerBlock(anderen));
+  }
+
+  if (checklist.trainingActor) {
+    if (recipient.actors.length === 0) {
+      /**
+       * De adviseur zegt dat er een acteur meewerkt, maar er is er geen aan te wijzen. Het
+       * blok noemt de acteur bij naam, dus het stellig plaatsen zou een lege naam opleveren.
+       */
+      blocks.push({
+        titel: 'Werken met een trainingsacteur',
+        regels: [
+          notDecided(
+            'wie de trainingsacteur is',
+            'de acteurvraag staat op ja, maar geen enkele gekoppelde persoon staat in de ' +
+              'groep Acteurs en er is er ook geen aangewezen'
+          ),
+        ],
+      });
+    } else {
+      blocks.push(withActorBlock(nameList(recipient.actors, format)));
+    }
+  }
+  return blocks;
+}
+
+/**
+ * De rolblokken zónder ontvanger: wat er in het document komt als de aanroeper niet zegt
+ * voor wie het is.
+ *
+ * Blijft bestaan omdat een briefing samenstellen zonder ontvanger een geldige tussenstap is
+ * — de adviseur die in de app-tab kijkt wat er in het document zou komen, bijvoorbeeld. Er
+ * komt dan een zichtbare `«…»`-regel in plaats van een gok, want de twee varianten spreken
+ * elkaar tegen.
+ */
 function roleBlocks(checklist: BriefingChecklist, session: SessionFacts): BriefingBlock[] {
   const blocks: BriefingBlock[] = [];
 
@@ -557,7 +631,12 @@ function roleBlocks(checklist: BriefingChecklist, session: SessionFacts): Briefi
 export function selectBlocks(
   checklist: BriefingChecklist,
   historie: readonly HistoryRow[] | undefined,
-  session: SessionFacts
+  session: SessionFacts,
+  /**
+   * Voor wie dit document is, als de aanroeper dat weet. Zonder ontvanger komen de
+   * rolblokken als zichtbare `«…»`-regel in plaats van als gok.
+   */
+  recipient?: { readonly recipient: Recipient; readonly format: (naam: string, telefoon: string) => string }
 ): BriefingBlock[] {
   if (checklist.ownGroup && checklist.sameGroup) {
     throw new Error(
@@ -565,7 +644,10 @@ export function selectBlocks(
         'niet allebei aanstaan; dit zijn de twee antwoorden op dezelfde vraag.'
     );
   }
-  const blocks: BriefingBlock[] = [...roleBlocks(checklist, session)];
+  const blocks: BriefingBlock[] =
+    recipient === undefined
+      ? [...roleBlocks(checklist, session)]
+      : [...recipientBlocks(recipient.recipient, checklist, recipient.format)];
   if (checklist.ownGroup) {
     blocks.push(OWN_GROUP);
   }
