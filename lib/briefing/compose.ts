@@ -37,7 +37,7 @@ import {
   type TravelInput,
 } from './format';
 import {
-  selectBlocks,
+  splitBlocks,
   type BriefingBlock,
   type BriefingChecklist,
   type HistoryRow,
@@ -127,6 +127,14 @@ export interface BriefingDocumentData {
   readonly extraInfo: readonly string[];
   readonly mondayChallenge: boolean;
   readonly bullets: readonly string[];
+  /**
+   * De blokken die zeggen wélke rol de ontvanger heeft, apart van de rest.
+   *
+   * Apart omdat ze bóven `Concept inhoud` staan en niet eronder: Tim, 24-Aug-2026 —
+   * *"i think it should be above the concept inhoud. So the page starts with that."* De
+   * trainer leest eerst wat er van hém verwacht wordt en dan pas het programma.
+   */
+  readonly rolblokken: readonly BriefingBlock[];
   readonly blokken: readonly BriefingBlock[];
   readonly inventarisatie: readonly InventoryAnswer[];
 }
@@ -195,7 +203,7 @@ export function composeBriefing(
         adviseurTekst: checklist.conceptInhoud,
         organisatie: training.opdrachtgever,
       }) ?? [MISSING.bullets],
-    blokken: selectBlocks(
+    ...splitBlocks(
       checklist,
       extras.historie,
       extras.roles ?? sessionFacts(training, checklist),
@@ -301,7 +309,9 @@ export function openIssues(data: BriefingDocumentData): string[] {
     ...data.achtergrond,
     ...data.extraInfo,
     ...data.bullets,
-    ...data.blokken.flatMap((blok) => blok.regels),
+    ...[...data.rolblokken, ...data.blokken].flatMap((blok) =>
+      blok.regels.map((regel) => regel.tekst)
+    ),
     ...data.inventarisatie.flatMap((v) => [v.vraag, v.antwoord]),
   ];
   return texts.filter(isOpenIssue);

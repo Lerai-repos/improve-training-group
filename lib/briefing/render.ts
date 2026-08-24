@@ -134,6 +134,16 @@ export async function renderBriefing(
     data,
     cmdDelimiter: CMD_DELIMITER,
     additionalJsContext: { blockImage },
+    /**
+     * Verplicht zodra een waarde een `\n` bevat, en dat doen ITG's rolblokken.
+     *
+     * Standaard staat dit uit, en dan zet `docx-templates` de `<w:br/>` **binnen** de
+     * `<w:t>`. Dat is ongeldige OOXML — `w:t` mag alleen tekst bevatten — en de tekst na
+     * de afbreking wordt de `tail` van een element dat daar niet hoort te staan. Gemeten
+     * 24-Aug-2026: "Jij bent de leadtrainer en dus verantwoordelijk voor:" verdween zo uit
+     * het document, terwijl er niets faalde.
+     */
+    processLineBreaksAsNewText: true,
   });
 
   /**

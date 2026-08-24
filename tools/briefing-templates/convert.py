@@ -9,7 +9,26 @@ import xmlkeep
 from xml.etree import ElementTree as ET
 
 W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+MC = '{http://schemas.openxmlformats.org/markup-compatibility/2006}'
 ET.register_namespace('w', W[1:-1])
+
+# De twee blokken die ITG in hun ECHTE briefings niet in een tekstvak zetten.
+#
+# Gemeten op `2.0 ITG vb Briefing Probiblio`: de intro staat daar als gewone alinea's
+# (body 45-55) en de tabel als gewone tabel (body 62). Alleen de disclaimer en de kopband
+# `Algemeen.` blijven bij hen een tekstvak, dus die laten we met rust.
+#
+# Waarom het uitmaakt: een tekstvak is in Word geen klik-en-typ maar een tekenobject, en
+# Google Docs laat het bij het openen helemaal weg — daar verdween de hele tabel.
+#
+# `spatie_voor` is de eigen V-offset van het tekstvak, in twips. Het introvak stond 1,9 cm
+# onder zijn anker omdat de kopband `Algemeen.` tot 1 cm onder de bovenmarge doorloopt;
+# zonder die ruimte loopt de eerste regel eronder.
+CM = 566.9
+UNWRAP = (
+    ('intro', ('Binnenkort organiseer je',), round(1.9 * CM)),
+    ('gegevenstabel', ('Trainingscode MC', 'Cursusscode MC'), 0),
+)
 
 # label in the left cell -> placeholder for the right cell. Order IS the v2.0 order.
 # (label, field, aliases). The first row's label is the LABEL'S OWN TERM — IT says
@@ -36,6 +55,70 @@ ROWS = [
 ]
 
 ROWS = [(r[0], r[1], r[2] if len(r) > 2 else (r[0],)) for r in ROWS]
+
+
+def set_space_before(p, twips):
+    """Zet de ruimte boven een alinea, zodat hij op dezelfde hoogte begint als het vak."""
+    if twips <= 0 or p.tag != W + 'p':
+        return
+    ppr = p.find(W + 'pPr')
+    if ppr is None:
+        ppr = ET.Element(W + 'pPr')
+        p.insert(0, ppr)
+    sp = ppr.find(W + 'spacing')
+    if sp is None:
+        sp = ET.SubElement(ppr, W + 'spacing')
+    sp.set(W + 'before', str(twips))
+
+
+def unwrap_box(body, naam, markers, spatie_voor):
+    """Til een zwevend tekstvak uit de opmaak naar de gewone documentstroom.
+
+    De ankeralinea BLIJFT staan en blijft leeg achter. Dat is geen slordigheid: de andere
+    tekstvakken op die pagina zijn gepositioneerd `relativeFrom="paragraph"`, dus ze
+    schuiven mee met hun anker. Zou de inhoud vóór het anker komen, dan zakt de kopband
+    `Algemeen.` de pagina af en verdwijnt de disclaimer eronderuit.
+
+    Het pagina-einde verhuist mee naar áchter de opgetilde inhoud, anders belandt die op
+    de volgende pagina in plaats van op zijn eigen.
+    """
+    for idx, para in enumerate(list(body)):
+        for run in para.iter(W + 'r'):
+            for alt in list(run.findall(MC + 'AlternateContent')):
+                choice = alt.find(MC + 'Choice')
+                box = choice.find('.//' + W + 'txbxContent') if choice is not None else None
+                if box is None:
+                    continue
+                text = ''.join(t.text or '' for t in box.iter(W + 't'))
+                if not any(m in text for m in markers):
+                    continue
+                kids = list(box)
+                # Het hele AlternateContent weg: de Fallback is een tweede kopie van
+                # dezelfde inhoud, en die zou na het optillen dubbel in het document staan.
+                run.remove(alt)
+                for i, kid in enumerate(kids):
+                    body.insert(idx + 1 + i, kid)
+                if kids:
+                    set_space_before(kids[0], spatie_voor)
+                move_page_break(para, body, idx + len(kids))
+                print(f'  {naam}: {len(kids)} element(en) uit het tekstvak gehaald')
+                return kids
+    raise SystemExit(f'{naam}: geen tekstvak gevonden met {markers}')
+
+
+def move_page_break(para, body, after_idx):
+    """Het pagina-einde van de ankeralinea naar achter de opgetilde inhoud."""
+    for run in para.iter(W + 'r'):
+        for br in list(run.findall(W + 'br')):
+            if br.get(W + 'type') != 'page':
+                continue
+            run.remove(br)
+            p = ET.Element(W + 'p')
+            r = ET.SubElement(p, W + 'r')
+            nb = ET.SubElement(r, W + 'br')
+            nb.set(W + 'type', 'page')
+            body.insert(after_idx + 1, p)
+            return
 
 
 def cell_text(tc):
@@ -144,13 +227,19 @@ def convert(src_path, dst_path):
         data = zin.read(item.filename)
         if item.filename == 'word/document.xml':
             root, root_tag = xmlkeep.parse(data)
+            body = root.find(W + 'body')
+            for naam, markers, spatie in UNWRAP:
+                unwrap_box(body, naam, markers, spatie)
             tables = [t for t in root.iter(W + 'tbl')
                       if any(label_of(r) in ('Trainingscode MC', 'Cursusscode MC') for r in t.findall(W + 'tr'))]
-            if len(tables) != 2:
-                raise SystemExit(f'{src_path}: expected 2 data tables, found {len(tables)}')
-            created = [convert_table(t) for t in tables]
+            # Eén, niet twee: het optillen heeft de mc:Fallback-kopie van de tabel
+            # weggenomen. Bleven het er twee, dan staat de tabel dubbel in het document.
+            if len(tables) != 1:
+                raise SystemExit(
+                    f'{src_path}: verwachtte 1 gegevenstabel na het optillen, vond {len(tables)}')
+            created = convert_table(tables[0])
             data = xmlkeep.serialise(root, root_tag)
-            print(f'  rows added: {created[0]}')
+            print(f'  rows added: {created}')
         if item.filename == '[Content_Types].xml':
             data = data.decode('utf8').replace(
                 'wordprocessingml.template.main+xml',

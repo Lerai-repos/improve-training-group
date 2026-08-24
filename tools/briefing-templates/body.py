@@ -38,6 +38,43 @@ def para_like(model, text):
 
 
 
+# De opsomming die het sjabloon al kent. `numbering.xml` definieert er drie en ze zijn
+# alle drie identiek: numFmt=bullet, teken U+F0B7 in Symbol, inspringen 720. Dat is
+# exact dezelfde definitie als `numId 5` in ITG's eigen verstuurde briefing, waar de
+# concept-regels wél een echte Word-opsomming zijn.
+#
+# Vóór 24-Aug-2026 gebruikte geen enkele alinea in het sjabloon deze definities, dus
+# kwamen de concept-regels als gewone alinea's uit de generator.
+BULLET_NUM_ID = '1'
+
+# Waar `numPr` in `pPr` mag staan. De OOXML-volgorde is vast: pStyle, keepNext, keepLines,
+# pageBreakBefore, framePr, widowControl, numPr. Zet je het ervoor, dan noemt Word het
+# bestand beschadigd — dezelfde stille totale fout als een ontbrekende namespace.
+VOOR_NUMPR = ('pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'widowControl')
+
+
+def bullet_para(model, text):
+    """Een alinea als `para_like`, maar dan als opsommingsteken."""
+    p = para_like(model, text)
+    ppr = p.find(W + 'pPr')
+    if ppr is None:
+        ppr = ET.Element(W + 'pPr')
+        p.insert(0, ppr)
+    for oud in ppr.findall(W + 'numPr'):
+        ppr.remove(oud)
+    numpr = ET.Element(W + 'numPr')
+    ET.SubElement(numpr, W + 'ilvl').set(W + 'val', '0')
+    ET.SubElement(numpr, W + 'numId').set(W + 'val', BULLET_NUM_ID)
+    at = 0
+    for kind in list(ppr):
+        if kind.tag.replace(W, '') in VOOR_NUMPR:
+            at += 1
+        else:
+            break
+    ppr.insert(at, numpr)
+    return p
+
+
 # Kolommen van de historie-tabel, letterlijk uit ITG's bronbestand:
 # "Tabel met onderstaande kolommen: Datum | Tijd | Klanttitel | Trainer (tel nr) | CP klant"
 HISTORIE_KOLOMMEN = [
@@ -129,11 +166,14 @@ def build(src, dst):
             z.writestr(item, d)
 
 
-# Hoe vaak elke ankertekst hóórt voor te komen. De achtergrondalinea's staan in een
-# tekstvak en staan daarom twee keer in de XML (Choice + Fallback); de twee koppen staan
-# in de gewone body en dus één keer. Wijkt een sjabloon af, dan stoppen we — anders komt
-# een sectie stilletjes dubbel in de briefing.
-EXPECTED = {'lorem': 2, 'tail': 2, 'intro': 1, 'inv': 1}
+# Hoe vaak elke ankertekst hóórt voor te komen. Wijkt een sjabloon af, dan stoppen we —
+# anders komt een sectie stilletjes dubbel in de briefing.
+#
+# Alles staat één keer. Tot 24-Aug-2026 stonden de achtergrondalinea's er twee keer, omdat
+# ze in het tekstvak van de gegevenstabel zaten en dus zowel in `mc:Choice` als in
+# `mc:Fallback` voorkwamen. `convert.py` tilt die tabel nu uit het tekstvak en gooit de
+# Fallback-kopie weg, dus die verdubbeling bestaat niet meer.
+EXPECTED = {'lorem': 1, 'tail': 1, 'intro': 1, 'inv': 1}
 
 
 def drop_duplicate_sections(root, parents, anchors):
@@ -157,7 +197,48 @@ def drop_duplicate_sections(root, parents, anchors):
     return anchors[:1]
 
 
+def strip_yellow_highlight(root):
+    """ITG's gele markering weghalen; die betekent "hier moet nog iets in".
+
+    Hun `.dotx` heeft er 374 en ze staan op de in te vullen tekst. Wij vullen die tekst
+    automatisch, dus blijft de markering staan op een veld dat al af is — de hele briefing
+    komt dan geel uit de generator. In ITG's eigen verstuurde briefing staat op geen enkele
+    letter nog een markering: de adviseur haalt hem er met de hand af.
+
+    Cyaan blijft staan. Dat is er maar één, op de regel "Vergeet de Monday Challenges niet",
+    en dat is een opmerking voor de trainer en geen invulmarkering.
+    """
+    weg = 0
+    for rpr in root.iter(W + 'rPr'):
+        for h in list(rpr.findall(W + 'highlight')):
+            if h.get(W + 'val') == 'yellow':
+                rpr.remove(h)
+                weg += 1
+    if weg:
+        print(f'  gele markering van {weg} run(s) gehaald')
+
+
+def blok_regels(model):
+    """De regels van één blok: opsommingsteken of gewone alinea, per regel.
+
+    Twee alinea's met elk een `IF`, en niet één alinea die zich aanpast: `docx-templates`
+    kan tekst weglaten of invoegen, maar niet de opmaak van een alinea omzetten. Welke van
+    de twee overblijft bepaalt `$r.bullet`, en die vlag komt uit ITG's eigen brondocument.
+    """
+    return [
+        '+++FOR r IN $blk.regels+++',
+        '+++IF $r.bullet+++',
+        bullet_para(model, '+++$r.tekst+++'),
+        '+++END-IF+++',
+        '+++IF !$r.bullet+++',
+        '+++$r.tekst+++',
+        '+++END-IF+++',
+        '+++END-FOR r+++',
+    ]
+
+
 def rewrite(root):
+    strip_yellow_highlight(root)
     parents = {c: p for p in root.iter() for c in p}
 
     def replace_with(model, lines):
@@ -203,18 +284,46 @@ def rewrite(root):
     for p in tail:
         parents[p].remove(p)
 
+    # De rolblokken staan BOVEN "Concept inhoud": de trainer leest eerst wat er van hem
+    # verwacht wordt, dan pas het programma. Tim, 24-Aug-2026: "i think it should be above
+    # the concept inhoud. So the page starts with that."
+    #
+    # Vóór de intro-vervanging hieronder, want die haalt de alinea weg die hier nog als
+    # opmaakmodel dient.
+    kop = [p for p in root.iter(W + 'p') if txt(p).strip() == 'Concept inhoud']
+    if len(kop) != 1:
+        raise SystemExit(f'verwachtte 1 kop "Concept inhoud", vond {len(kop)}')
+    model = intro[0]
+    voor = [
+        '+++FOR blk IN rolblokken+++',
+        para_like(kop[0], '+++$blk.titel+++'),
+        *blok_regels(model),
+        # Witregel na élk blok, dus ook tussen twee rolblokken en vóór "Concept inhoud".
+        # Zonder deze plakken de secties aan elkaar.
+        '',
+        '+++END-FOR blk+++',
+    ]
+    parent = parents[kop[0]]
+    at = list(parent).index(kop[0])
+    for i, regel in enumerate(voor):
+        node = copy.deepcopy(regel) if ET.iselement(regel) else para_like(model, regel)
+        parent.insert(at + i, node)
+
     # Concept inhoud: the bullets, then every conditional block the code decided on.
     for p in intro:
         replace_with(p, [
             'Het volgende concept programma is gecommuniceerd met de klant.',
-            '+++FOR b IN bullets+++', '+++$b+++', '+++END-FOR b+++',
+            # Alleen de regel zelf is een opsommingsteken; docx-templates haalt de
+            # FOR- en END-FOR-alinea's weg, dus die blijven gewoon.
+            '+++FOR b IN bullets+++', bullet_para(p, '+++$b+++'), '+++END-FOR b+++',
             '+++FOR blk IN blokken+++', '+++$blk.titel+++',
-            '+++FOR r IN $blk.regels+++', '+++$r+++', '+++END-FOR r+++',
+            *blok_regels(p),
             # The training-cycle block carries a diagram; every other block leaves this empty.
             # IMAGE needs the call parentheses, and the function comes from additionalJsContext.
             '+++IF $blk.afbeelding+++', '+++IMAGE blockImage($blk)+++', '+++END-IF+++',
             # Vaste klant brings the historie table; every other block leaves it empty.
-            '+++IF $blk.historie+++', historie_tabel(p), '', '+++END-IF+++',
+            '+++IF $blk.historie+++', historie_tabel(p), '+++END-IF+++',
+            '',
             '+++END-FOR blk+++',
         ])
 

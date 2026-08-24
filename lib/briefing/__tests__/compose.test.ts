@@ -125,7 +125,7 @@ describe('composeBriefing', () => {
   it('laat zien dat de historie nog niet is aangesloten', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
     const vasteKlant = data.blokken.find((b) => b.titel === 'Vaste klant');
-    expect(vasteKlant?.regels[0]).toContain('nog niet aangesloten');
+    expect(vasteKlant?.regels[0]?.tekst).toContain('nog niet aangesloten');
     expect(openIssues(data).some((p) => p.includes('sessies bij deze klant'))).toBe(true);
   });
 
@@ -222,7 +222,7 @@ describe('selectBlocks', () => {
   it('houdt "nog geen historie-bron" en "geen eerdere sessies" uit elkaar', () => {
     const withoutSource = recurringClientBlock(undefined);
     expect(withoutSource?.titel).toBe('Vaste klant');
-    expect(withoutSource?.regels[0]).toContain('nog niet aangesloten');
+    expect(withoutSource?.regels[0]?.tekst).toContain('nog niet aangesloten');
     expect(recurringClientBlock([])).toBeNull();
   });
 
@@ -241,7 +241,7 @@ describe('selectBlocks', () => {
     );
     const cyclusZonder = zonder.find((b) => b.titel.includes('cyclus'));
     expect(cyclusZonder).toBeDefined();
-    expect(cyclusZonder?.regels.some((r) => r.startsWith(NESTED))).toBe(false);
+    expect(cyclusZonder?.regels.some((r) => r.tekst.startsWith(NESTED))).toBe(false);
 
     const met = selectBlocks(
       { ...EMPTY_CHECKLIST, trainingCycle: true, homework: true, preparatoryAssignment: true },
@@ -249,10 +249,10 @@ describe('selectBlocks', () => {
       SOLO
     );
     const cyclusMet = met.find((b) => b.titel.includes('cyclus'));
-    expect(cyclusMet?.regels.some((r) => r.startsWith(NESTED))).toBe(true);
+    expect(cyclusMet?.regels.some((r) => r.tekst.startsWith(NESTED))).toBe(true);
 
     // Alleen die ene alinea verschilt; de rest van het blok is identiek.
-    expect(cyclusMet?.regels.filter((r) => !r.startsWith(NESTED))).toEqual(cyclusZonder?.regels);
+    expect(cyclusMet?.regels.filter((r) => !r.tekst.startsWith(NESTED))).toEqual(cyclusZonder?.regels);
   });
 
   /** `06-briefing.md`: het cyclusblok is de uitleg **plus het cyclusschema als afbeelding**. */
@@ -275,7 +275,11 @@ describe('selectBlocks', () => {
       SOLO
     );
     const cyclus = blocks.find((b) => b.titel.includes('cyclus'));
-    expect(cyclus?.regels.some((r) => r.includes('Huiswerkopdracht') && r.includes('nog niet bepaald'))).toBe(true);
+    expect(
+      cyclus?.regels.some(
+        (r) => r.tekst.includes('Huiswerkopdracht') && r.tekst.includes('nog niet bepaald')
+      )
+    ).toBe(true);
   });
 
   /**
@@ -290,7 +294,7 @@ describe('selectBlocks', () => {
       unknownRole: 0,
     });
     expect(twee.map((b) => b.titel)).toContain('Leadtrainer / Co-trainer');
-    expect(twee[0]?.regels[0]).toContain('nog niet aangesloten');
+    expect(twee[0]?.regels[0]?.tekst).toContain('nog niet aangesloten');
 
     const acteur = selectBlocks({ ...EMPTY_CHECKLIST, trainingActor: true }, [], SOLO);
     expect(acteur.map((b) => b.titel)).toContain('Trainingsacteur');
@@ -323,7 +327,7 @@ describe('selectBlocks', () => {
     });
     expect(blocks.map((b) => b.titel)).toEqual(['Rolverdeling onduidelijk', 'Trainingsacteur']);
     expect(blocks.map((b) => b.titel)).not.toContain('Leadtrainer / Co-trainer');
-    expect(blocks[0]?.regels[0]).toContain('nog niet bepaald');
+    expect(blocks[0]?.regels[0]?.tekst).toContain('nog niet bepaald');
   });
 
   /**

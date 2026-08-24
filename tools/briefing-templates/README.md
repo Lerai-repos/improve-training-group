@@ -24,9 +24,28 @@ zegt wáár.
 
 ## Wat je moet weten voor je hieraan sleutelt
 
-**De hele gegevenstabel zit in een Word-tekstvak.** De inhoud daarvan staat twee keer in de
-XML, in `mc:Choice` én `mc:Fallback`. Beide converters passen daarom elke tabel aan die ze
-vinden, niet alleen de eerste. `docx-templates` vult beide takken correct in.
+**De intro en de gegevenstabel worden uit hun tekstvak getild** (24-Aug-2026). ITG's `.dotx`
+zet ze in een zwevend tekstvak; hun eigen verstuurde briefings niet — gemeten op
+`2.0 ITG vb Briefing Probiblio`: intro op body 45-55, tabel op body 62. Alleen de disclaimer
+en de kopband `Algemeen.` blijven ook bij hen een tekstvak, en dus bij ons.
+
+Waarom: een tekstvak is in Word een tekenobject in plaats van klik-en-typ, en **Google Docs
+laat het bij importeren volledig weg** — daar verdween de hele gegevenstabel. De adviseur
+bewerkt deze documenten, dus dat is geen schoonheidsfoutje.
+
+Het optillen verwijdert meteen de `mc:Fallback`-kopie, want die is een tweede exemplaar van
+dezelfde inhoud en zou na het optillen dubbel in het document staan. Daarom verwacht
+`convert.py` ná het optillen nog **één** gegevenstabel, en telt `body.py` elke ankertekst
+**één** keer.
+
+**De ankeralinea blijft leeg staan.** De overige tekstvakken op die pagina zijn
+gepositioneerd `relativeFrom="paragraph"` en schuiven dus mee met hun anker. Zou de
+opgetilde inhoud vóór het anker komen, dan zakt de kopband `Algemeen.` de pagina af en
+verdwijnt de disclaimer eronderuit. Het pagina-einde verhuist mee naar áchter de opgetilde
+inhoud, anders belandt die een pagina te laat.
+
+De intro krijgt 1,9 cm ruimte erboven: dat was de eigen V-offset van zijn tekstvak, nodig
+omdat de kopband `Algemeen.` tot 1 cm onder de bovenmarge doorloopt.
 
 **De eerste rij heet per label anders**: Training, Workshop, Teambuilding of Cursus. Die
 wordt op aliassen gematcht en de eigen schrijfwijze van het sjabloon blijft staan. CC had

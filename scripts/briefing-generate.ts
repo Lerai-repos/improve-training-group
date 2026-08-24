@@ -331,9 +331,15 @@ async function main(): Promise<void> {
 
     console.log(`\n  ── ${ontvanger.trainer.naam} — ${rol[ontvanger.role]}`);
     console.log(`     Klantcontactmoment  ${eigen.klantcontactmoment === '' ? '—' : eigen.klantcontactmoment}`);
-    console.log(`     Blokken             ${eigen.blokken.length === 0 ? '—' : ''}`);
-    for (const block of eigen.blokken) {
-      console.log(`       ${block.titel} (${block.regels.length} alinea's)`);
+    // Rolblokken én de rest: ze staan in het document op verschillende plaatsen (boven en
+    // onder Concept inhoud), maar hier gaat het om wát erin staat.
+    const alle = [...eigen.rolblokken, ...eigen.blokken];
+    console.log(`     Blokken             ${alle.length === 0 ? '—' : ''}`);
+    for (const block of alle) {
+      const bullets = block.regels.filter((r) => r.bullet).length;
+      console.log(
+        `       ${block.titel} (${block.regels.length} alinea's, waarvan ${bullets} opsomming)`
+      );
     }
 
     const open = openIssues(eigen);

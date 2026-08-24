@@ -69,10 +69,10 @@ MANIFEST = (
     "In de bijlage van de mail vind je een template met voorbeeldvragen.",
     # De vier rolafhankelijke blokken. ITG's plaatshouder "Naam (tel nr)" staat bewust in de
     # literal, zodat juist deze zinnen letterlijk vergeleken kunnen worden.
-    "Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), Naam (tel nr).Jij bent de leadtrainer",
-    "Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), Naam (tel nr).Jij bent ingedeeld als co-trainer",
-    "Afstemmen met de co-trainer(s)Alle trainers (jij en de co-trainers)",
-    "Afstemmen met de co-trainer(s)Alle trainers (jij en de lead trainer)",
+    "Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), Naam (tel nr). Jij bent de leadtrainer",
+    "Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), Naam (tel nr). Jij bent ingedeeld als co-trainer",
+    "Afstemmen met de co-trainer(s) Alle trainers (jij en de co-trainers)",
+    "Afstemmen met de co-trainer(s) Alle trainers (jij en de lead trainer)",
     "Voor deze opdracht werk je met een trainingsacteur:",
     "Voor deze opdracht word je ingezet als trainingsacteur,",
     "Belangrijk: de trainingsacteur is geen co-trainer of inhoudsdeskundige,",
@@ -116,11 +116,34 @@ def squash(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def unescape_ts(text: str) -> str:
+    """De escapes van een TypeScript-literal terug naar de tekens die ze voorstellen.
+
+    Zonder dit blijft `\\n` in blocks.ts twee tekens — backslash en n — die `squash` niet
+    als witruimte ziet. De literal zou dan nooit overeenkomen met de bronalinea, en een
+    correcte regelafbreking werd als afwijking gemeld.
+    """
+    return text.replace("\\n", "\n").replace("\\'", "'").replace("\\\\", "\\")
+
+
 def source_paragraphs(path: Path) -> set[str]:
+    """Elke alinea van ITG's bron, met haar regelafbrekingen als witruimte.
+
+    Een `<w:br/>` MOET meetellen. Sloegen we hem over, dan las deze tool
+    "co-trainer(s)Alle trainers" als de bedoelde tekst, en dan is de aan elkaar geplakte
+    versie in blocks.ts precies wat de verificatie goedkeurt. Zo is die fout er ook in
+    gekomen: de tekst was verbatim volgens deze tool, en las in Word als een fout.
+    """
     root = ET.fromstring(zipfile.ZipFile(path).read("word/document.xml"))
     found = set()
     for par in root.iter(W + "p"):
-        text = squash("".join(node.text or "" for node in par.iter(W + "t")))
+        stuk = []
+        for node in par.iter():
+            if node.tag == W + "t":
+                stuk.append(node.text or "")
+            elif node.tag == W + "br":
+                stuk.append("\n")
+        text = squash("".join(stuk))
         if text:
             found.add(text)
     return found
@@ -166,7 +189,7 @@ def code_paragraphs(path: Path) -> list[str]:
     code = strip_comments(path.read_text(encoding="utf8"))
     out = []
     for match in re.finditer(r"((?:'(?:[^'\\]|\\.)*'\s*\+\s*)*'(?:[^'\\]|\\.)*')", code):
-        joined = squash("".join(re.findall(r"'((?:[^'\\]|\\.)*)'", match.group(1))))
+        joined = squash(unescape_ts("".join(re.findall(r"'((?:[^'\\]|\\.)*)'", match.group(1)))))
         if len(joined) >= MIN_PARAGRAPH:
             out.append(joined)
     return out
