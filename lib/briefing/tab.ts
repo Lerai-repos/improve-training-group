@@ -13,6 +13,7 @@
 import { countLinkedActors } from './compose';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
 import { conceptLines, resolveConceptInhoud } from './concept';
+import { formatDutchDate } from './deadline';
 import { resolveRecipientRoles, type RecipientRole } from './recipients';
 import { EMPTY_SAVED, type SavedChecklist } from './answers';
 
@@ -200,7 +201,8 @@ export function buildTabView(
       naam: training.naam,
       opdrachtgever: training.opdrachtgever,
       klanttitel: training.klanttitel,
-      datum: training.datum ?? '',
+      // Zoals in het document: "17 september 2026", niet de rauwe ISO-datum uit Monday.
+      datum: formatDutchDate(training.datum ?? ''),
       label: training.label,
       brie: training.brie,
     },

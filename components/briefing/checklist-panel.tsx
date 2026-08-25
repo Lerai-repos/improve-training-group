@@ -161,9 +161,14 @@ const ActeurVraag = ({
           />
           Nee
         </label>
+        {/*
+          Een eigen chip in plaats van kale rode tekst: `text-destructive` op Monday's donkere
+          ondergrond is donkerrood op donkerblauw en nauwelijks te lezen — precies de regel die
+          de adviseur juist moet zien.
+        */}
         {!beantwoord && (
-          <span className="text-xs font-medium text-destructive">
-            Monday stelt {voorstel ? 'ja' : 'nee'} voor — bevestig of wijzig het.
+          <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-foreground">
+            Monday stelt {voorstel ? 'ja' : 'nee'} voor — bevestig of wijzig het
           </span>
         )}
       </div>
