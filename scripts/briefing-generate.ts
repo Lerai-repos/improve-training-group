@@ -23,6 +23,18 @@ import { resolveRecipientRoles } from '@lib/briefing/recipients';
 import { readHistorie } from '@lib/briefing/historie';
 import { readBriefingTraining } from '@lib/briefing/read';
 import { readExtraInfo } from '@lib/briefing/updates';
+import { readTrainerAddresses, resolveBriefingTravel } from '@lib/briefing/reis';
+import type { TravelInput } from '@lib/briefing/format';
+import { createAddressFormatter } from '@lib/recommend/address';
+import { createOpenRouterCompletion } from '@lib/recommend/completion';
+import { createRoutesProvider, createGoogleRoutesTransport } from '@lib/recommend/travel';
+import {
+  createTravelCache,
+  createKvTravelCacheStore,
+  createMemoryTravelCacheStore,
+} from '@lib/recommend/travel-cache';
+import { createUpstashKvStore, createRedisClient } from '@lib/recommend/kv';
+import { loadSettingsOnce } from '@lib/settings/load';
 import { briefingFilename, renderBriefing } from '@lib/briefing/render';
 import { BRIE } from '@lib/briefing/types';
 
@@ -166,6 +178,79 @@ function readOutputDir(argv: readonly string[]): string {
   return value;
 }
 
+/**
+ * Km en reistijd per trainer, of een lege kaart als het niet kan.
+ *
+ * Leeg is hier geen storing maar het bestaande gedrag: dan houdt de gegevenstabel zijn
+ * zichtbare `«nog niet aangesloten»`-regel. Zo blijft dit script bruikbaar op een machine
+ * zonder Google-sleutel of KV, precies zoals vóór deze stap.
+ *
+ * De acteurs zitten er bewust bij: die rijden net zo goed naar de locatie, en zij krijgen
+ * hun eigen document met hun eigen km's.
+ */
+async function resolveReis(
+  client: ReturnType<typeof createMondayGraphQLClient>,
+  training: Awaited<ReturnType<typeof readBriefingTraining>>,
+  itemIds: readonly string[]
+): Promise<ReadonlyMap<string, TravelInput>> {
+  const nodig = ['OPENROUTER_API_KEY', 'GOOGLE_MAPS_API_KEY'];
+  const missend = nodig.filter((naam) => (process.env[naam] ?? '') === '');
+  if (missend.length > 0) {
+    console.log(`  Km/reistijd overgeslagen: ${missend.join(', ')} ontbreekt in .env.local.`);
+    return new Map();
+  }
+
+  /**
+   * De gedeelde routecache, of anders een cache in het geheugen.
+   *
+   * Niet zelf op namen van omgevingsvariabelen toetsen: `createRedisClient` accepteert zowel
+   * `UPSTASH_REDIS_REST_*` (wat `.env.example` voorschrijft) als Vercels alias
+   * `KV_REST_API_*`, en alleen op die tweede kijken koos hier stilletjes de cache in het
+   * geheugen. Gemeten: lokaal staat de UPSTASH-variant wél en de KV-variant niet, dus elke
+   * briefing betaalde opnieuw voor routes die de aanbevelingsengine al had opgehaald.
+   *
+   * Hem laten wérpen is dus de toets zelf, en die kan niet uit de pas gaan lopen met
+   * `kv.ts`. Zonder cache blijft het script bruikbaar — dezelfde uitkomst, alleen betaalt
+   * die run zijn eigen Google-aanroepen.
+   */
+  let store;
+  try {
+    store = createKvTravelCacheStore(createUpstashKvStore(createRedisClient()));
+  } catch {
+    store = createMemoryTravelCacheStore();
+    console.log('  Let op: geen Redis-cache, dus routes gelden alleen binnen deze run.');
+  }
+
+  const settings = await loadSettingsOnce(client);
+  const adressen = await readTrainerAddresses(client, itemIds);
+  const travel = await resolveBriefingTravel(
+    {
+      formatter: createAddressFormatter(createOpenRouterCompletion(process.env.OPENROUTER_API_KEY ?? '')),
+      cache: createTravelCache(store),
+      provider: createRoutesProvider(
+        createGoogleRoutesTransport(process.env.GOOGLE_MAPS_API_KEY ?? '')
+      ),
+      hqAddress: settings.app.hqAddress,
+      thresholdMinutes: settings.app.travelTimeThresholdMinutes,
+    },
+    {
+      locatie: training.locatie,
+      trainers: itemIds.map((id) => ({ externalItemId: id, adres: adressen.get(id) ?? null })),
+    }
+  );
+  // Eén regel als iedereen om dezelfde reden geen km krijgt; dat is meestal de locatie,
+  // en dan is het één probleem en geen acht.
+  const redenen = new Set(travel.zonder.map((z) => z.reden));
+  if (travel.zonder.length > 0 && redenen.size === 1) {
+    console.log(`  LET OP: geen km voor ${travel.zonder.length} trainer(s) — ${[...redenen][0]}`);
+  } else {
+    for (const ontbreekt of travel.zonder) {
+      console.log(`  LET OP: geen km voor trainer ${ontbreekt.itemId} (${ontbreekt.reden}).`);
+    }
+  }
+  return travel.perTrainer;
+}
+
 async function main(): Promise<void> {
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) {
@@ -262,6 +347,11 @@ async function main(): Promise<void> {
   if (historie.length > 0) {
     console.log(`  Historie: ${historie.length} eerdere/komende sessie(s) bij ${training.opdrachtgever}`);
   }
+  const reis = await resolveReis(
+    client,
+    training,
+    ontvangers.recipients.map((r) => r.trainer.itemId)
+  );
   const gedeeld = {
     historie,
     extraInfo: extraInfo.lines,
@@ -277,7 +367,11 @@ async function main(): Promise<void> {
   if (eerste === undefined) {
     throw new Error('Geen ontvangers: er hangt niemand aan deze training.');
   }
-  const data = composeBriefing(training, checklist, { ...gedeeld, recipient: eerste });
+  const data = composeBriefing(training, checklist, {
+    ...gedeeld,
+    recipient: eerste,
+    reis: reis.get(eerste.trainer.itemId),
+  });
 
   console.log('  Gegevenstabel');
   const rows: Array<[string, string]> = [
@@ -327,10 +421,15 @@ async function main(): Promise<void> {
 
   console.log(`\n  ${ontvangers.recipients.length} ontvanger(s)`);
   for (const ontvanger of ontvangers.recipients) {
-    const eigen = composeBriefing(training, checklist, { ...gedeeld, recipient: ontvanger });
+    const eigen = composeBriefing(training, checklist, {
+      ...gedeeld,
+      recipient: ontvanger,
+      reis: reis.get(ontvanger.trainer.itemId),
+    });
 
     console.log(`\n  ── ${ontvanger.trainer.naam} — ${rol[ontvanger.role]}`);
     console.log(`     Klantcontactmoment  ${eigen.klantcontactmoment === '' ? '—' : eigen.klantcontactmoment}`);
+    console.log(`     Km. / Reistijd      ${eigen.reis}`);
     // Rolblokken én de rest: ze staan in het document op verschillende plaatsen (boven en
     // onder Concept inhoud), maar hier gaat het om wát erin staat.
     const alle = [...eigen.rolblokken, ...eigen.blokken];

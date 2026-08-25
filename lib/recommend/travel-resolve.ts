@@ -126,10 +126,23 @@ async function cacheElement(
   }
 }
 
+/**
+ * Het minimum dat een herkomst moet hebben om een route te kunnen opvragen.
+ *
+ * Smaller dan `CandidateTrainer` omdat dit alles is wat `resolveTravel` gebruikt, en omdat
+ * de briefing dezelfde routes nodig heeft zonder ooit een kandidaat te zijn: die kent geen
+ * tarief, geen kwalificaties en geen groep. Een `CandidateTrainer` voldoet hier vanzelf aan,
+ * dus de aanbevelingsengine verandert niet.
+ */
+export interface TravelOrigin {
+  readonly externalItemId: string;
+  readonly adres: string | null;
+}
+
 export async function resolveTravel(
   cache: TravelCache,
   provider: TravelProvider,
-  input: { destination: string; hqAddress: string; trainers: readonly CandidateTrainer[] }
+  input: { destination: string; hqAddress: string; trainers: readonly TravelOrigin[] }
 ): Promise<TravelResolution> {
   const routingKey = provider.routingKey();
   const destinationNorm = normalizeAddressKey(input.destination);
@@ -170,7 +183,7 @@ export async function resolveTravel(
 
   // --- Trainer legs ---
   const excluded: Array<{ externalItemId: string; reason: string }> = [];
-  const withAddress: Array<{ trainer: CandidateTrainer; address: string; norm: string }> = [];
+  const withAddress: Array<{ trainer: TravelOrigin; address: string; norm: string }> = [];
   for (const t of input.trainers) {
     const address = (t.adres ?? '').trim();
     if (address === '') {
