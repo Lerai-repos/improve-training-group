@@ -29,7 +29,6 @@ export const HEADER_COLUMN_IDS: readonly string[] = [
   C.companyMirror,
   C.themaRelation,
   C.tijd,
-  C.duur,
   C.locatie,
 ].filter((id): id is string => id !== undefined);
 
@@ -38,7 +37,6 @@ export interface TrainingHeader {
   readonly klant: string | null;
   readonly thema: string | null;
   readonly tijden: string | null;
-  readonly duur: string | null;
   readonly locatie: string | null;
 }
 
@@ -47,7 +45,6 @@ export const EMPTY_HEADER: TrainingHeader = {
   klant: null,
   thema: null,
   tijden: null,
-  duur: null,
   locatie: null,
 };
 
@@ -110,25 +107,6 @@ function cellText(
 }
 
 /**
- * Hours as ITG writes them, with the unit attached.
- *
- * The column is numeric, so `4.75` is what comes back and `4,75 uur` is what a Dutch
- * planner reads. Anything non-numeric is passed through untouched rather than dropped:
- * this is decoration, and showing whatever is in the cell beats hiding it because it did
- * not parse.
- */
-function formatDuur(raw: string | null): string | null {
-  if (raw === null) {
-    return null;
-  }
-  const hours = Number(raw);
-  if (!Number.isFinite(hours)) {
-    return raw;
-  }
-  return `${String(hours).replace('.', ',')} uur`;
-}
-
-/**
  * The header for the item in `data`.
  *
  * Every field fails to null independently, and none of them throws — the same rule the
@@ -151,7 +129,6 @@ export function readTrainingHeader(data: unknown): TrainingHeader {
      * the parenthetical the planner needs or invent a precision the cell does not have.
      */
     tijden: cellText(cells, C.tijd),
-    duur: formatDuur(cellText(cells, C.duur)),
     locatie: cellText(cells, C.locatie),
   };
 }
@@ -167,6 +144,11 @@ export interface HeaderField {
  * Empty ones are left out rather than held open with a dash. An empty slot under the
  * heading reads as a missing value on a training that may simply not be dated or located
  * yet, and this row is decoration for a list that stands on its own.
+ *
+ * Duration is deliberately NOT here. `TrainingHours` already prints it directly below as
+ * "Duur training", beside the billable hours it needs to be read against — a second copy
+ * in this line said the same thing twice and invited the reader to wonder why the two
+ * numbers were formatted differently.
  */
 export function headerFields(header: TrainingHeader): readonly HeaderField[] {
   const all: readonly HeaderField[] = [
@@ -174,7 +156,6 @@ export function headerFields(header: TrainingHeader): readonly HeaderField[] {
     { label: 'Klant', value: header.klant ?? '' },
     { label: 'Thema', value: header.thema ?? '' },
     { label: 'Tijden', value: header.tijden ?? '' },
-    { label: 'Duur', value: header.duur ?? '' },
     { label: 'Locatie', value: header.locatie ?? '' },
   ];
   return all.filter((field) => field.value !== '');

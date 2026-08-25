@@ -36,7 +36,6 @@ const ELEOS = itemWith(
   { id: C.companyMirror, text: null, display_value: 'Eleos' },
   { id: C.themaRelation, text: null, display_value: 'Maatwerk' },
   { id: C.tijd, text: '09:00-13:00' },
-  { id: C.duur, text: '4' },
   { id: C.locatie, text: 'Duinweg 1 3735 LA Bosch en Duin' }
 );
 
@@ -47,7 +46,6 @@ describe('readTrainingHeader', () => {
       klant: 'Eleos',
       thema: 'Maatwerk',
       tijden: '09:00-13:00',
-      duur: '4 uur',
       locatie: 'Duinweg 1 3735 LA Bosch en Duin',
     });
   });
@@ -67,11 +65,6 @@ describe('readTrainingHeader', () => {
     );
     expect(header.klant).toBe('Nexperia');
     expect(header.thema).toBe('Time management');
-  });
-
-  /** Decimal hours are Dutch, and never rounded — `4.75` is a real value on this board. */
-  it('writes a fractional duration the way a Dutch planner reads it', () => {
-    expect(readTrainingHeader(itemWith({ id: C.duur, text: '4.75' })).duur).toBe('4,75 uur');
   });
 
   /**
@@ -109,7 +102,6 @@ describe('headerFields', () => {
       'Klant',
       'Thema',
       'Tijden',
-      'Duur',
       'Locatie',
     ]);
   });
@@ -153,7 +145,7 @@ describe('useTrainingHeader', () => {
     expect(seen).toEqual([
       {
         ids: ['222'],
-        cols: [C.datum, C.companyMirror, C.themaRelation, C.tijd, C.duur, C.locatie],
+        cols: [C.datum, C.companyMirror, C.themaRelation, C.tijd, C.locatie],
       },
     ]);
   });
