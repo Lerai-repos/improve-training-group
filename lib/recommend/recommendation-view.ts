@@ -42,6 +42,12 @@ export type ViewState =
        * board's `duur` column is empty or the rows predate the field.
        */
       duurTraining: number | null;
+      /**
+       * `'city'` when Locatie named only a town, so every distance below was measured to
+       * that town's centre. Null when the destination was a real address, and on lists
+       * written before this was recorded.
+       */
+      travelPrecision: 'city' | null;
     }
   | { kind: 'no_match'; generation: number }
   /** `stage` names where it broke — `travel`, `monday`, `dlq_exhausted`. */
@@ -79,6 +85,16 @@ export interface ViewDeps {
    * from Redis. The columns render `—`, which already means "not recorded".
    */
   assignments?: CachedAssignments;
+  /**
+   * Hand a background task to the platform so it outlives the response — `waitUntil`.
+   *
+   * Only used to warm a cold workload cache. Optional because nothing depends on it:
+   * without it the miss simply stays a miss until the cron's next run, which is at most
+   * five minutes. A floating promise instead of this would be killed the moment the
+   * serverless response is flushed, so the scan would be started and never finished —
+   * the same Monday cost as a real refresh, with none of the benefit.
+   */
+  warm?: (task: Promise<unknown>) => void;
 }
 
 export function viewCapabilities(caps: Capabilities): ViewCapabilities {
@@ -195,6 +211,8 @@ async function resolveState(
     generation,
     rows: toPublicRows(detail.rows, marked, caps, workload),
     duurTraining: detail.duurTraining,
+    // Only a caller who can see the travel columns can be misled by them.
+    travelPrecision: caps.full ? detail.travelPrecision : null,
   };
 }
 
@@ -215,7 +233,28 @@ async function resolveWorkload(
     return none;
   }
   try {
-    const scan = await deps.assignments.read();
+    /**
+     * `peek`, not `read` — the request never scans Monday itself.
+     *
+     * `read` would block this response for as long as the scan takes, which is the
+     * 5.5–8.5 seconds that made the columns a coin flip in the first place. The refresh
+     * cron owns filling this cache; all a request does is use what is there, and on a
+     * miss ask for a refresh it will not wait for.
+     */
+    const peeked = await deps.assignments.peek();
+    if (peeked.kind !== 'hit') {
+      /**
+       * `miss` warms the cache for the next caller; `failed` deliberately does not.
+       * That sentinel means a refresh just failed, and its short TTL is what stops
+       * every poll — the view refreshes every 20 seconds, from every open tab — from
+       * starting the same doomed scan for as long as Monday is down.
+       */
+      if (peeked.kind === 'miss') {
+        deps.warm?.(deps.assignments.refresh());
+      }
+      return none;
+    }
+    const scan = peeked.value;
     /**
      * The training's CURRENT month, from the same scan — not the one stored with the
      * rows. Rescheduling from September to October does not advance the generation, so a

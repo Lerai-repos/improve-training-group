@@ -48,7 +48,7 @@ describe('handleFailureCallback', () => {
   it('re-delivers a stored GEREED rather than replacing it with FOUT', async () => {
     const h = harness();
     await generationAt(h.store, 1);
-    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+    await h.deps.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
     const result = await handleFailureCallback(h.deps, callback);
 
@@ -101,6 +101,7 @@ describe('handleFailureCallback', () => {
       kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
       duurTraining: null,
+      travelPrecision: null,
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
       trainingMonth: null,
     });

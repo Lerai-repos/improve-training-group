@@ -98,6 +98,12 @@ function sortAuditArrays(value: unknown): unknown {
  * intentional differences here (rather than listing the fields to compare) means a
  * change to anything NOT named below fails the check instead of slipping past.
  */
+/**
+ * Address prompt versions reviewed and accepted as not changing a replayed result.
+ * Adding one here is a decision; a version absent from it fails the comparison.
+ */
+const FOLDED_PROMPT_VERSIONS = new Set(['v1', 'v2', 'v3']);
+
 function stripIntentional(artifact: Record<string, unknown>): unknown {
   const trainers = Array.isArray(artifact.trainers) ? artifact.trainers : [];
   const rates = (artifact.rates ?? {}) as Record<string, unknown>;
@@ -108,16 +114,24 @@ function stripIntentional(artifact: Record<string, unknown>): unknown {
     enrichment: {
       ...enrichment,
       /**
-       * The address prompt gained a `city` field, so its version moved v1 → v2. The
-       * classification itself is unchanged — the baselines' own decisions are replayed
-       * from the fixtures, so any real drift would still show up in `addressDecision`.
+       * The address prompt's version has moved twice since these baselines: v1 → v2 added
+       * a `city` field, and v2 → v3 added the `city_only` outcome so a location naming
+       * only a town resolves instead of failing.
        *
-       * Pinned as a PAIR, not stripped as a field: a future v3 is not normalised and
-       * fails, which is the whole point of listing intentional differences rather than
-       * listing what to compare. Applied to both sides, so a recorded v1 stays v1 and
-       * only the live v2 folds onto it.
+       * v3 is a real change in what an input MEANS, unlike v2 — and it still cannot move
+       * this replay, because the formatter here is stubbed with each baseline's own
+       * recorded decision. The live classifier never runs, so what is being compared is
+       * the version string alone; any genuine drift would surface in `addressDecision`,
+       * which is not normalised.
+       *
+       * Listed EXPLICITLY rather than stripped as a field: a future v4 is not normalised
+       * and fails, which is the whole point of enumerating intentional differences instead
+       * of enumerating what to compare. Applied to both sides, so a recorded v1 stays v1
+       * and only a live known version folds onto it.
        */
-      promptVersion: enrichment.promptVersion === 'v2' ? 'v1' : enrichment.promptVersion,
+      promptVersion: FOLDED_PROMPT_VERSIONS.has(String(enrichment.promptVersion))
+        ? 'v1'
+        : enrichment.promptVersion,
     },
     // v2 → v3, deliberate.
     version: undefined,

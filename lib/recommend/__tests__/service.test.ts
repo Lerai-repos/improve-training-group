@@ -94,7 +94,7 @@ function deps(over: Partial<ServiceDeps> = {}): { deps: ServiceDeps; spies: Spie
     addressFormatter: {
       format: () => {
         spies.addressCalls += 1;
-        return Promise.resolve({ kind: 'travel_required', formatted: 'Dest 1', city: 'Utrecht' });
+        return Promise.resolve({ kind: 'travel_required', formatted: 'Dest 1', city: 'Utrecht', precision: 'exact' as const });
       },
     },
     travelProvider: {
@@ -272,6 +272,7 @@ describe('runRecommendation — fail-closed stages', () => {
       kind: 'travel_required',
       formatted: 'Dest 1',
       city: 'Utrecht',
+      precision: 'exact' as const,
     });
   });
 
@@ -453,7 +454,12 @@ describe('runRecommendation — the city side effect', () => {
     const { deps: d } = deps({
       addressFormatter: {
         format: () =>
-          Promise.resolve({ kind: 'travel_required' as const, formatted: 'Dest 1', city: null }),
+          Promise.resolve({
+            kind: 'travel_required' as const,
+            formatted: 'Dest 1',
+            city: null,
+            precision: 'exact' as const,
+          }),
       },
       cityStore: {
         lookup: () => Promise.resolve(null),

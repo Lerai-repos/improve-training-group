@@ -50,7 +50,18 @@ export interface Row extends BaseRow {
 export type ViewState =
   | { kind: 'idle' }
   | { kind: 'computing'; generation: number }
-  | { kind: 'ready'; generation: number; rows: Row[]; duurTraining?: number | null }
+  | {
+      kind: 'ready';
+      generation: number;
+      rows: Row[];
+      duurTraining?: number | null;
+      /**
+       * `'city'` when Locatie held only a town, so every km and reistijd below was
+       * measured to that town's centre. Optional like `duurTraining`: a list computed
+       * before this was recorded simply carries no claim either way.
+       */
+      travelPrecision?: 'city' | null;
+    }
   | { kind: 'no_match'; generation: number }
   | { kind: 'failed'; generation: number; stage: string }
   | { kind: 'unavailable'; generation: number; label: string };

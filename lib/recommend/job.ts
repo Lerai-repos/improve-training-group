@@ -64,6 +64,17 @@ function toClaim(result: RecommendationResult, settings: SettingsProvenance): Ou
         rows: result.rows,
         trainingMonth: result.trainingMonth,
         duurTraining: result.duurTraining,
+        /**
+         * Stored once for the whole list, like the month and the hours: how the
+         * destination was known when these distances were measured. Only `city` is worth
+         * keeping — it is the case the list has to warn about — so an exact address
+         * records null and old stored lists, which have no such field, read the same way.
+         */
+        travelPrecision:
+          result.addressDecision?.kind === 'travel_required' &&
+          result.addressDecision.precision === 'city'
+            ? 'city'
+            : null,
         settings,
       }
     : { kind: 'no_match', settings };

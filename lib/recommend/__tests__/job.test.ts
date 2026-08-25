@@ -260,7 +260,7 @@ describe('runJob', () => {
       runRecommendation: async () => {
         // The race has to happen DURING compute: `runJob` reads the stored outcome
         // before computing, so pre-seeding it would short-circuit and prove nothing.
-        await outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: PROVENANCE });
+        await outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: PROVENANCE });
         return { result: failed(false), settings: PROVENANCE }; // ours failed terminally, but it lost the claim
       },
     };

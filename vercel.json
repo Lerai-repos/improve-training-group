@@ -11,6 +11,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/refresh-workload",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/eval-stats",
       "schedule": "45 2 * * *"
     }

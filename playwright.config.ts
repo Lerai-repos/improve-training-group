@@ -31,6 +31,13 @@ const baseURL = `http://localhost:${PORT}`;
  * same secret, which is the only way to exercise the authorization matrix over HTTP
  * before the Monday app exists.
  */
+/**
+ * The bearer the cron routes expect. Pinned here for the same reason as the caps map: a
+ * developer's real `CRON_SECRET` in `.env.local` would otherwise decide whether the
+ * unauthorized cases pass, and "refuses the wrong secret" would be testing their machine.
+ */
+export const TEST_CRON_SECRET = 'playwright-cron-secret-not-a-real-one';
+
 export const TEST_AUTH = {
   clientSecret: 'playwright-session-secret-not-a-real-one',
   accountId: '12345678',
@@ -173,6 +180,7 @@ export default defineConfig({
       MONDAY_AGENDA_BOARD_ID: '0',
       MONDAY_APP_CLIENT_SECRET: TEST_AUTH.clientSecret,
       MONDAY_ACCOUNT_ID: TEST_AUTH.accountId,
+      CRON_SECRET: TEST_CRON_SECRET,
       /**
        * Pinned EMPTY, and this is load-bearing rather than tidy.
        *

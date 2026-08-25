@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
 import { buildAgendaScan, type AgendaScan, type AssignmentRow } from './assignments';
-import { createSharedCache } from './shared-cache';
+import {
+  createSharedCache,
+  type CachePeek,
+  type RefreshOptions,
+  type RefreshOutcome,
+} from './shared-cache';
 
 import type { KvStore } from './kv';
 
@@ -23,8 +28,26 @@ import type { KvStore } from './kv';
  * A cached empty index would be indistinguishable from "nobody is busy".
  */
 
-/** Five minutes: workload changes when someone is booked, which is not a per-second event. */
-export const ASSIGNMENTS_TTL_MS = 5 * 60 * 1000;
+/**
+ * Twenty minutes, and it MUST outlast the refresh cron's interval by a clear margin.
+ *
+ * That margin is the whole fix for "de kolommen blijven heel vaak leeg". The scan takes
+ * 5.5–8.5 seconds against a board of 839 trainings (nine sequential pages of 100), so
+ * when it ran on the planner's own request under a six-second budget it lost roughly one
+ * time in three, and the columns went blank. With the cron refreshing every five minutes,
+ * several consecutive runs have to fail before this value can expire, and until it does a
+ * slightly older number is served instead of nothing.
+ *
+ * Twenty rather than fifteen, because three intervals is not three chances. A value
+ * written at T0 with a fifteen-minute life expires *as* the T+15 run begins, and that run
+ * still needs its 5.5–8.5 seconds — so two failures could leave a gap even though the
+ * third run succeeded. The extra interval turns "three attempts" into three attempts that
+ * each have time to finish.
+ *
+ * Workload changes when somebody is booked, so twenty minutes of staleness is invisible to
+ * a planner, and strictly better than the alternative of being correct or absent.
+ */
+export const ASSIGNMENTS_TTL_MS = 20 * 60 * 1000;
 
 /**
  * How long a failure is remembered.
@@ -78,6 +101,10 @@ function decode(raw: string | null): AgendaScan | null {
 export interface CachedAssignments {
   /** The current scan. Throws when it cannot be determined — never returns an empty one. */
   read(): Promise<AgendaScan>;
+  /** The cached scan or nothing, without ever touching Monday. The view's fast path. */
+  peek(): Promise<CachePeek<AgendaScan>>;
+  /** Rescan and store. The cron's entry point; leaves a cached scan alone on failure. */
+  refresh(options?: RefreshOptions): Promise<RefreshOutcome>;
 }
 
 export interface CachedAssignmentsDeps {
@@ -86,6 +113,8 @@ export interface CachedAssignmentsDeps {
   load: () => Promise<AgendaScan>;
   boardId: string;
   ttlMs?: number;
+  /** Must exceed the scan's own deadline — see `lockTtlMs` on the shared cache. */
+  lockTtlMs?: number;
   /** Injected in tests so waiting for the lock holder costs no real time. */
   sleep?: (ms: number) => Promise<void>;
   /** Injected in tests; production mints a random owner token per refresh. */
@@ -105,6 +134,7 @@ export function createCachedAssignments(deps: CachedAssignmentsDeps): CachedAssi
     encode,
     decode,
     ttlMs: deps.ttlMs ?? ASSIGNMENTS_TTL_MS,
+    lockTtlMs: deps.lockTtlMs,
     failureTtlMs: FAILURE_TTL_MS,
     label: 'Workload index',
     sleep: deps.sleep,
@@ -115,5 +145,9 @@ export function createCachedAssignments(deps: CachedAssignmentsDeps): CachedAssi
 /** Convenience for tests and scripts: a scan built straight from rows, no cache. */
 export function staticAssignments(rows: readonly AssignmentRow[]): CachedAssignments {
   const scan = buildAgendaScan(rows);
-  return { read: () => Promise.resolve(scan) };
+  return {
+    read: () => Promise.resolve(scan),
+    peek: () => Promise.resolve({ kind: 'hit', value: scan }),
+    refresh: () => Promise.resolve({ refreshed: true }),
+  };
 }

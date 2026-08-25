@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 
 import { Button } from '@components/ui/button';
 import { Skeleton } from '@components/ui/skeleton';
@@ -16,7 +16,8 @@ import { WhatsappButton, WhatsappPanel } from './whatsapp-panel';
 import { useWhatsappMessage } from './use-whatsapp-message';
 import type { SortLevel } from './sorting';
 import { useTrainerNames } from './use-trainer-names';
-import { useTrainingDate } from './use-training-date';
+import { headerFields } from './training-header';
+import { useTrainingHeader } from './use-training-header';
 
 import type { MondayBridge } from './monday-client';
 import type { MessageState } from './whatsapp-link';
@@ -182,8 +183,9 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
       : [];
   const names = useTrainerNames(monday, trainerIds, { includePhones: caps?.canPlan === true });
 
-  /** The training's own date, read live — see `use-training-date.ts`. */
-  const trainingDate = useTrainingDate(monday, view.itemId);
+  /** The training's own details, read live — see `use-training-header.ts`. */
+  const training = useTrainingHeader(monday, view.itemId);
+  const headerDetails = headerFields(training.header);
 
   /**
    * A pick that needs an answer before it can be written — see `PickConfirmDialog`.
@@ -290,14 +292,22 @@ export const RecommendationsView = ({ monday, api, view }: RecommendationsViewPr
     >
       {pending ? null : (
         <>
-          <header className="relative flex items-center justify-between gap-4">
-            <div>
+          <header className="relative flex items-start justify-between gap-4">
+            <div className="min-w-0">
               <h1 className="text-lg font-semibold">Aanbevolen trainers</h1>
-              {/* Left out entirely when there is no date to show, rather than held open
-              with a dash: an empty slot under the heading reads as a missing value on a
-              training that may simply not be dated yet. */}
-              {trainingDate.label !== null && (
-                <p className="text-sm text-muted-foreground">{trainingDate.label}</p>
+              {/* Wraps rather than truncates: a location runs to a full street address,
+              and the one field a planner most often needs in full is the longest one.
+              Empty fields are dropped in `headerFields`, so this row is absent rather
+              than half-filled on a training that is not scheduled yet. */}
+              {headerDetails.length > 0 && (
+                <dl className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm">
+                  {headerDetails.map((field) => (
+                    <div key={field.label} className="flex items-baseline gap-1">
+                      <dt className="text-muted-foreground">{field.label}</dt>
+                      <dd className="font-medium">{field.value}</dd>
+                    </div>
+                  ))}
+                </dl>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -533,6 +543,26 @@ const Body = ({
             billableHours={state.rows[0]?.billableHours ?? null}
             canViewFull={caps.canViewFull}
           />
+          {/* Said once, above the list, for the same reason as the hours: it is a fact
+          about the destination, not about any one trainer, so a per-row marker would
+          repeat it down every row.
+
+          Phrased about the CALCULATION, not about the board. This flag was recorded when
+          the list was computed, while the header above reads Locatie live — so the moment
+          somebody types a full address, a sentence claiming "Locatie is alleen een
+          plaatsnaam" would contradict what they can see and tell them to enter an address
+          they just entered. Naming the recalculate is also the only way to act on it: the
+          stored kilometres do not change until the list is recomputed. */}
+          {state.travelPrecision === 'city' && (
+            <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+              <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                Bij deze berekening was alleen een plaatsnaam bekend, dus km en reistijd zijn
+                gemeten naar het centrum. Staat er inmiddels een adres in Locatie? Bereken dan
+                opnieuw voor exacte afstanden.
+              </span>
+            </p>
+          )}
           <RecommendationTable
           rows={state.rows}
           names={names}

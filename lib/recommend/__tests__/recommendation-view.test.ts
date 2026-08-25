@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { createApproachedStore } from '../approached';
-import { staticAssignments } from '../assignment-cache';
-import { buildAssignmentIndex } from '../assignments';
+import { staticAssignments, type CachedAssignments } from '../assignment-cache';
+import { buildAssignmentIndex, type AgendaScan } from '../assignments';
 import { NO_CAPABILITIES, type Capabilities } from '../capabilities';
 import { createMemoryKvStore } from '../kv';
 import { createOutcomeStore, ROWS_TTL_MS } from '../outcome';
 import { createQueueStore } from '../queue-store';
 import { resolveView, type ViewDeps } from '../recommendation-view';
+import type { CachePeek } from '../shared-cache';
 import { storedRow } from './stored-row.fixture';
 
 const ITEM = '5029726254';
@@ -37,6 +38,36 @@ async function bump(h: ReturnType<typeof harness>): Promise<void> {
   await h.queue.enqueueOrGet({ triggerUuid: `u${triggerSeq}`, mondayItemId: ITEM, nowMs: 0 });
 }
 
+/**
+ * A workload cache in one of the three states `peek` can report, with a counter for the
+ * background refresh the view may ask for.
+ *
+ * `read` rejects on purpose. The view reads through `peek` now, so a fixture that still
+ * answered `read` would keep every one of these tests green while proving nothing about
+ * the code path that actually runs.
+ */
+function workload(
+  peek: CachePeek<AgendaScan>
+): CachedAssignments & { peeks: () => number; refreshes: () => number } {
+  let peeks = 0;
+  let refreshes = 0;
+  return {
+    read: () => Promise.reject(new Error('the view must not scan on the request path')),
+    peek: () => {
+      peeks += 1;
+      return Promise.resolve(peek);
+    },
+    refresh: () => {
+      refreshes += 1;
+      return Promise.resolve({ refreshed: true });
+    },
+    peeks: () => peeks,
+    refreshes: () => refreshes,
+  };
+}
+
+const scanOf = (scan: AgendaScan): CachePeek<AgendaScan> => ({ kind: 'hit', value: scan });
+
 describe('resolveView', () => {
   it('reports idle when the training has never been triggered', async () => {
     const h = harness();
@@ -59,7 +90,7 @@ describe('resolveView', () => {
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-      trainingMonth: null, duurTraining: null,
+      trainingMonth: null, duurTraining: null, travelPrecision: null,
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
     });
 
@@ -67,6 +98,77 @@ describe('resolveView', () => {
 
     expect(state).toMatchObject({ kind: 'ready', generation: 1 });
     expect(state.kind === 'ready' && state.rows).toHaveLength(1);
+  });
+
+  /**
+   * ITG may type only a town in Locatie, and Google then measures to its centre. The
+   * kilometres come back looking exactly as measured as any other, so the list has to
+   * carry the difference or it presents a guess as a fact.
+   */
+  describe('a destination known only by its town', () => {
+    it('reports that the distances are measured to a town centre', async () => {
+      const h = harness();
+      await bump(h);
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        trainingMonth: null,
+        duurTraining: null,
+        travelPrecision: 'city',
+        rows: [storedRow()],
+      });
+
+      const { state } = await resolveView(h.deps, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.travelPrecision).toBe('city');
+    });
+
+    /** Only someone who can see km and reistijd can be misled by them. */
+    it('says nothing to a caller who cannot see the travel columns', async () => {
+      const h = harness();
+      await bump(h);
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        trainingMonth: null,
+        duurTraining: null,
+        travelPrecision: 'city',
+        rows: [storedRow()],
+      });
+
+      const { state } = await resolveView(h.deps, ITEM, RESTRICTED);
+
+      expect(state.kind === 'ready' && state.travelPrecision).toBeNull();
+    });
+
+    /**
+     * Lists stored before this field existed have no claim either way, and must read as
+     * "no warning" rather than failing to decode — `ROWS_TTL_MS` is a year, so every one
+     * of them is still being served.
+     */
+    it('reads a list written before the field existed as no warning', async () => {
+      const h = harness();
+      await bump(h);
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        trainingMonth: null,
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+      });
+      // Strip the field the way a record written yesterday would have it.
+      const raw: unknown = JSON.parse(String(await h.kv.get(`rows:${ITEM}:1`)));
+      if (typeof raw === 'object' && raw !== null && 'travelPrecision' in raw) {
+        delete (raw as Record<string, unknown>).travelPrecision;
+      }
+      await h.kv.set(`rows:${ITEM}:1`, JSON.stringify(raw));
+
+      const { state } = await resolveView(h.deps, ITEM, FULL);
+
+      expect(state.kind).toBe('ready');
+      expect(state.kind === 'ready' && state.travelPrecision).toBeNull();
+    });
   });
 
   /** "We looked and found nobody" is an answer, and must not read as a missing one. */
@@ -111,7 +213,7 @@ describe('resolveView', () => {
       let now = 1_000;
       const h = harness(() => now);
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
       now += ROWS_TTL_MS + 1;
 
@@ -138,7 +240,7 @@ describe('resolveView', () => {
     it('does not report an older generation’s answer for a newer generation', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
       await bump(h); // a recalculate: generation 2, nothing stored yet
 
       expect((await resolveView(h.deps, ITEM, FULL)).state).toEqual({
@@ -171,7 +273,7 @@ describe('resolveView', () => {
 
     it('does not return the superseded generation as ready', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
       // Read generation 1, resolve its rows, then discover the current one is 2.
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 2]) };
@@ -184,11 +286,11 @@ describe('resolveView', () => {
 
     it('re-resolves against the new generation rather than giving up', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
       await h.outcomes.claim(ITEM, 2, {
         kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-        trainingMonth: null, duurTraining: null,
+        trainingMonth: null, duurTraining: null, travelPrecision: null,
         rows: [storedRow({ trainerItemId: 'newer' })],
       });
 
@@ -206,7 +308,7 @@ describe('resolveView', () => {
      */
     it('gives up after a few attempts and reports computing', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 3, 4, 5, 6, 7, 8, 9]) };
 
@@ -231,7 +333,7 @@ describe('resolveView', () => {
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-        trainingMonth: '2026-09', duurTraining: null,
+        trainingMonth: '2026-09', duurTraining: null, travelPrecision: null,
         rows: [storedRow({ trainerItemId: 't1' })],
       });
     }
@@ -287,12 +389,9 @@ describe('resolveView', () => {
     it('renders unknown rather than zero when the scan fails', async () => {
       const h = harness();
       await readyList(h);
+      const assignments = workload({ kind: 'failed' });
 
-      const { state } = await resolveView(
-        { ...h.deps, assignments: { read: () => Promise.reject(new Error('Monday down')) } },
-        ITEM,
-        FULL
-      );
+      const { state } = await resolveView({ ...h.deps, assignments }, ITEM, FULL);
 
       expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
         assignmentsThisMonth: null,
@@ -313,16 +412,15 @@ describe('resolveView', () => {
       const { state } = await resolveView(
         {
           ...h.deps,
-          assignments: {
-            read: () =>
-              Promise.resolve({
-                workload: buildAssignmentIndex([
-                  { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
-                ]),
-                // Scanned, and it has no date any more.
-                monthByItemId: new Map([[ITEM, null]]),
-              }),
-          },
+          assignments: workload(
+            scanOf({
+              workload: buildAssignmentIndex([
+                { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
+              ]),
+              // Scanned, and it has no date any more.
+              monthByItemId: new Map([[ITEM, null]]),
+            })
+          ),
         },
         ITEM,
         FULL
@@ -342,15 +440,14 @@ describe('resolveView', () => {
       const { state } = await resolveView(
         {
           ...h.deps,
-          assignments: {
-            read: () =>
-              Promise.resolve({
-                workload: buildAssignmentIndex([
-                  { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
-                ]),
-                monthByItemId: new Map(),
-              }),
-          },
+          assignments: workload(
+            scanOf({
+              workload: buildAssignmentIndex([
+                { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
+              ]),
+              monthByItemId: new Map(),
+            })
+          ),
         },
         ITEM,
         FULL
@@ -363,23 +460,74 @@ describe('resolveView', () => {
     it('does not scan for a caller who cannot see the columns', async () => {
       const h = harness();
       await readyList(h);
-      let scans = 0;
+      const assignments = workload(scanOf({ workload: new Map(), monthByItemId: new Map() }));
 
-      await resolveView(
-        {
-          ...h.deps,
-          assignments: {
-            read: () => {
-              scans += 1;
-              return Promise.resolve({ workload: new Map(), monthByItemId: new Map() });
-            },
-          },
-        },
+      await resolveView({ ...h.deps, assignments }, ITEM, RESTRICTED);
+
+      expect(assignments.peeks()).toBe(0);
+      expect(assignments.refreshes()).toBe(0);
+    });
+
+    /**
+     * A cold cache costs the planner nothing and warms itself for the next caller. The
+     * refresh cron owns filling this, so blocking the response on an 8-second board scan
+     * — which is what `read` would do — is exactly the behaviour that made the columns a
+     * coin flip.
+     */
+    it('warms a cold cache in the background instead of scanning inline', async () => {
+      const h = harness();
+      await readyList(h);
+      const assignments = workload({ kind: 'miss' });
+      const warmed: Promise<unknown>[] = [];
+
+      const { state } = await resolveView(
+        { ...h.deps, assignments, warm: (task) => warmed.push(task) },
         ITEM,
-        RESTRICTED
+        FULL
       );
 
-      expect(scans).toBe(0);
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        assignmentsThisMonth: null,
+        assignmentsThisYear: null,
+      });
+      expect(assignments.refreshes()).toBe(1);
+      expect(warmed).toHaveLength(1);
+      await Promise.all(warmed);
+    });
+
+    /**
+     * A recent failure must NOT schedule a refresh. The sentinel's short TTL is the only
+     * thing stopping every 20-second poll from every open tab restarting the same doomed
+     * scan for as long as Monday is unreachable.
+     */
+    it('does not schedule a refresh while a recent one is known to have failed', async () => {
+      const h = harness();
+      await readyList(h);
+      const assignments = workload({ kind: 'failed' });
+      const warmed: Promise<unknown>[] = [];
+
+      await resolveView(
+        { ...h.deps, assignments, warm: (task) => warmed.push(task) },
+        ITEM,
+        FULL
+      );
+
+      expect(assignments.refreshes()).toBe(0);
+      expect(warmed).toHaveLength(0);
+    });
+
+    /** Without a `warm` hook the miss is simply a miss — never an inline scan. */
+    it('never scans inline when no background hook is available', async () => {
+      const h = harness();
+      await readyList(h);
+      const assignments = workload({ kind: 'miss' });
+
+      const { state } = await resolveView({ ...h.deps, assignments }, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        assignmentsThisMonth: null,
+      });
+      expect(assignments.refreshes()).toBe(0);
     });
   });
 
@@ -390,7 +538,7 @@ describe('resolveView', () => {
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-        trainingMonth: null, duurTraining: null,
+        trainingMonth: null, duurTraining: null, travelPrecision: null,
         rows: [
           storedRow({ trainerItemId: 't1', rank: 1 }),
           storedRow({ trainerItemId: 't2', rank: 2 }),
@@ -417,7 +565,7 @@ describe('resolveView', () => {
     it('does not carry marks across a recalculate', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
       await h.approached.write({
         mondayItemId: ITEM,
         generation: 1,
@@ -427,7 +575,7 @@ describe('resolveView', () => {
       });
 
       await bump(h);
-      await h.outcomes.claim(ITEM, 2, { kind: 'ready', duurTraining: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 2, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
       const { state } = await resolveView(h.deps, ITEM, FULL);
 
@@ -439,7 +587,7 @@ describe('resolveView', () => {
     it('gives a full caller the money, and a restricted one none of it', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
 
       const full = await resolveView(h.deps, ITEM, FULL);
       const restricted = await resolveView(h.deps, ITEM, RESTRICTED);

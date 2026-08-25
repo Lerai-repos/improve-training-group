@@ -27,6 +27,7 @@ const REQUIRED: AddressDecision = {
   kind: 'travel_required',
   formatted: 'Raadhuisplein 6, 3851 NT Ermelo',
   city: 'Ermelo',
+  precision: 'exact' as const,
 };
 
 /** Een cache die niets kent en niets onthoudt; alles gaat dan naar de provider. */

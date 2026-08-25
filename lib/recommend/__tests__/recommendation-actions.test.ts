@@ -161,7 +161,7 @@ describe('handleApproached', () => {
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-      trainingMonth: null, duurTraining: null,
+      trainingMonth: null, duurTraining: null, travelPrecision: null,
       rows: trainerIds.map((trainerItemId, index) => storedRow({ trainerItemId, rank: index + 1 })),
     });
   }

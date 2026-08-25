@@ -150,6 +150,16 @@ const storedRowsSchema = z.discriminatedUnion('kind', [
      * header renders nothing rather than a misleading `0,00`.
      */
     duurTraining: z.number().finite().nonnegative().nullable().default(null),
+    /**
+     * `'city'` when these distances were measured to a town centre because Locatie named
+     * only a town, otherwise null.
+     *
+     * Recorded with the list rather than resolved at read time: it describes how the
+     * kilometres stored in these rows were obtained, and someone typing a full address
+     * tomorrow does not make yesterday's numbers exact. `.default(null)` so every list
+     * written before this existed reads as "no warning", which is what it was.
+     */
+    travelPrecision: z.literal('city').nullable().default(null),
     // At least one. `service.ts` emits GEREED exactly when `ranked.length > 0` and
     // GEEN MATCH otherwise, so a ready-but-empty artifact contradicts the label it was
     // stored beside, and the view would render it as a successful empty recommendation.
@@ -190,6 +200,7 @@ export type OutcomeClaim =
       rows: StoredRow[];
       trainingMonth: string | null;
       duurTraining: number | null;
+      travelPrecision: 'city' | null;
       settings: SettingsProvenance;
     }
   | { kind: 'no_match'; settings: SettingsProvenance }
@@ -237,6 +248,7 @@ function detailOf(claim: OutcomeClaim): StoredDetail {
       rows: claim.rows,
       trainingMonth: claim.trainingMonth,
       duurTraining: claim.duurTraining,
+      travelPrecision: claim.travelPrecision,
       failure: null,
     };
   }

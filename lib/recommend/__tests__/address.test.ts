@@ -11,6 +11,7 @@ describe('parseAiResponse', () => {
       kind: 'travel_required',
       formatted: 'Wolvenplein 25, Utrecht',
       city: 'Utrecht',
+      precision: 'exact',
     });
   });
 
@@ -35,6 +36,7 @@ describe('parseAiResponse', () => {
         kind: 'travel_required',
         formatted: 'X 1',
         city: null,
+        precision: 'exact',
       });
     });
 
@@ -42,7 +44,7 @@ describe('parseAiResponse', () => {
     it('normalises a missing city to null rather than undefined', () => {
       const d = parseAiResponse('{"outcome":"travel_required","formatted":"X 1"}');
 
-      expect(d).toEqual({ kind: 'travel_required', formatted: 'X 1', city: null });
+      expect(d).toEqual({ kind: 'travel_required', formatted: 'X 1', city: null, precision: 'exact' });
       expect(d.kind === 'travel_required' && 'city' in d && d.city === null).toBe(true);
     });
 
@@ -64,6 +66,54 @@ describe('parseAiResponse', () => {
     expect(parseAiResponse('{"outcome":"online","formatted":null}')).toEqual({
       kind: 'no_travel_confirmed',
       reason: 'online',
+    });
+  });
+
+  /**
+   * ITG's own request: a training whose Locatie says only "Rotterdam" used to produce no
+   * recommendations at all. Google will happily route to a town, so refusing was stricter
+   * than it needed to be — the answer is to accept it and say that it is an estimate.
+   */
+  describe('a town with no street', () => {
+    it('is a destination, marked as measured to the centre', () => {
+      expect(
+        parseAiResponse('{"outcome":"city_only","formatted":"Rotterdam","city":"Rotterdam"}')
+      ).toEqual({
+        kind: 'travel_required',
+        formatted: 'Rotterdam',
+        city: 'Rotterdam',
+        precision: 'city',
+      });
+    });
+
+    /** For a town-only location the town IS the address — never lose it to a null city. */
+    it('falls back to the formatted town when the model names no city', () => {
+      const d = parseAiResponse('{"outcome":"city_only","formatted":"Utrecht"}');
+      expect(d).toEqual({
+        kind: 'travel_required',
+        formatted: 'Utrecht',
+        city: 'Utrecht',
+        precision: 'city',
+      });
+    });
+
+    /** A town we cannot even name is not a destination, whatever the outcome says. */
+    it('is unresolved when there is no town to route to', () => {
+      expect(parseAiResponse('{"outcome":"city_only","formatted":""}')).toEqual({
+        kind: 'unresolved_location',
+        detail: 'city_only without a formatted address',
+      });
+    });
+
+    /**
+     * The reason `city_only` is an OUTCOME and not a boolean beside `travel_required`.
+     *
+     * A model that does not know the word cannot accidentally present a town-centre guess
+     * as an exact address — the enum rejects it, and the run fails the way it did before
+     * this existed rather than quietly claiming a precision it does not have.
+     */
+    it('never lets an unknown outcome pass as an exact address', () => {
+      expect(parseAiResponse('{"outcome":"city","formatted":"Rotterdam"}').kind).toBe('error');
     });
   });
 
@@ -111,6 +161,7 @@ describe('createAddressFormatter', () => {
       kind: 'travel_required',
       formatted: 'X 1',
       city: null,
+      precision: 'exact',
     });
   });
 });

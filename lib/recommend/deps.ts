@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 
+import { waitUntil } from '@vercel/functions';
+
+import { log } from '@lib/logger';
 import { parseAcknowledgements } from '@lib/monday';
 import {
   AGENDA_2026_COLUMNS,
@@ -21,7 +24,7 @@ import { createAddressFormatter } from './address';
 import { assertAddressHashKey } from './address-key';
 import { createApproachedStore } from './approached';
 import { readAgendaScan } from './assignments';
-import { createCachedAssignments } from './assignment-cache';
+import { createCachedAssignments, type CachedAssignments } from './assignment-cache';
 import { capabilityPolicyFromEnv } from './capabilities';
 import { createItemBoardReader, type ItemBoardReader } from './item-board';
 import type { ViewDeps } from './recommendation-view';
@@ -40,7 +43,7 @@ import { createKvTravelCacheStore, createTravelCache } from './travel-cache';
 import { createCityStore } from './city-store';
 import type { StatusWriter } from './delivery';
 import { createAlertGate, type FailureCallbackDeps } from './failure-callback';
-import { createRedisClient, createUpstashKvStore } from './kv';
+import { createRedisClient, createUpstashKvStore, type KvStore } from './kv';
 import { createUpstashOutcomeStore, type OutcomeStore } from './outcome';
 import { createWhatsappTrainingReader, type WhatsappDeps } from './whatsapp-service';
 import { createUpstashWhatsappStore } from './whatsapp-store';
@@ -80,6 +83,88 @@ const ACK_VERSION_LENGTH = 16;
  * columns are not worth making a planner wait.
  */
 const WORKLOAD_DEADLINE_MS = 6_000;
+
+/**
+ * The refresh cron's budget, ten times the request path's.
+ *
+ * Nobody is waiting on it, and `maxDuration` on that route is 300s, so the scan can
+ * simply be allowed to finish. Six seconds was never a statement about how long the
+ * scan takes — it is how long a planner should be made to wait for two columns they
+ * can live without — and applying it to a background job is what kept the cache empty.
+ */
+export const WORKLOAD_CRON_DEADLINE_MS = 60_000;
+
+/** Headroom on the lock beyond the scan's own deadline, for the write that follows it. */
+const LOCK_MARGIN_MS = 15_000;
+
+/**
+ * The workload cache over one board, with an explicit scan budget.
+ *
+ * Shared by the view (short budget, degrades to dashes) and the refresh cron (long
+ * budget, nobody waiting) so both read and write the SAME Redis key. A second cache
+ * with a different key would mean the cron warmed something the view never reads.
+ */
+function workloadCache(kv: KvStore, board: string, deadlineMs: number): CachedAssignments {
+  return createCachedAssignments({
+    kv,
+    boardId: board,
+    /**
+     * The lease has to outlast the scan it is guarding.
+     *
+     * The cron budgets sixty seconds; the cache's default lease is thirty. That lease
+     * would lapse mid-scan and let the very next caller start a SECOND scan of the same
+     * board — the duplicate work the lock exists to prevent, arriving exactly when the
+     * scan is already slow. The margin covers the round trip that writes the result after
+     * the deadline is reached.
+     */
+    lockTtlMs: deadlineMs + LOCK_MARGIN_MS,
+    load: () => {
+      /**
+       * Captured ONCE, here — not recomputed per check.
+       *
+       * `deadlineMs` is a callback the client consults on every attempt, so
+       * `() => Date.now() + 6_000` grants a fresh six seconds each time and an
+       * outage burns the full retry budget instead of degrading. An absolute
+       * timestamp is a deadline; a relative one is a renewal.
+       */
+      const deadline = Date.now() + deadlineMs;
+      return readAgendaScan(
+        createMondayGraphQLClient({
+          token: requireEnv('MONDAY_API_TOKEN'),
+          apiVersion: MONDAY_API_VERSION,
+          /**
+           * Its OWN deadline, not the worker's.
+           *
+           * `currentDeadlineMs` is null outside a run context, and the client then
+           * spends five 30-second attempts before giving up — so during a Monday
+           * outage the whole GET would time out long before `resolveWorkload` could
+           * degrade to dashes. Workload is the one part of a read that is allowed to
+           * be missing; it must fail fast enough for that to mean anything.
+           */
+          deadlineMs: () => deadline,
+        }),
+        {
+          boardId: board,
+          dateColumnId: AGENDA_2026_COLUMNS.datum,
+          trainerColumnIds: trainerRelationIds(AGENDA_2026_COLUMNS),
+        }
+      );
+    },
+  });
+}
+
+/** Everything `GET /api/cron/refresh-workload` needs, and nothing else. */
+export function buildWorkloadRefreshDeps(): { assignments: CachedAssignments; boardId: string } {
+  const board = agendaBoardId();
+  return {
+    assignments: workloadCache(
+      createUpstashKvStore(createRedisClient()),
+      board,
+      WORKLOAD_CRON_DEADLINE_MS
+    ),
+    boardId: board,
+  };
+}
 
 // Static-import the acknowledgements so Vercel's file tracing bundles them into
 // EVERY function that imports these deps (webhook + cron) — a runtime fs read is
@@ -341,42 +426,24 @@ export function buildViewDeps(): {
        * touches Monday, and it degrades to `—` rather than failing the view. Building the
        * client eagerly would put a missing token back on the critical read path.
        */
-      assignments: createCachedAssignments({
-        kv,
-        boardId: board,
-        load: () => {
-          /**
-           * Captured ONCE, here — not recomputed per check.
-           *
-           * `deadlineMs` is a callback the client consults on every attempt, so
-           * `() => Date.now() + 6_000` grants a fresh six seconds each time and an
-           * outage burns the full retry budget instead of degrading. An absolute
-           * timestamp is a deadline; a relative one is a renewal.
-           */
-          const deadline = Date.now() + WORKLOAD_DEADLINE_MS;
-          return readAgendaScan(
-            createMondayGraphQLClient({
-              token: requireEnv('MONDAY_API_TOKEN'),
-              apiVersion: MONDAY_API_VERSION,
-              /**
-               * Its OWN short deadline, not the worker's.
-               *
-               * `currentDeadlineMs` is null outside a run context, and the client then
-               * spends five 30-second attempts before giving up — so during a Monday
-               * outage the whole GET would time out long before `resolveWorkload` could
-               * degrade to dashes. Workload is the one part of a read that is allowed to
-               * be missing; it must fail fast enough for that to mean anything.
-               */
-              deadlineMs: () => deadline,
-            }),
-            {
-              boardId: board,
-              dateColumnId: AGENDA_2026_COLUMNS.datum,
-              trainerColumnIds: trainerRelationIds(AGENDA_2026_COLUMNS),
-            }
-          );
-        },
-      }),
+      assignments: workloadCache(kv, board, WORKLOAD_DEADLINE_MS),
+      /**
+       * The rejection has to be swallowed HERE, before `waitUntil` ever sees it.
+       *
+       * A refresh that cannot reach Monday rejects, and handing a rejecting promise to
+       * the platform is an unhandled rejection that can fail the whole invocation — for
+       * a background warm-up whose failure the response already handled by rendering
+       * dashes. The scan's own failure path has already written its sentinel by then.
+       */
+      warm: (task) => {
+        waitUntil(
+          task.catch((error: unknown) => {
+            log.warn('workload warm-up failed', {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          })
+        );
+      },
     },
     recalculate: () => ({
       queue: createRunQueue(store, buildPublisher()),
