@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST } from '../blocks';
+import { BRIEFING_AGENDA_COLUMNS } from '../columns';
 import { buildTabView } from '../tab';
 
 import type { SavedChecklist } from '../answers';
@@ -108,6 +109,41 @@ describe('buildTabView', () => {
     };
     const uit = buildTabView(geen, opgeslagen());
     expect(uit.issues.find((i) => i.kind === 'geen_lead')?.tekst).toContain('geen leadtrainer');
+  });
+
+  /**
+   * "Er staat niemand in de leadkolom" en "Trainer is leeg" zijn hetzelfde feit in twee
+   * zinnen. Naast elkaar op één scherm lezen ze als twee losse problemen, en de tweede
+   * voegt niets toe: alleen de eerste zegt wat je eraan doet.
+   */
+  it('meldt een lege trainerkolom één keer, niet ook als leeg veld', () => {
+    const geen = {
+      ...TRAINING,
+      trainers: [],
+      missing: [
+        { column: BRIEFING_AGENDA_COLUMNS.trainerRelation, label: 'Trainer' },
+        { column: 'itg_achtergrond', label: 'Achtergrondinformatie' },
+      ],
+    };
+
+    const uit = buildTabView(geen, opgeslagen());
+
+    expect(uit.issues.filter((i) => i.kind === 'geen_lead')).toHaveLength(1);
+    // De achtergrondinformatie is een ander veld en blijft gewoon gemeld.
+    expect(uit.issues.filter((i) => i.kind === 'veld_leeg').map((i) => i.tekst)).toEqual([
+      'Achtergrondinformatie is leeg; dat wordt een zichtbare regel in het document',
+    ]);
+  });
+
+  /** Zonder dat blokkerende geval blijft de trainermelding wél staan. */
+  it('meldt een leeg trainerveld wel als er gewoon een leadtrainer is', () => {
+    const uit = buildTabView(
+      { ...TRAINING, missing: [{ column: BRIEFING_AGENDA_COLUMNS.trainerRelation, label: 'Trainer' }] },
+      opgeslagen()
+    );
+
+    expect(uit.issues.some((i) => i.kind === 'geen_lead')).toBe(false);
+    expect(uit.issues.find((i) => i.kind === 'veld_leeg')?.tekst).toContain('Trainer');
   });
 
   /** Het gemeten randgeval: `Acteuraantal` belooft iemand die nergens als acteur staat. */

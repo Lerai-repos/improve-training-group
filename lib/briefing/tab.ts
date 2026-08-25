@@ -10,6 +10,7 @@
  * wie, en met welke rol — zodat het scherm dat kan tonen vóórdat er iets gemaakt wordt.
  */
 
+import { BRIEFING_AGENDA_COLUMNS } from './columns';
 import { countLinkedActors } from './compose';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
 import { conceptLines, resolveConceptInhoud } from './concept';
@@ -105,12 +106,14 @@ function personen(training: BriefingTraining, aangewezen: readonly string[]): Ta
  * melden, niet tegenhouden: het document komt er wel, en de adviseur ziet precies wat er
  * ontbreekt in plaats van een knop die niets doet.
  */
-function legeVelden(training: BriefingTraining): TabIssue[] {
-  return training.missing.map((veld) => ({
-    kind: 'veld_leeg' as const,
-    tekst: `${veld.label} is leeg; dat wordt een zichtbare regel in het document`,
-    blokkeert: false,
-  }));
+function legeVelden(training: BriefingTraining, onderdrukt: ReadonlySet<string>): TabIssue[] {
+  return training.missing
+    .filter((veld) => !onderdrukt.has(veld.column))
+    .map((veld) => ({
+      kind: 'veld_leeg' as const,
+      tekst: `${veld.label} is leeg; dat wordt een zichtbare regel in het document`,
+      blokkeert: false,
+    }));
 }
 
 /**
@@ -148,6 +151,14 @@ export function buildTabView(
   });
 
   const issues: TabIssue[] = [];
+  /**
+   * Velden waarover elders al iets scherpers staat, zodat ze niet twee keer gemeld worden.
+   *
+   * "Er staat niemand in de kolom Trainers contactgegevens" en "Trainer is leeg" zijn
+   * hetzelfde feit in twee zinnen, en op één scherm naast elkaar lezen ze als twee losse
+   * problemen. De eerste zegt óók wat je eraan doet, dus die blijft.
+   */
+  const onderdrukt = new Set<string>();
   if (training.brie === INTERNE_TRAINER) {
     issues.push({
       kind: 'interne_trainer',
@@ -165,6 +176,7 @@ export function buildTabView(
           : `Er staan ${rollen.leadCandidates.length} mensen in de leadkolom (${namen}), dus wie de lead is staat nergens. Zet de co-trainer(s) in de kolom Co-trainer(s).`,
       blokkeert: true,
     });
+    onderdrukt.add(BRIEFING_AGENDA_COLUMNS.trainerRelation);
   }
   if (rollen.kind === 'ambiguous') {
     issues.push({
@@ -183,7 +195,7 @@ export function buildTabView(
       blokkeert: true,
     });
   }
-  issues.push(...legeVelden(training));
+  issues.push(...legeVelden(training, onderdrukt));
 
   const documenten: TabDocument[] =
     rollen.kind === 'resolved'

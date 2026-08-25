@@ -31,31 +31,51 @@ interface IssuesProps {
  * op die plek. Twee mensen in de leadkolom is een opdracht: daar moet iemand iets aan doen
  * voordat er ook maar één document klopt.
  */
-const Issues = ({ issues }: IssuesProps) => {
+const Blokkerend = ({ issues }: IssuesProps) => {
   if (issues.length === 0) {
     return null;
   }
+  const [eerste, ...rest] = issues;
   return (
-    <ul className="grid gap-2">
-      {issues.map((issue) => (
-        <li
-          key={`${issue.kind}-${issue.tekst}`}
-          className={cn(
-            'flex items-start gap-2 rounded-md border p-2 text-xs',
-            issue.blokkeert
-              ? 'border-destructive/40 bg-destructive/10 text-foreground'
-              : 'border-border bg-muted/40 text-muted-foreground'
-          )}
-        >
-          {issue.blokkeert ? (
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-          ) : (
-            <Info className="mt-0.5 size-3.5 shrink-0" />
-          )}
-          <span>{issue.tekst}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+      <div className="grid gap-1">
+        <p>{eerste.tekst}</p>
+        {/*
+          De rest hangt onder dezelfde melding in plaats van in een eigen kader. Drie rode
+          balken onder elkaar lezen als drie problemen, terwijl het er in de praktijk één is
+          met gevolgen — en de adviseur begint toch bovenaan.
+        */}
+        {rest.map((issue) => (
+          <p key={`${issue.kind}-${issue.tekst}`} className="text-muted-foreground">
+            {issue.tekst}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * De lege velden op één regel, niet als stapel kaders.
+ *
+ * Elk hiervan is een voetnoot: het document komt er wel, met een zichtbare `«…»`-regel op die
+ * plek. Ze allemaal hun eigen omlijnde vak geven zette footnotes op dezelfde visuele hoogte
+ * als het ene ding dat écht in de weg staat.
+ */
+const LegeVelden = ({ issues }: IssuesProps) => {
+  if (issues.length === 0) {
+    return null;
+  }
+  const velden = issues.map((issue) => issue.tekst.split(' is leeg')[0]);
+  return (
+    <p className="flex items-start gap-2 text-xs text-muted-foreground">
+      <Info className="mt-0.5 size-3.5 shrink-0" />
+      <span>
+        Nog leeg, wordt een zichtbare regel in het document:{' '}
+        <span className="text-foreground">{velden.join(', ')}</span>
+      </span>
+    </p>
   );
 };
 
@@ -65,8 +85,15 @@ export interface DocumentsPanelProps {
 }
 
 export const DocumentsPanel = ({ documenten, issues }: DocumentsPanelProps) => {
-  const blokkerend = issues.filter((i) => i.blokkeert);
-  const meldingen = issues.filter((i) => !i.blokkeert);
+  /**
+   * De acteurvraag hoort hier niet thuis, al blokkeert hij wél.
+   *
+   * De checklist zet zijn eigen melding pal naast de knop waar je hem beantwoordt, dus een
+   * tweede rode balk hierboven zegt hetzelfde een halve pagina eerder. `kanGenereren` rekent
+   * er nog gewoon mee — dit gaat alleen over wáár het staat.
+   */
+  const blokkerend = issues.filter((i) => i.blokkeert && i.kind !== 'acteur_onbeantwoord');
+  const leeg = issues.filter((i) => i.kind === 'veld_leeg');
 
   return (
     <section className="grid gap-3 rounded-md border border-border bg-card p-4">
@@ -76,7 +103,7 @@ export const DocumentsPanel = ({ documenten, issues }: DocumentsPanelProps) => {
           : `${documenten.length} document${documenten.length === 1 ? '' : 'en'}`}
       </h2>
 
-      <Issues issues={blokkerend} />
+      <Blokkerend issues={blokkerend} />
 
       {documenten.length > 0 && (
         <ul className="grid gap-1">
@@ -90,7 +117,7 @@ export const DocumentsPanel = ({ documenten, issues }: DocumentsPanelProps) => {
         </ul>
       )}
 
-      <Issues issues={meldingen} />
+      <LegeVelden issues={leeg} />
     </section>
   );
 };

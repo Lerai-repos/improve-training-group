@@ -4,6 +4,8 @@ import { Checkbox } from '@components/ui/checkbox';
 import { Label } from '@components/ui/label';
 import { cn } from '@lib/utils';
 
+import { Segmented } from './segmented';
+
 import type { BriefingChecklist } from '@lib/briefing/blocks';
 import type { TabPerson } from '@lib/briefing/tab';
 
@@ -41,6 +43,27 @@ const Vraag = ({ id, label, uitleg, checked, disabled, onChange }: VraagProps) =
   );
 };
 
+interface KeuzeVraagProps {
+  readonly label: string;
+  readonly uitleg?: string;
+  readonly children: React.ReactNode;
+}
+
+/**
+ * De vorm die élke vraag hier heeft: kop, één grijze regel, dan de bediening.
+ *
+ * Eerst had elke vraag zijn eigen indeling — de ene een legend zonder uitleg, de andere
+ * legend-uitleg-opties, de vinkjes weer label-onder-uitleg — en dan leest een lijst van zes
+ * vragen als zes losse dingen in plaats van als één formulier.
+ */
+const KeuzeVraag = ({ label, uitleg, children }: KeuzeVraagProps) => (
+  <fieldset className="grid gap-1.5">
+    <legend className="text-sm font-medium">{label}</legend>
+    {uitleg !== undefined && <p className="text-xs text-muted-foreground">{uitleg}</p>}
+    <div className="mt-0.5">{children}</div>
+  </fieldset>
+);
+
 interface GroepKeuzeProps {
   readonly checklist: BriefingChecklist;
   onChange(next: Partial<BriefingChecklist>): void;
@@ -54,36 +77,26 @@ interface GroepKeuzeProps {
  * en dat is beter dan hem achteraf afkeuren.
  */
 const GroepKeuze = ({ checklist, onChange }: GroepKeuzeProps) => {
-  const kies = (waarde: 'geen' | 'eigen' | 'samen') => () => {
+  const kies = (waarde: 'geen' | 'eigen' | 'samen') => {
     onChange({ ownGroup: waarde === 'eigen', sameGroup: waarde === 'samen' });
   };
   const huidig = checklist.ownGroup ? 'eigen' : checklist.sameGroup ? 'samen' : 'geen';
-  const opties: ReadonlyArray<{ waarde: 'geen' | 'eigen' | 'samen'; label: string }> = [
-    { waarde: 'geen', label: 'Niet van toepassing' },
-    { waarde: 'eigen', label: 'Ieder een eigen groep' },
-    { waarde: 'samen', label: 'Samen op één groep' },
-  ];
   return (
-    <fieldset className="grid gap-2">
-      <legend className="text-sm font-medium">Meerdere trainers op deze sessie</legend>
-      <p className="-mt-1 text-xs text-muted-foreground">
-        Alleen invullen als er meer dan één trainer meedoet; het voegt het bijbehorende blok toe.
-      </p>
-      <div className="flex flex-wrap gap-4">
-        {opties.map((optie) => (
-          <label key={optie.waarde} className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="groepkeuze"
-              className="size-4"
-              checked={huidig === optie.waarde}
-              onChange={kies(optie.waarde)}
-            />
-            {optie.label}
-          </label>
-        ))}
-      </div>
-    </fieldset>
+    <KeuzeVraag
+      label="Meerdere trainers op deze sessie"
+      uitleg="Alleen invullen als er meer dan één trainer meedoet; het voegt het bijbehorende blok toe."
+    >
+      <Segmented
+        name="groepkeuze"
+        value={huidig}
+        onChange={kies}
+        options={[
+          { value: 'geen', label: 'Niet van toepassing' },
+          { value: 'eigen', label: 'Ieder een eigen groep' },
+          { value: 'samen', label: 'Samen op één groep' },
+        ]}
+      />
+    </KeuzeVraag>
   );
 };
 
@@ -122,8 +135,8 @@ const ActeurVraag = ({
    * aangewezen acteurs hoort in dezelfde wijziging te zitten: als twee losse aanroepen las de
    * tweede nog het concept van vóór de eerste, en draaide hem terug.
    */
-  const zet = (waarde: boolean) => () => {
-    onAnswerActor(waarde);
+  const zet = (waarde: 'ja' | 'nee') => {
+    onAnswerActor(waarde === 'ja');
   };
   const wissel = (itemId: string) => () => {
     const gekozen = new Set(actorItemIds);
@@ -136,31 +149,17 @@ const ActeurVraag = ({
   };
 
   return (
-    <fieldset className="grid gap-2">
-      <legend className="text-sm font-medium">Werkt er een trainingsacteur mee?</legend>
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="radio"
-            name="acteur"
-            className="size-4"
-            checked={checklist.trainingActor}
-            onChange={zet(true)}
-            onClick={zet(true)}
-          />
-          Ja
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="radio"
-            name="acteur"
-            className="size-4"
-            checked={!checklist.trainingActor}
-            onChange={zet(false)}
-            onClick={zet(false)}
-          />
-          Nee
-        </label>
+    <KeuzeVraag label="Werkt er een trainingsacteur mee?">
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented
+          name="acteur"
+          value={checklist.trainingActor ? 'ja' : 'nee'}
+          onChange={zet}
+          options={[
+            { value: 'ja', label: 'Ja' },
+            { value: 'nee', label: 'Nee' },
+          ]}
+        />
         {/*
           Een eigen chip in plaats van kale rode tekst: `text-destructive` op Monday's donkere
           ondergrond is donkerrood op donkerblauw en nauwelijks te lezen — precies de regel die
@@ -172,6 +171,19 @@ const ActeurVraag = ({
           </span>
         )}
       </div>
+
+      {/*
+        Ja aanvinken terwijl er niemand aan de training hangt deed zichtbaar niets: de kiezer
+        hieronder rendert alleen mét mensen, dus het scherm bleef staan zoals het stond. Een
+        antwoord dat geen reactie oplevert leest als een kapotte knop, dus staat er nu wat er
+        aan de hand is — en waar het opgelost wordt, want dat is op het bord en niet hier.
+      */}
+      {checklist.trainingActor && personen.length === 0 && (
+        <p className="mt-1 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+          Er hangt nog niemand aan deze training, dus er is niemand om als acteur aan te wijzen.
+          Koppel eerst de trainers op het agendabord.
+        </p>
+      )}
 
       {checklist.trainingActor && personen.length > 0 && (
         <div className="mt-1 grid gap-1 rounded-md border border-border bg-muted/40 p-3">
@@ -195,7 +207,7 @@ const ActeurVraag = ({
           ))}
         </div>
       )}
-    </fieldset>
+    </KeuzeVraag>
   );
 };
 
