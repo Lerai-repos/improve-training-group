@@ -7,6 +7,7 @@ import { Skeleton } from '@components/ui/skeleton';
 import { cn } from '@lib/utils';
 
 import { ChecklistPanel } from './checklist-panel';
+import { GeneratePanel, type GenerateState } from './generate-panel';
 import { ConceptPanel } from './concept-panel';
 import { DocumentsPanel } from './documents-panel';
 
@@ -22,6 +23,12 @@ import type { UseBriefingView } from './use-briefing-view';
 
 interface BriefingViewProps {
   readonly view: UseBriefingView;
+  readonly generate: {
+    readonly state: GenerateState;
+    generate(): void;
+    confirm(): void;
+    cancel(): void;
+  };
 }
 
 const SaveStatus = ({ save }: { save: UseBriefingView['save'] }) => {
@@ -49,7 +56,7 @@ const SaveStatus = ({ save }: { save: UseBriefingView['save'] }) => {
   return null;
 };
 
-export const BriefingView = ({ view }: BriefingViewProps) => {
+export const BriefingView = ({ view, generate }: BriefingViewProps) => {
   const handleRefresh = () => {
     view.refresh();
   };
@@ -164,8 +171,8 @@ export const BriefingView = ({ view }: BriefingViewProps) => {
       {view.locked && (
         <div className="flex items-start justify-between gap-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
           <p>
-            Er staan antwoorden opgeslagen die niet te lezen zijn. Het formulier hieronder is
-            daarom leeg én vergrendeld: doorgaan overschrijft wat er stond.
+            Er staan antwoorden opgeslagen die niet te lezen zijn. Het formulier hieronder is daarom
+            leeg én vergrendeld: doorgaan overschrijft wat er stond.
           </p>
           <Button variant="outline" size="sm" onClick={handleUnlock}>
             Opnieuw invullen
@@ -175,7 +182,19 @@ export const BriefingView = ({ view }: BriefingViewProps) => {
 
       <DocumentsPanel documenten={tab.documenten} issues={tab.issues} />
 
-      <fieldset disabled={view.locked} className={cn(view.locked && 'opacity-60')}>
+      {/*
+        Ook op slot terwijl er gegenereerd wordt.
+
+        `useGenerate` legt het concept eerst vast en rendert daarna — samen seconden. Een
+        vinkje dat in dat gat wordt gezet start een nieuwe uitgestelde opslag, en die kan te
+        laat zijn voor de laatste controle van de server: dan gaat het document de deur uit
+        met de óude antwoorden terwijl de nieuwe er vlak daarna overheen worden bewaard, en
+        het scherm toont iets anders dan wat de trainer krijgt.
+      */}
+      <fieldset
+        disabled={view.locked || generate.state.kind === 'bezig'}
+        className={cn((view.locked || generate.state.kind === 'bezig') && 'opacity-60')}
+      >
         <div className="flex flex-col gap-4">
           <ChecklistPanel
             /**
@@ -206,14 +225,18 @@ export const BriefingView = ({ view }: BriefingViewProps) => {
         </div>
       </fieldset>
 
-      {/**
-       * Genereren komt hierna. De knop staat er bewust nog niet: wat er ná het indrukken
-       * gebeurt hangt aan de open vraag of het document naar SharePoint gaat of als PDF
-       * gemaild wordt, en dat is het enige deel van deze tab dat daarvan afhangt.
-       */}
-      <p className="text-xs text-muted-foreground">
-        Genereren wordt hierna aangesloten; de antwoorden hierboven worden al bewaard.
-      </p>
+      {/*
+        Buiten de `fieldset`: ook met een onleesbaar record moet zichtbaar zijn wat er zou
+        gebeuren. `kanGenereren` is dan hoe dan ook false, dus de knop doet niets — hij legt
+        alleen uit waarom.
+      */}
+      <GeneratePanel
+        state={generate.state}
+        kanGenereren={tab.kanGenereren && !view.locked}
+        onGenerate={generate.generate}
+        onConfirm={generate.confirm}
+        onCancel={generate.cancel}
+      />
     </div>
   );
 };

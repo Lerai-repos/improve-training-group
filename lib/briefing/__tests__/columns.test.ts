@@ -27,7 +27,9 @@ describe('formatDutchMobile', () => {
 
 describe('formatContact', () => {
   it('matches the v2.0 briefing', () => {
-    expect(formatContact('Paula Hollander', '+31 6 42085076')).toBe('Paula Hollander (06-42085076)');
+    expect(formatContact('Paula Hollander', '+31 6 42085076')).toBe(
+      'Paula Hollander (06-42085076)'
+    );
   });
 
   /** Roughly half the contacts have no number, so this is the common case, not an edge. */

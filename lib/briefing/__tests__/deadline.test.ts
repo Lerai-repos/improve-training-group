@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  formatDeadline,
-  materialsDeadline,
-  parseStartTime,
-  workingDaysBefore,
-} from '../deadline';
+import { formatDeadline, materialsDeadline, parseStartTime, workingDaysBefore } from '../deadline';
 
 describe('materialsDeadline', () => {
   /**

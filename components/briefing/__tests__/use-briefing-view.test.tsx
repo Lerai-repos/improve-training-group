@@ -91,6 +91,9 @@ function fakeApi(over: {
   return {
     writes,
     log,
+    /** Deze suite gaat over opslaan; genereren heeft zijn eigen tests en hoort hier niet. */
+    generate: () =>
+      Promise.reject(new Error('generate hoort in deze suite niet aangeroepen te worden')),
     async get(itemId) {
       /**
        * De waarde wordt gelezen op het moment dat het verzoek binnenkomt, en pas daarna komt
@@ -404,6 +407,41 @@ describe('useBriefingView', () => {
       expect(result.current.status.kind).toBe('loaded');
     });
     expect(result.current.itemId).toBe('901');
+  });
+
+  /**
+   * `flush` beslist of er gegenereerd mag worden, en leest die stand uit een ref.
+   *
+   * Alleen de zichtbare kaart legen bij `refresh` liet die ref op de oude mislukking staan.
+   * Het scherm zei dan "rust" terwijl Genereren bleef weigeren, tot er toevallig een
+   * volgende wijziging goed werd opgeslagen — zonder dat iets uitlegde waarom.
+   */
+  it('geeft genereren weer vrij nadat de adviseur opnieuw heeft geladen', async () => {
+    const monday = fakeMonday(CTX('900'));
+    const api = fakeApi({ conflict: true });
+    const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    act(() => {
+      result.current.setChecklist({ homework: true });
+    });
+    await waitFor(() => {
+      expect(result.current.save.kind).toBe('conflict');
+    });
+    // Zolang de botsing staat is genereren terecht geblokkeerd.
+    await expect(result.current.flush()).resolves.toBe(false);
+
+    act(() => {
+      result.current.refresh();
+    });
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    expect(result.current.save.kind).toBe('rust');
+    await expect(result.current.flush()).resolves.toBe(true);
   });
 
   it('meldt een botsing en neemt het token van de ander niet over', async () => {

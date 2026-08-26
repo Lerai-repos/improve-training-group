@@ -11,6 +11,15 @@ import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+/**
+ * Dezelfde saneerregel als voor mapnamen, met opzet gedeeld.
+ *
+ * Bestandsnaam en klantmap ondergaan hetzelfde verbod van SharePoint, en twee kopieën van
+ * die tekenlijst drijven uit elkaar zodra er één wordt aangepast — waarna een klantnaam met
+ * een schuine streep in de ene wél en in de andere niet wordt opgevangen.
+ */
+import { sanitiseItemName } from '@lib/sharepoint/paths';
+
 import { createReport } from 'docx-templates';
 
 import type { BriefingDocumentData } from './compose';
@@ -42,15 +51,6 @@ export function templatePath(label: string, dir: string = TEMPLATES_DIR): string
   return path.join(dir, `${clean}.docx`);
 }
 
-/**
- * De tekens die Windows en SharePoint weigeren in een bestandsnaam. Een klant als
- * `Gemeente Ede / Wageningen` zou anders een map aanmaken in plaats van een bestand.
- *
- * Spaties en streepjes staan er bewust **niet** bij: ITG schrijft zijn briefings zelf als
- * `Briefing Probiblio - Verbindend communiceren - …`, en dat is de naam die zij herkennen.
- */
-const UNSAFE_IN_FILENAME = /[\\/:*?"<>|]/g;
-
 /** `24-03-2026` uit `2026-03-24`; leeg wanneer er geen bruikbare datum is. */
 function dateForFilename(isoDatum: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDatum.trim());
@@ -78,10 +78,13 @@ export function briefingFilename(input: {
     input.opdrachtgever.trim(),
     input.thema.trim(),
     dateForFilename(input.isoDatum),
-    input.trainers.map((t) => t.trim()).filter((t) => t !== '').join(', '),
+    input.trainers
+      .map((t) => t.trim())
+      .filter((t) => t !== '')
+      .join(', '),
   ].filter((d) => d !== '');
   const name = `Briefing ${parts.join(' - ')}`;
-  return `${name.replace(UNSAFE_IN_FILENAME, '-').replace(/\s+/g, ' ').trim()}.docx`;
+  return `${sanitiseItemName(name)}.docx`;
 }
 
 /**
@@ -110,7 +113,9 @@ export async function renderBriefing(
    * De hoogte volgt uit de breedte en de werkelijke beeldverhouding: een vaste hoogte zou het
    * cyclusschema uitrekken zodra ITG er een nieuwe versie in zet.
    */
-  const blockImage = (blok: { afbeelding?: string }): { width: number; height: number; data: Buffer; extension: string } => {
+  const blockImage = (blok: {
+    afbeelding?: string;
+  }): { width: number; height: number; data: Buffer; extension: string } => {
     const naam = blok.afbeelding;
     if (naam === undefined || naam === '') {
       throw new Error('Briefing: IMAGE aangeroepen voor een blok zonder afbeelding');

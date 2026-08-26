@@ -190,7 +190,10 @@ export async function readExtraInfo(
     return { lines: [], truncated: false };
   }
   const data = await client.query<{
-    items: Array<{ id: string | number; updates: Array<{ text_body: string | null; created_at: string }> | null }>;
+    items: Array<{
+      id: string | number;
+      updates: Array<{ text_body: string | null; created_at: string }> | null;
+    }>;
   }>(
     `query ($ids: [ID!], $limit: Int!) {
        items(ids: $ids) { id updates(limit: $limit) { text_body created_at } }

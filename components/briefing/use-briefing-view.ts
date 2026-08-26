@@ -75,6 +75,18 @@ export interface UseBriefingView {
   /** Het onleesbare record bewust overschrijven. */
   unlock(): void;
   refresh(): void;
+  /**
+   * De openstaande wijziging nú wegschrijven, en zeggen of het concept daarna veilig staat.
+   *
+   * Nodig vóór het genereren: de server leest de opgeslagen checklist, niet het scherm. Wie
+   * een vinkje zet en binnen de 800 ms doorklikt naar Genereren zou anders een document
+   * krijgen dat op de vórige antwoorden is gebouwd — zonder een woord, want alles ziet er
+   * goed uit.
+   *
+   * `false` betekent: er is niets weggeschreven dat klopt. Bij een botsing of een mislukte
+   * opslag is dat óók zo, en dan is doorgaan met genereren erger dan wachten.
+   */
+  flush(): Promise<boolean>;
 }
 
 export interface BriefingViewOptions {
@@ -110,9 +122,37 @@ export function useBriefingView(
    * waarmee B's botsing van het scherm verdween.
    */
   const [saves, setSaves] = useState<ReadonlyMap<string, SaveState>>(new Map());
+  /**
+   * Dezelfde kaart als `saves`, maar leesbaar zónder opnieuw te renderen.
+   *
+   * `flush` kijkt ná het wachten hoe het is afgelopen. Zou hij `saves` uit de sluiting
+   * lezen, dan leest hij de stand van het moment waarop hij werd aangeroepen — vóór de
+   * schrijfactie die hij zelf net startte — en meldt hij een botsing als succes.
+   */
+  const savesRef = useRef<ReadonlyMap<string, SaveState>>(new Map());
   const [unlocked, setUnlocked] = useState<Owned<boolean>>({ itemId: null, value: false });
 
+  /**
+   * Eén plek die een opslagstatus weghaalt, uit BEIDE kaarten.
+   *
+   * Alleen `saves` legen liet `savesRef` op de oude mislukking staan. Het scherm zei dan
+   * "rust" terwijl `flush` nog steeds die mislukking las — en dan weigert Genereren te
+   * werken tot er toevallig een volgende wijziging goed wordt opgeslagen, zonder dat iets
+   * uitlegt waarom.
+   */
+  const wisSave = useCallback((id: string) => {
+    const zonder = new Map(savesRef.current);
+    zonder.delete(id);
+    savesRef.current = zonder;
+    setSaves((vorig) => {
+      const volgende = new Map(vorig);
+      volgende.delete(id);
+      return volgende;
+    });
+  }, []);
+
   const zetSave = useCallback((id: string, value: SaveState) => {
+    savesRef.current = new Map(savesRef.current).set(id, value);
     setSaves((vorig) => new Map(vorig).set(id, value));
   }, []);
   const [nonce, setNonce] = useState(0);
@@ -438,14 +478,40 @@ export function useBriefingView(
   const refresh = useCallback(() => {
     // De adviseur zegt: ik heb de botsing of de fout gezien. Pas dán mag hij weg.
     if (itemId !== null) {
-      setSaves((vorig) => {
-        const volgende = new Map(vorig);
-        volgende.delete(itemId);
-        return volgende;
-      });
+      wisSave(itemId);
     }
     setNonce((n) => n + 1);
-  }, [itemId]);
+  }, [itemId, wisSave]);
+
+  /**
+   * Alles wat nog openstaat nú wegschrijven, en wachten tot het klaar is.
+   *
+   * De timer wordt afgebroken zodat de uitgestelde schrijfactie niet ook nog een keer gaat;
+   * `bewaar` zet zichzelf in dezelfde rij als de lopende schrijfacties, dus wachten op die
+   * rij is wachten op álles wat voor dit item onderweg is.
+   *
+   * De uitkomst komt uit `saves`, niet uit het feit dat de belofte klaar is: een botsing of
+   * een mislukking rondt óók netjes af, en die twee mogen nooit als "veilig opgeslagen"
+   * gelezen worden.
+   */
+  const flush = useCallback(async (): Promise<boolean> => {
+    const doel = itemId;
+    if (doel === null) {
+      return false;
+    }
+    if (timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const openstaand = pending.current;
+    pending.current = null;
+    if (openstaand !== null) {
+      bewaar(openstaand);
+    }
+    await (inFlight.current.get(doel) ?? Promise.resolve());
+    const stand = savesRef.current.get(doel);
+    return stand === undefined || stand.kind === 'rust' || stand.kind === 'bewaard';
+  }, [bewaar, itemId]);
 
   return {
     itemId,
@@ -465,5 +531,6 @@ export function useBriefingView(
     answerActor,
     unlock,
     refresh,
+    flush,
   };
 }

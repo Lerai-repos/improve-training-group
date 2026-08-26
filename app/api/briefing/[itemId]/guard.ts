@@ -12,6 +12,7 @@ import {
 import { createUpstashChecklistStore, type ChecklistStore } from '@lib/briefing/checklist-store';
 import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient, type MondayGraphQLClient } from '@lib/monday/graphql-client';
+import { createMondayMutationClient, type MondayMutationClient } from '@lib/monday/mutate';
 import { createRedisClient } from '@lib/recommend/kv';
 
 /**
@@ -29,6 +30,8 @@ export class BriefingNotConfigured extends Error {}
 
 export interface BriefingDeps {
   readonly monday: MondayGraphQLClient;
+  /** Schrijven naar Monday. Apart, want de leesclient weigert elk `mutation`-document. */
+  readonly mutate: MondayMutationClient;
   readonly checklists: ChecklistStore;
   readonly boards: ItemBoardReader;
   readonly boardId: string;
@@ -53,15 +56,31 @@ const refuse = (status: number, error: string): { ok: false; response: NextRespo
  * precies de toestand die deze klasse bestaat om als 503 te melden — een deploy die nog niet af
  * is, met een voor de hand liggende oplossing.
  */
-function buildDeps(): BriefingDeps {
+function buildDeps(deadlines: GuardDeadlines): BriefingDeps {
   const token = process.env.MONDAY_API_TOKEN;
   if (token === undefined || token === '') {
     throw new BriefingNotConfigured('MONDAY_API_TOKEN ontbreekt');
   }
   try {
-    const monday = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+    const monday = createMondayGraphQLClient({
+      token,
+      apiVersion: MONDAY_API_VERSION,
+      deadlineMs: deadlines.read,
+    });
     return {
       monday,
+      /**
+       * Eén deadline voor álles wat deze aanroep doet.
+       *
+       * Zonder gaat de retry-begroting van Monday zijn eigen gang, en die kan het budget van
+       * de route opeten voordat er ook maar iets is weggeschreven — waarna het platform de
+       * functie afkapt op een moment dat wij niet meer kunnen opruimen.
+       */
+      mutate: createMondayMutationClient({
+        token,
+        apiVersion: MONDAY_API_VERSION,
+        deadlineMs: deadlines.write ?? deadlines.read,
+      }),
       checklists: createUpstashChecklistStore(createRedisClient()),
       boards: createItemBoardReader(monday),
       boardId: agendaBoardId(),
@@ -78,7 +97,25 @@ function buildDeps(): BriefingDeps {
  * De checklist opslaan en straks genereren vallen allebei onder `plan`: ze veranderen wat er
  * bij een trainer terechtkomt. Alleen kijken wat er zou gebeuren is `view`.
  */
-export async function guard(request: Request, required: 'view' | 'plan'): Promise<Guarded> {
+export interface GuardDeadlines {
+  /** Voor het lezen: mag samen met de rest van het werk aflopen. */
+  readonly read?: () => number | null;
+  /**
+   * Voor het schrijven naar Monday, en met opzet LATER.
+   *
+   * De administratie draait pas nadat de documenten in SharePoint staan. Deelt hij zijn
+   * deadline met het uploaden, dan is die bij een afgebroken upload al verstreken en faalt
+   * élke mutatie meteen met "deadline exceeded" — waarna de bestanden die er wél staan
+   * nergens zijn vastgelegd. Precies de wees die het deelresultaat hoort te voorkomen.
+   */
+  readonly write?: () => number | null;
+}
+
+export async function guard(
+  request: Request,
+  required: 'view' | 'plan',
+  deadlines: GuardDeadlines = {}
+): Promise<Guarded> {
   // Vóór er configuratie gelezen wordt: een verzoek zonder token krijgt hetzelfde antwoord, of
   // deze omgeving nu is ingericht of niet. Anders verbergt een half ingerichte deploy zijn
   // enige echte probleem achter 500's op anoniem verkeer.
@@ -89,7 +126,7 @@ export async function guard(request: Request, required: 'view' | 'plan'): Promis
 
   let deps: BriefingDeps;
   try {
-    deps = buildDeps();
+    deps = buildDeps(deadlines);
   } catch (error) {
     if (error instanceof BriefingNotConfigured) {
       console.error('briefing: niet geconfigureerd', error.message);

@@ -34,7 +34,15 @@ const PROBIBLIO: BriefingTraining = {
   ieCode: '',
   accountmanager: { naam: 'Dirkje Pril', mobiel: '+31648431025' },
   contactpersoon: { naam: 'Paula Hollander', telefoon: '+31642085076' },
-  trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false }],
+  trainers: [
+    {
+      itemId: '1',
+      naam: 'Lennart Bosschaart',
+      telefoon: '0618683139',
+      isActeur: false,
+      isCoTrainer: false,
+    },
+  ],
   acteuraantal: null,
   opportunityItemId: '2674263314',
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
@@ -68,7 +76,10 @@ describe('composeBriefing', () => {
   });
 
   it('voegt meerdere thema’s samen tot één regel', () => {
-    const data = composeBriefing({ ...PROBIBLIO, themas: ['Feedback', 'Assertiviteit'] }, EMPTY_CHECKLIST);
+    const data = composeBriefing(
+      { ...PROBIBLIO, themas: ['Feedback', 'Assertiviteit'] },
+      EMPTY_CHECKLIST
+    );
     expect(data.thema).toBe('Feedback & Assertiviteit');
   });
 
@@ -158,7 +169,10 @@ describe('composeBriefing', () => {
   });
 
   it('laat een lege accountmanager of contactpersoon leeg in plaats van halve haakjes', () => {
-    const data = composeBriefing({ ...PROBIBLIO, accountmanager: null, contactpersoon: null }, EMPTY_CHECKLIST);
+    const data = composeBriefing(
+      { ...PROBIBLIO, accountmanager: null, contactpersoon: null },
+      EMPTY_CHECKLIST
+    );
     expect(data.accountmanager).toBe('');
     expect(data.contactpersoon).toBe('');
   });
@@ -166,7 +180,10 @@ describe('composeBriefing', () => {
   /** Acceptatiecriterium 3: zonder de voorbereidende opdracht verdwijnt die alinea. */
   it('zet de voorbereidende opdracht alleen erin als de checklist dat zegt', () => {
     const omitted = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
-    const included = composeBriefing(PROBIBLIO, { ...EMPTY_CHECKLIST, preparatoryAssignment: true });
+    const included = composeBriefing(PROBIBLIO, {
+      ...EMPTY_CHECKLIST,
+      preparatoryAssignment: true,
+    });
     expect(omitted.blokken.map((b) => b.titel)).not.toContain('Voorbereidende opdracht');
     expect(included.blokken.map((b) => b.titel)).toContain('Voorbereidende opdracht');
   });
@@ -187,13 +204,17 @@ describe('selectBlocks', () => {
   ];
 
   it('houdt de volgorde van het bronbestand aan', () => {
-    const blocks = selectBlocks({
+    const blocks = selectBlocks(
+      {
         ...EMPTY_CHECKLIST,
         sameGroup: true,
         trainingCycle: true,
         homework: true,
         preparatoryAssignment: true,
-      }, HISTORY, SOLO);
+      },
+      HISTORY,
+      SOLO
+    );
     expect(blocks.map((b) => b.titel)).toEqual([
       'Lead- en co-trainer(s) op dezelfde groep',
       'Vaste klant',
@@ -232,7 +253,8 @@ describe('selectBlocks', () => {
    * voorbereidende opdracht is dus een gevraagde toestand en geen fout.
    */
   it('laat de geneste cyclusalinea meebewegen met de voorbereidende opdracht', () => {
-    const NESTED = 'Vóór de eerste sessie ontvangen deelnemers een voorbereidende reflectieopdracht.';
+    const NESTED =
+      'Vóór de eerste sessie ontvangen deelnemers een voorbereidende reflectieopdracht.';
 
     const zonder = selectBlocks(
       { ...EMPTY_CHECKLIST, trainingCycle: true, homework: true },
@@ -252,7 +274,9 @@ describe('selectBlocks', () => {
     expect(cyclusMet?.regels.some((r) => r.tekst.startsWith(NESTED))).toBe(true);
 
     // Alleen die ene alinea verschilt; de rest van het blok is identiek.
-    expect(cyclusMet?.regels.filter((r) => !r.tekst.startsWith(NESTED))).toEqual(cyclusZonder?.regels);
+    expect(cyclusMet?.regels.filter((r) => !r.tekst.startsWith(NESTED))).toEqual(
+      cyclusZonder?.regels
+    );
   });
 
   /** `06-briefing.md`: het cyclusblok is de uitleg **plus het cyclusschema als afbeelding**. */
@@ -400,7 +424,6 @@ describe('sessionFacts', () => {
     expect(facts).toEqual({ certainTrainers: 1, identifiedActors: 0, unknownRole: 1 });
   });
 });
-
 
 describe('briefingFilename', () => {
   it('schrijft de naam zoals ITG hem zelf schrijft', () => {

@@ -50,9 +50,7 @@ const cells = (session: Session, jaar: 2025 | 2026): Cell[] => [
     id: jaar === 2026 ? COLUMNS.trainer2026 : COLUMNS.trainer2025,
     linked_item_ids: session.trainers ?? [],
   },
-  ...(jaar === 2026
-    ? [{ id: COLUMNS.co2026, linked_item_ids: session.coTrainers ?? [] }]
-    : []),
+  ...(jaar === 2026 ? [{ id: COLUMNS.co2026, linked_item_ids: session.coTrainers ?? [] }] : []),
 ];
 
 /** Een client die per bord een pagina serveert en trainernamen kent. */
@@ -73,7 +71,13 @@ const schemaFor = (
     { id: COLUMNS.contactpersoon, type: 'text', settings_str: null },
     { id: trainer, type: 'board_relation', settings_str: `{"boardIds":[${TRAINERS_BOARD}]}` },
     ...(boardId === '5087396949'
-      ? [{ id: COLUMNS.co2026, type: 'board_relation', settings_str: `{"boardIds":[${TRAINERS_BOARD}]}` }]
+      ? [
+          {
+            id: COLUMNS.co2026,
+            type: 'board_relation',
+            settings_str: `{"boardIds":[${TRAINERS_BOARD}]}`,
+          },
+        ]
       : []),
   ];
   const patched = base.map((c) => {
@@ -92,7 +96,7 @@ function client(input: {
   onItems?: (ids: string[]) => void;
   schemaOver?: Array<{ id: string; type?: string; settings_str?: string | null }>;
 }): MondayGraphQLClient {
-  const query = <T,>(document: string, variables?: Record<string, unknown>): Promise<T> => {
+  const query = <T>(document: string, variables?: Record<string, unknown>): Promise<T> => {
     if (document.includes('telefoon_mkn1hbyh')) {
       const ids = ((variables?.ids as string[] | undefined) ?? []).map(String);
       input.onItems?.(ids);
@@ -310,7 +314,9 @@ describe('readHistorie', () => {
   it('werpt als de mirror door een andere kolom is gaan kijken', async () => {
     const broken = client({
       b2026: [{ id: '1', bedrijf: 'CNV', datum: '2026-06-09' }],
-      schemaOver: [{ id: COLUMNS.bedrijf, settings_str: '{"displayed_linked_columns":{"999":["iets"]}}' }],
+      schemaOver: [
+        { id: COLUMNS.bedrijf, settings_str: '{"displayed_linked_columns":{"999":["iets"]}}' },
+      ],
     });
     await expect(readHistorie(broken, base)).rejects.toThrow(/settings missing/);
   });

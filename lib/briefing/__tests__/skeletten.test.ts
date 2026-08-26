@@ -23,9 +23,7 @@ interface ThemaMap {
   readonly openVraag: Readonly<Record<string, string>>;
 }
 
-const skeletons = JSON.parse(
-  readFileSync('tools/skeletten/skeletten.json', 'utf-8')
-) as Skeleton[];
+const skeletons = JSON.parse(readFileSync('tools/skeletten/skeletten.json', 'utf-8')) as Skeleton[];
 const map = JSON.parse(readFileSync('tools/skeletten/thema-map.json', 'utf-8')) as ThemaMap;
 
 /** Gemeten in het bronbestand: 85 koppen, waarvan 37 de afsprakenbullet hebben. */
@@ -35,7 +33,7 @@ const EXPECTED_AFSPRAKEN = 37;
 const MIN_LINE = 20;
 
 describe('de uitgelezen skeletten', () => {
-  it('bevat alle 85 thema\'s', () => {
+  it("bevat alle 85 thema's", () => {
     expect(skeletons).toHaveLength(EXPECTED_THEMES);
   });
 
@@ -53,9 +51,7 @@ describe('de uitgelezen skeletten', () => {
   });
 
   it('kent nog maar één schrijfwijze van de plaatshouder', () => {
-    const woord = skeletons.flatMap((s) =>
-      s.regels.filter((r) => /organisatienaam/i.test(r))
-    );
+    const woord = skeletons.flatMap((s) => s.regels.filter((r) => /organisatienaam/i.test(r)));
     expect(woord).toEqual([]);
     const dubbel = skeletons.flatMap((s) =>
       s.regels.filter((r) => r.split(ORGANISATIE_TOKEN).length > 2)
@@ -74,7 +70,7 @@ describe('de uitgelezen skeletten', () => {
    * Besloten 21-Aug-2026: de afsprakenbullet blijft staan bij de thema's die hem nu hebben
    * en komt er niet bij de andere bij. Dat is een keuze per thema, geen vraag per briefing.
    */
-  it('houdt de afsprakenbullet bij precies de 37 thema\'s die hem hadden', () => {
+  it("houdt de afsprakenbullet bij precies de 37 thema's die hem hadden", () => {
     const met = skeletons.filter((s) =>
       s.regels.some((r) => r.startsWith('Welke afspraken en verbeteringen'))
     );
@@ -106,8 +102,11 @@ describe('de kaart naar het Themas-bord', () => {
 
   it('verwijst nergens naar een skelet dat niet bestaat', () => {
     const namen = new Set(skeletons.map((s) => s.skelet));
-    const onbekend = [...Object.keys(map.kaart), ...Object.keys(map.geenThema), ...Object.keys(map.openVraag)]
-      .filter((k) => !namen.has(k));
+    const onbekend = [
+      ...Object.keys(map.kaart),
+      ...Object.keys(map.geenThema),
+      ...Object.keys(map.openVraag),
+    ].filter((k) => !namen.has(k));
     expect(onbekend).toEqual([]);
   });
 

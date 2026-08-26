@@ -49,10 +49,7 @@ export function conceptLines(raw: string): readonly string[] {
  * Gemeten op het agendabord: `Bedrijf` is gevuld op 738 van de 756 trainingen (97,6%), dus
  * dit is de uitzondering en niet de regel.
  */
-export function fillOrganisatie(
-  lines: readonly string[],
-  organisatie: string
-): readonly string[] {
+export function fillOrganisatie(lines: readonly string[], organisatie: string): readonly string[] {
   const naam = organisatie.trim();
   if (naam !== '') {
     return lines.map((line) => line.split(ORGANISATIE_TOKEN).join(naam));

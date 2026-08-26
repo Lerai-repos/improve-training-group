@@ -122,10 +122,7 @@ function legeVelden(training: BriefingTraining, onderdrukt: ReadonlySet<string>)
  * `saved` is wat er in KV staat; zonder opgeslagen antwoorden begint het scherm leeg, met de
  * acteurvraag voorgezet op wat Monday suggereert.
  */
-export function buildTabView(
-  training: BriefingTraining,
-  saved: SavedChecklist | null
-): TabView {
+export function buildTabView(training: BriefingTraining, saved: SavedChecklist | null): TabView {
   const antwoorden = saved ?? EMPTY_SAVED;
   const voorstel = prefillTrainingActor(training.acteuraantal, countLinkedActors(training));
 

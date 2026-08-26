@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  ORGANISATIE_TOKEN,
-  conceptLines,
-  fillOrganisatie,
-  resolveConceptInhoud,
-} from '../concept';
+import { ORGANISATIE_TOKEN, conceptLines, fillOrganisatie, resolveConceptInhoud } from '../concept';
 import { isOpenIssue } from '../open-issues';
 
 const REFLECTIE = `Reflectie: hoe staat het er nu voor met feedback binnen ${ORGANISATIE_TOKEN} en binnen deze groep?`;

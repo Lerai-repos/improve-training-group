@@ -91,7 +91,15 @@ const REQUIRED: ReadonlyArray<{ column: string; label: string; of: keyof Briefin
 
 /** De negen labels waarvoor een sjabloon bestaat. Een ander label kan niet gegenereerd worden. */
 export const SUPPORTED_LABELS: readonly string[] = [
-  'CC', 'CP', 'FT', 'FV', 'IT', 'JE', 'SST', 'TT', 'WJ',
+  'CC',
+  'CP',
+  'FT',
+  'FV',
+  'IT',
+  'JE',
+  'SST',
+  'TT',
+  'WJ',
 ];
 
 interface RawColumn {
@@ -320,8 +328,15 @@ async function readTrainers(
     { ids: [...ids] }
   );
   const items = data.items ?? [];
-  assertNoDuplicateIds(items.map((i) => String(i.id)), 'Briefing: trainers');
-  assertAllResolved(ids, items.map((i) => String(i.id)), 'trainers');
+  assertNoDuplicateIds(
+    items.map((i) => String(i.id)),
+    'Briefing: trainers'
+  );
+  assertAllResolved(
+    ids,
+    items.map((i) => String(i.id)),
+    'trainers'
+  );
 
   /**
    * De **koppelvolgorde** bepaalt wie lead is en wie co-trainer.
@@ -362,9 +377,7 @@ async function readAccountmanager(
     users: Array<{ id: string | number; name: string; mobile_phone: string | null }>;
   }>('query ($ids: [ID!]) { users(ids: $ids) { id name mobile_phone } }', { ids: [userId] });
   const user = (data.users ?? [])[0];
-  return user === undefined
-    ? null
-    : { naam: user.name, mobiel: (user.mobile_phone ?? '').trim() };
+  return user === undefined ? null : { naam: user.name, mobiel: (user.mobile_phone ?? '').trim() };
 }
 
 /**
@@ -430,7 +443,11 @@ async function readContact(
    * doorgaan voor "deze klant heeft nu eenmaal geen contactpersoon" — en dan mist het
    * telefoonnummer zonder dat iemand weet waarom.
    */
-  assertAllResolved([opportunityItemId], oppItem === undefined ? [] : [String(oppItem.id)], 'Opportunity');
+  assertAllResolved(
+    [opportunityItemId],
+    oppItem === undefined ? [] : [String(oppItem.id)],
+    'Opportunity'
+  );
   if (oppItem === undefined) {
     // Onbereikbaar: assertAllResolved werpt hierboven al. Staat er zodat de rest van deze
     // functie met een echte RawItem werkt in plaats van met een cast.
@@ -456,7 +473,11 @@ async function readContact(
    * dan zou de "één kandidaat, dus dat zal 'm zijn"-regel hieronder een gok doen bij een
    * relatie die in werkelijkheid dubbelzinnig was.
    */
-  assertAllResolved(linked, contactItems.map((c) => String(c.id)), 'contactpersonen');
+  assertAllResolved(
+    linked,
+    contactItems.map((c) => String(c.id)),
+    'contactpersonen'
+  );
   const candidates = contactItems.map((c) => ({
     naam: c.name.trim(),
     telefoon: (cell(c, CONTACT_COLUMNS.telefoon).text ?? '').trim(),

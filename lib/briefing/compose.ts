@@ -168,7 +168,9 @@ export function composeBriefing(
   checklist: BriefingChecklist,
   extras: BriefingExtras = {}
 ): BriefingDocumentData {
-  const deadline = formatDeadline(materialsDeadline({ datum: training.datum, tijden: training.tijden }));
+  const deadline = formatDeadline(
+    materialsDeadline({ datum: training.datum, tijden: training.tijden })
+  );
 
   return {
     opdrachtgever: training.opdrachtgever.trim(),
@@ -196,8 +198,7 @@ export function composeBriefing(
     achtergrond: achtergrondAlineas(training, extras),
     extraInfo: extras.extraInfo ?? [MISSING.extraInfo],
     mondayChallenge: extras.mondayChallenge ?? false,
-    bullets:
-      extras.bullets ??
+    bullets: extras.bullets ??
       resolveConceptInhoud({
         themaTekst: training.themaInhoud,
         adviseurTekst: checklist.conceptInhoud,
@@ -211,8 +212,7 @@ export function composeBriefing(
         ? undefined
         : { recipient: extras.recipient, format: formatContact }
     ),
-    inventarisatie:
-      extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
+    inventarisatie: extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
   };
 }
 

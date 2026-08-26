@@ -31,8 +31,7 @@ function stubFetch(responses: readonly Response[]): { calls: Captured[] } {
   return { calls };
 }
 
-const ok = (data: unknown): Response =>
-  new Response(JSON.stringify({ data }), { status: 200 });
+const ok = (data: unknown): Response => new Response(JSON.stringify({ data }), { status: 200 });
 
 const graphqlError = (errors: unknown[]): Response =>
   new Response(JSON.stringify({ errors }), { status: 200 });
@@ -131,7 +130,10 @@ describe('createMondayMutationClient', () => {
     it('gives up after the retry budget and throws', async () => {
       const { calls } = stubFetch([
         graphqlError([
-          { message: 'busy', extensions: { code: 'COMPLEXITY_BUDGET_EXHAUSTED', retry_in_seconds: 0 } },
+          {
+            message: 'busy',
+            extensions: { code: 'COMPLEXITY_BUDGET_EXHAUSTED', retry_in_seconds: 0 },
+          },
         ]),
       ]);
 
@@ -165,7 +167,10 @@ describe('createMondayMutationClient', () => {
     it('retries a concurrency refusal', async () => {
       const { calls } = stubFetch([
         graphqlError([
-          { message: 'busy', extensions: { code: 'Concurrency limit exceeded', retry_in_seconds: 0 } },
+          {
+            message: 'busy',
+            extensions: { code: 'Concurrency limit exceeded', retry_in_seconds: 0 },
+          },
         ]),
         ok({ create_item: { id: '9' } }),
       ]);
@@ -232,6 +237,44 @@ describe('createMondayMutationClient', () => {
       expect(Date.now() - started).toBeGreaterThanOrEqual(30);
     });
 
+    /**
+     * Monday answers 409 with a `Retry-After` when the SAME idempotency key arrives while
+     * the original is still being processed. That is the situation the key exists to create:
+     * the duplicate is held back and the original goes through. Throwing would tell the
+     * caller the mutation failed at the moment it is actually succeeding.
+     */
+    it('retries a 409 while an idempotent mutation is still in flight', async () => {
+      const { calls } = stubFetch([
+        new Response('in flight', { status: 409, headers: { 'retry-after': '0' } }),
+        ok({ create_item: { id: '1' } }),
+      ]);
+
+      const uit = await client({ attempts: 2 }).mutate(DOC, {}, { idempotencyKey: 'briefing:1' });
+
+      expect(calls).toHaveLength(2);
+      expect(uit).toEqual({ create_item: { id: '1' } });
+    });
+
+    /** Zonder sleutel is 409 een echte botsing en hoort hij gewoon door te reizen. */
+    it('does not retry a 409 without an idempotency key', async () => {
+      const { calls } = stubFetch([
+        new Response('conflict', { status: 409 }),
+        ok({ create_item: { id: '1' } }),
+      ]);
+
+      await expect(client({ attempts: 2 }).mutate(DOC, {})).rejects.toThrow('409');
+      expect(calls).toHaveLength(1);
+    });
+
+    /** En de sleutel moet écht meegaan als header, anders doet Monday er niets mee. */
+    it('sends the idempotency key as a header', async () => {
+      const { calls } = stubFetch([ok({ create_item: { id: '1' } })]);
+
+      await client().mutate(DOC, {}, { idempotencyKey: 'briefing-row:900:https://sp/a.docx' });
+
+      expect(calls[0]?.headers['Idempotency-Key']).toBe('briefing-row:900:https://sp/a.docx');
+    });
+
     it('honours a Retry-After when the server sends one', async () => {
       const { calls } = stubFetch([
         new Response('slow down', { status: 429, headers: { 'retry-after': '0' } }),
@@ -248,9 +291,9 @@ describe('createMondayMutationClient', () => {
     it('refuses to start once the deadline has passed', async () => {
       const { calls } = stubFetch([ok({ create_item: { id: '1' } })]);
 
-      await expect(
-        client({ deadlineMs: () => Date.now() - 1 }).mutate(DOC, {})
-      ).rejects.toThrow(/deadline/);
+      await expect(client({ deadlineMs: () => Date.now() - 1 }).mutate(DOC, {})).rejects.toThrow(
+        /deadline/
+      );
       expect(calls).toHaveLength(0);
     });
 

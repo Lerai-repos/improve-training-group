@@ -368,8 +368,8 @@ const SAME_GROUP: BriefingBlock = {
   regels: [
     prose(
       'Jullie trainen samen de gehele groep, deze wordt dus niet opgesplitst over meerdere ' +
-      'locaties. Zorg daarom voor een goede afstemming. Houd er rekening mee dat de klant ' +
-      'extra betaalt voor de co-trainer(s). Het is daarom belangrijk dat alle trainers een ' +
+        'locaties. Zorg daarom voor een goede afstemming. Houd er rekening mee dat de klant ' +
+        'extra betaalt voor de co-trainer(s). Het is daarom belangrijk dat alle trainers een ' +
         'actieve en duidelijke rol hebben tijdens de sessie(s).'
     ),
   ],
@@ -448,10 +448,10 @@ const HOMEWORK: BriefingBlock = {
     ),
     ...bullets(
       'De opdracht dient deelnemers te helpen om de inhoud van de training direct in de praktijk toe ' +
-      'te passen, inzichten op te doen en eventuele knelpunten of vragen zichtbaar te maken.',
-    'Zorg er zo veel mogelijk voor dat de opdracht als onderdeel van het werk kan worden ' +
-      'uitgevoerd, in plaats van dat het de deelnemers extra tijd kost.',
-    'Is de huiswerkopdracht niet onderdeel van een trainingscyclus (dus meerdere opvolgende ' +
+        'te passen, inzichten op te doen en eventuele knelpunten of vragen zichtbaar te maken.',
+      'Zorg er zo veel mogelijk voor dat de opdracht als onderdeel van het werk kan worden ' +
+        'uitgevoerd, in plaats van dat het de deelnemers extra tijd kost.',
+      'Is de huiswerkopdracht niet onderdeel van een trainingscyclus (dus meerdere opvolgende ' +
         'sessies vanuit ons)? Spreek dan met de groep af of en hoe ze de uitvoer van de opdracht ' +
         'borgen.'
     ),
@@ -509,7 +509,9 @@ export interface HistoryRow {
  * dus tot het sjabloon een tabel krijgt staan de regels hier als tekst onder elkaar. Dat is
  * zichtbaar anders dan bedoeld, en dat is beter dan stilletjes de helft weglaten.
  */
-export function recurringClientBlock(rows: readonly HistoryRow[] | undefined): BriefingBlock | null {
+export function recurringClientBlock(
+  rows: readonly HistoryRow[] | undefined
+): BriefingBlock | null {
   if (rows === undefined) {
     return {
       titel: 'Vaste klant',
@@ -691,7 +693,10 @@ export function splitBlocks(
   checklist: BriefingChecklist,
   historie: readonly HistoryRow[] | undefined,
   session: SessionFacts,
-  recipient?: { readonly recipient: Recipient; readonly format: (naam: string, telefoon: string) => string }
+  recipient?: {
+    readonly recipient: Recipient;
+    readonly format: (naam: string, telefoon: string) => string;
+  }
 ): { readonly rolblokken: BriefingBlock[]; readonly blokken: BriefingBlock[] } {
   const alle = selectBlocks(checklist, historie, session, recipient);
   const rol = new Set<string>(rolBlockTitels(checklist, session, recipient));
@@ -705,7 +710,10 @@ export function splitBlocks(
 function rolBlockTitels(
   checklist: BriefingChecklist,
   session: SessionFacts,
-  recipient?: { readonly recipient: Recipient; readonly format: (naam: string, telefoon: string) => string }
+  recipient?: {
+    readonly recipient: Recipient;
+    readonly format: (naam: string, telefoon: string) => string;
+  }
 ): string[] {
   const blokken =
     recipient === undefined
@@ -722,7 +730,10 @@ export function selectBlocks(
    * Voor wie dit document is, als de aanroeper dat weet. Zonder ontvanger komen de
    * rolblokken als zichtbare `«…»`-regel in plaats van als gok.
    */
-  recipient?: { readonly recipient: Recipient; readonly format: (naam: string, telefoon: string) => string }
+  recipient?: {
+    readonly recipient: Recipient;
+    readonly format: (naam: string, telefoon: string) => string;
+  }
 ): BriefingBlock[] {
   if (checklist.ownGroup && checklist.sameGroup) {
     throw new Error(

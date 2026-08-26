@@ -156,7 +156,8 @@ describe('resolveRecipientRoles — welke rol', () => {
       },
       { ...EMPTY_CHECKLIST, trainingActor: true }
     );
-    const elke = uit.kind === 'resolved' ? uit.recipients.find((r) => r.role === 'acteur') : undefined;
+    const elke =
+      uit.kind === 'resolved' ? uit.recipients.find((r) => r.role === 'acteur') : undefined;
     expect(elke?.otherTrainers.map((t) => t.naam)).toEqual(['Lennart']);
   });
 

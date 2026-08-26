@@ -87,7 +87,7 @@ function schema(opts: FakeOpts) {
 }
 
 function client(item: unknown, opts: FakeOpts = {}) {
-  const query = <T,>(doc: string, vars?: Record<string, unknown>): Promise<T> => {
+  const query = <T>(doc: string, vars?: Record<string, unknown>): Promise<T> => {
     if (doc.includes('users(')) {
       return Promise.resolve({
         users: [{ id: 7, name: 'Dirkje Pril', mobile_phone: '+31648431025' }],
@@ -122,7 +122,10 @@ function client(item: unknown, opts: FakeOpts = {}) {
             name: 'Opp',
             column_values: [
               { id: 'deal_contact', linked_item_ids: ids },
-              { id: 'itg_achtergrond', text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.' },
+              {
+                id: 'itg_achtergrond',
+                text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.',
+              },
             ],
           },
         ],
@@ -151,9 +154,7 @@ function client(item: unknown, opts: FakeOpts = {}) {
           .map((id) => ({
             id,
             name: id === '900' ? 'Verbindend communiceren' : `Thema ${id}`,
-            column_values: [
-              { id: 'itg_conceptinhoud', text: opts.conceptInhoud?.[id] ?? null },
-            ],
+            column_values: [{ id: 'itg_conceptinhoud', text: opts.conceptInhoud?.[id] ?? null }],
           })),
       } as T);
     }
@@ -162,47 +163,47 @@ function client(item: unknown, opts: FakeOpts = {}) {
   const getSchema = (ids: string[]) =>
     Promise.resolve(
       ids[0] === '5067928440'
-      ? [
-          {
-            id: '5067928440',
-            name: "Thema's",
-            groups: [],
-            columns: opts.dropConceptColumn
-              ? []
-              : [
-                  {
-                    id: 'itg_conceptinhoud',
-                    title: 'Concept inhoud',
-                    type: opts.conceptColumnType ?? 'long_text',
-                    settings_str: null,
-                  },
-                ],
-          },
-        ]
-      : ids[0] === '1279052045'
         ? [
             {
-              id: '1279052045',
-              name: 'Opportunities',
+              id: '5067928440',
+              name: "Thema's",
               groups: [],
-              columns: [
-                {
-                  id: 'deal_contact',
-                  title: 'Contactpersoon',
-                  type: opts.oppRelationType ?? 'board_relation',
-                  settings_str: opts.oppSettings ?? '{"boardIds":[1279052020]}',
-                },
-                {
-                  id: 'itg_achtergrond',
-                  title: 'Achtergrondinformatie',
-                  type: opts.oppAchtergrondType ?? 'long_text',
-                  settings_str: '{}',
-                },
-              ],
-              items_count: 1,
+              columns: opts.dropConceptColumn
+                ? []
+                : [
+                    {
+                      id: 'itg_conceptinhoud',
+                      title: 'Concept inhoud',
+                      type: opts.conceptColumnType ?? 'long_text',
+                      settings_str: null,
+                    },
+                  ],
             },
           ]
-        : schema(opts)
+        : ids[0] === '1279052045'
+          ? [
+              {
+                id: '1279052045',
+                name: 'Opportunities',
+                groups: [],
+                columns: [
+                  {
+                    id: 'deal_contact',
+                    title: 'Contactpersoon',
+                    type: opts.oppRelationType ?? 'board_relation',
+                    settings_str: opts.oppSettings ?? '{"boardIds":[1279052020]}',
+                  },
+                  {
+                    id: 'itg_achtergrond',
+                    title: 'Achtergrondinformatie',
+                    type: opts.oppAchtergrondType ?? 'long_text',
+                    settings_str: '{}',
+                  },
+                ],
+                items_count: 1,
+              },
+            ]
+          : schema(opts)
     );
   return { query, getSchema } as unknown as MondayGraphQLClient;
 }
@@ -332,7 +333,9 @@ describe('readBriefingTraining', () => {
 
   it('keeps the agenda name when no linked contact matches it', async () => {
     const t = await readBriefingTraining(
-      client(agendaItem(), { contacts: [{ id: '801', name: 'Marco de Vries', phone: '+31 6 11111111' }] }),
+      client(agendaItem(), {
+        contacts: [{ id: '801', name: 'Marco de Vries', phone: '+31 6 11111111' }],
+      }),
       '1'
     );
     expect(t.contactpersoon).toEqual({ naam: 'Paula Hollander', telefoon: '' });
@@ -354,7 +357,9 @@ describe('readBriefingTraining', () => {
   /** The label picks the template, so a blank one means there is nothing to generate. */
   it('treats label, tijden and voertaal as required', async () => {
     const t = await readBriefingTraining(
-      client(agendaItem({ [C.label]: { text: '' }, [C.tijden]: { text: '' }, [C.taal]: { text: '' } })),
+      client(
+        agendaItem({ [C.label]: { text: '' }, [C.tijden]: { text: '' }, [C.taal]: { text: '' } })
+      ),
       '1'
     );
     expect(t.missing.map((m) => m.label).sort()).toEqual(['Label', 'Tijden', 'Voertaal']);
@@ -579,7 +584,7 @@ describe('readBriefingTraining', () => {
     const original = c.query.bind(c);
     const patched = {
       ...c,
-      query: <T,>(doc: string, vars?: Record<string, unknown>): Promise<T> =>
+      query: <T>(doc: string, vars?: Record<string, unknown>): Promise<T> =>
         doc.includes('deal_contact')
           ? (Promise.resolve({ items: [] }) as Promise<T>)
           : original(doc, vars),
@@ -599,7 +604,7 @@ describe('readBriefingTraining', () => {
 
   it('refuses a training it cannot find', async () => {
     const empty = {
-      query: <T,>() => Promise.resolve({ items: [] } as T),
+      query: <T>() => Promise.resolve({ items: [] } as T),
       getSchema: () => Promise.resolve(schema({})),
     } as unknown as MondayGraphQLClient;
     await expect(readBriefingTraining(empty, '99')).rejects.toThrow(/niet gevonden/);

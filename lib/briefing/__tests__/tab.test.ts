@@ -138,7 +138,10 @@ describe('buildTabView', () => {
   /** Zonder dat blokkerende geval blijft de trainermelding wél staan. */
   it('meldt een leeg trainerveld wel als er gewoon een leadtrainer is', () => {
     const uit = buildTabView(
-      { ...TRAINING, missing: [{ column: BRIEFING_AGENDA_COLUMNS.trainerRelation, label: 'Trainer' }] },
+      {
+        ...TRAINING,
+        missing: [{ column: BRIEFING_AGENDA_COLUMNS.trainerRelation, label: 'Trainer' }],
+      },
       opgeslagen()
     );
 
@@ -153,7 +156,9 @@ describe('buildTabView', () => {
       opgeslagen({ checklist: { ...EMPTY_CHECKLIST, trainingActor: true } })
     );
     expect(uit.kanGenereren).toBe(false);
-    expect(uit.issues.find((i) => i.kind === 'acteur_onbekend')?.tekst).toContain('Wijs hieronder aan');
+    expect(uit.issues.find((i) => i.kind === 'acteur_onbekend')?.tekst).toContain(
+      'Wijs hieronder aan'
+    );
   });
 
   it('lost dat op zodra de adviseur er een aanwijst', () => {
@@ -202,10 +207,7 @@ describe('buildTabView', () => {
   /** De klantnaam komt uit de Bedrijf-mirror; het scherm toont wat er écht in komt te staan. */
   it('toont het resultaat met de organisatienaam ingevuld', () => {
     const uit = buildTabView(TRAINING, opgeslagen());
-    expect(uit.conceptResultaat).toEqual([
-      'Plenaire opening.',
-      'Oefenen bij Welzijn Ermelo.',
-    ]);
+    expect(uit.conceptResultaat).toEqual(['Plenaire opening.', 'Oefenen bij Welzijn Ermelo.']);
   });
 
   /**

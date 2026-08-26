@@ -38,7 +38,15 @@ const TRAINING: BriefingTraining = {
   ieCode: '',
   accountmanager: { naam: 'Dirkje Pril', mobiel: '+31648431025' },
   contactpersoon: { naam: 'Paula Hollander', telefoon: '+31642085076' },
-  trainers: [{ itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false }],
+  trainers: [
+    {
+      itemId: '1',
+      naam: 'Lennart Bosschaart',
+      telefoon: '0618683139',
+      isActeur: false,
+      isCoTrainer: false,
+    },
+  ],
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
@@ -87,14 +95,17 @@ function historyRows(xml: string): string[][] {
   const rows: string[][] = [];
   for (const table of xml.split('<w:tbl>').slice(1)) {
     const body = table.split('</w:tbl>')[0] ?? '';
-    const parsed = body.split('<w:tr').slice(1).map((row) => {
-      const cells = row.split('</w:tr>')[0]?.split('<w:tc>').slice(1) ?? [];
-      return cells.map((cell) =>
-        unescapeXml(
-          [...cell.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join('')
-        ).trim()
-      );
-    });
+    const parsed = body
+      .split('<w:tr')
+      .slice(1)
+      .map((row) => {
+        const cells = row.split('</w:tr>')[0]?.split('<w:tc>').slice(1) ?? [];
+        return cells.map((cell) =>
+          unescapeXml(
+            [...cell.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join('')
+          ).trim()
+        );
+      });
     if (parsed.length > 0 && parsed[0]?.length === 5) {
       rows.push(...parsed);
     }
@@ -204,9 +215,27 @@ describe('renderBriefing', () => {
    * misgaat als de verkeerde variant wordt gekozen.
    */
   describe('rolblokken per ontvanger', () => {
-    const LENNART = { itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false };
-    const TESSA = { itemId: '2', naam: 'Tessa de Haas', telefoon: '0624118840', isActeur: false, isCoTrainer: true };
-    const ELKE = { itemId: '3', naam: 'Elke Jansen', telefoon: '0611111111', isActeur: true, isCoTrainer: false };
+    const LENNART = {
+      itemId: '1',
+      naam: 'Lennart Bosschaart',
+      telefoon: '0618683139',
+      isActeur: false,
+      isCoTrainer: false,
+    };
+    const TESSA = {
+      itemId: '2',
+      naam: 'Tessa de Haas',
+      telefoon: '0624118840',
+      isActeur: false,
+      isCoTrainer: true,
+    };
+    const ELKE = {
+      itemId: '3',
+      naam: 'Elke Jansen',
+      telefoon: '0611111111',
+      isActeur: true,
+      isCoTrainer: false,
+    };
 
     const renderFor = async (
       trainers: BriefingTraining['trainers'],
@@ -223,7 +252,10 @@ describe('renderBriefing', () => {
         throw new Error(`${naam} is geen ontvanger`);
       }
       return documentXml(
-        await renderBriefing('IT', composeBriefing(training, checklist, { historie: [], recipient }))
+        await renderBriefing(
+          'IT',
+          composeBriefing(training, checklist, { historie: [], recipient })
+        )
       );
     };
 

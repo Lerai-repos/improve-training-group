@@ -36,7 +36,14 @@ describe('formatDuration', () => {
    * duren zijn een flink deel van de staart.
    */
   it('laat alles staan wat de eenheid al zelf schrijft', () => {
-    for (const raw of ['2,5 uur', '2x 1 uur', '1,5 uur x 4', '3 x 45 min', '2 - 2,5 uur', '2 x 4 uur']) {
+    for (const raw of [
+      '2,5 uur',
+      '2x 1 uur',
+      '1,5 uur x 4',
+      '3 x 45 min',
+      '2 - 2,5 uur',
+      '2 x 4 uur',
+    ]) {
       expect(formatDuration(raw)).toBe(raw);
     }
   });

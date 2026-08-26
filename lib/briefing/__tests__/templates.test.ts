@@ -47,10 +47,7 @@ const BLOCK_LINE = '+++$r.tekst+++';
 const highlight = (kleur: string): RegExp => new RegExp(`<w:highlight[^>]*w:val="${kleur}"`);
 
 function templateXml(label: string): string {
-  return zipReadText(
-    readFileSync(path.join(TEMPLATES_DIR, `${label}.docx`)),
-    'word/document.xml'
-  );
+  return zipReadText(readFileSync(path.join(TEMPLATES_DIR, `${label}.docx`)), 'word/document.xml');
 }
 
 /** De begin- en eindposities van elk tekstvak in het document. */
@@ -167,9 +164,7 @@ describe.each(LABELS)('sjabloon %s', (label) => {
  */
 it('vult in elk sjabloon dezelfde velden', () => {
   const velden = (label: string): string[] =>
-    [...templateXml(label).matchAll(/\+\+\+([^+]{1,40}?)\+\+\+/g)]
-      .map((m) => m[1] ?? '')
-      .sort();
+    [...templateXml(label).matchAll(/\+\+\+([^+]{1,40}?)\+\+\+/g)].map((m) => m[1] ?? '').sort();
   const eerste = new Set(velden('IT'));
   for (const label of LABELS) {
     expect(new Set(velden(label)), `${label} wijkt af van IT`).toEqual(eerste);
@@ -197,8 +192,20 @@ const TRAINING: BriefingTraining = {
   accountmanager: { naam: 'Dirkje Pril', mobiel: '+31648431025' },
   contactpersoon: { naam: 'Paula Hollander', telefoon: '+31642085076' },
   trainers: [
-    { itemId: '1', naam: 'Lennart Bosschaart', telefoon: '0618683139', isActeur: false, isCoTrainer: false },
-    { itemId: '2', naam: 'Tessa de Haas', telefoon: '0624118840', isActeur: false, isCoTrainer: true },
+    {
+      itemId: '1',
+      naam: 'Lennart Bosschaart',
+      telefoon: '0618683139',
+      isActeur: false,
+      isCoTrainer: false,
+    },
+    {
+      itemId: '2',
+      naam: 'Tessa de Haas',
+      telefoon: '0624118840',
+      isActeur: false,
+      isCoTrainer: true,
+    },
   ],
   acteuraantal: null,
   opportunityItemId: null,

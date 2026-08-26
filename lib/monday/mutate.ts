@@ -36,6 +36,18 @@ const DEFAULT_COMPLEXITY_RETRIES = 2;
 const SECONDS_TO_MS = 1000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
+/**
+ * `409` — maar ALLEEN met een idempotentiesleutel.
+ *
+ * Monday antwoordt met 409 en een `Retry-After` wanneer dezelfde sleutel binnenkomt terwijl
+ * het origineel nog verwerkt wordt. Dat is precies de situatie die de sleutel hoort op te
+ * lossen: het duplicaat wordt tegengehouden en het origineel loopt door. Doorwerpen zou de
+ * aanroeper vertellen dat de mutatie mislukte terwijl hij op dat moment juist slaagt.
+ *
+ * Zonder sleutel is 409 iets heel anders — een echte botsing — en die hoort door te reizen.
+ */
+const IDEMPOTENT_RETRY_STATUS = 409;
+
 const sleep = (ms: number): Promise<void> =>
   ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -156,7 +168,12 @@ export function createMondayMutationClient(
   }
 
   /** One HTTP round trip, with transport-level retry for network errors and 5xx/429. */
-  async function post(body: string, headers: Record<string, string>): Promise<Response> {
+  async function post(
+    body: string,
+    headers: Record<string, string>,
+    /** Set when the caller supplied an idempotency key; see `IDEMPOTENT_RETRY_STATUS`. */
+    idempotent = false
+  ): Promise<Response> {
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const remaining = remainingMs();
@@ -181,7 +198,10 @@ export function createMondayMutationClient(
           statusText: res.statusText,
           headers: res.headers,
         });
-        if (isLast || !RETRYABLE_STATUS.has(res.status)) {
+        const opnieuw =
+          RETRYABLE_STATUS.has(res.status) ||
+          (idempotent && res.status === IDEMPOTENT_RETRY_STATUS);
+        if (isLast || !opnieuw) {
           return buffered;
         }
         /**
@@ -230,7 +250,7 @@ export function createMondayMutationClient(
       if (remainingMs() <= 0) {
         throw new Error('Monday mutate: deadline exceeded');
       }
-      const res = await post(body, headers);
+      const res = await post(body, headers, mutateOpts?.idempotencyKey !== undefined);
       if (!res.ok) {
         throw new Error(`Monday mutate ${res.status}: ${await res.text()}`);
       }

@@ -369,10 +369,9 @@ export async function readHistorie(
    * geloofwaardig uitzien.
    */
   const trimmed = input.limit === undefined ? sessions : sessions.slice(-input.limit);
-  const namesById = await readTrainerNames(
-    client,
-    [...new Set(trimmed.flatMap((session) => session.trainerIds))]
-  );
+  const namesById = await readTrainerNames(client, [
+    ...new Set(trimmed.flatMap((session) => session.trainerIds)),
+  ]);
 
   return trimmed.map((session) => ({
     datum: formatShortDate(session.datum),

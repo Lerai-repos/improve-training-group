@@ -54,7 +54,11 @@ describe('parseMarkedUpdate', () => {
 
   it('scheidt alinea’s op lege regels', () => {
     const raw = 'Voor in briefing:\n\n\n19 nov lennart\n\n24 nov\n\nSituatie is geëscaleerd.';
-    expect(parseMarkedUpdate(raw)).toEqual(['19 nov lennart', '24 nov', 'Situatie is geëscaleerd.']);
+    expect(parseMarkedUpdate(raw)).toEqual([
+      '19 nov lennart',
+      '24 nov',
+      'Situatie is geëscaleerd.',
+    ]);
   });
 
   /**
@@ -116,16 +120,28 @@ describe('collectExtraInfo', () => {
    */
   it('ontdubbelt over de twee borden heen, ongeacht witruimte en hoofdletters', () => {
     const result = collectExtraInfo([
-      { textBody: 'Voor in briefing: Geen papieren flip-over.', createdAt: '2026-01-01T00:00:00.000Z' },
-      { textBody: 'voor in briefing:  geen  papieren flip-over.', createdAt: '2026-01-02T00:00:00.000Z' },
+      {
+        textBody: 'Voor in briefing: Geen papieren flip-over.',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        textBody: 'voor in briefing:  geen  papieren flip-over.',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
     ]);
     expect(result.lines).toEqual(['Geen papieren flip-over.']);
   });
 
   it('laat de ongemarkeerde updates buiten de briefing', () => {
     const result = collectExtraInfo([
-      { textBody: 'Automatisch gelogde e-mail van de klant', createdAt: '2026-01-01T00:00:00.000Z' },
-      { textBody: 'zie planning voor in briefing en voor trainers', createdAt: '2026-01-02T00:00:00.000Z' },
+      {
+        textBody: 'Automatisch gelogde e-mail van de klant',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        textBody: 'zie planning voor in briefing en voor trainers',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
       { textBody: 'Voor in briefing: wel meenemen', createdAt: '2026-01-03T00:00:00.000Z' },
     ]);
     expect(result.lines).toEqual(['wel meenemen']);
