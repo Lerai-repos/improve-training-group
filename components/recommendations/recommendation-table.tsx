@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDown, ArrowUp, Check, Loader2, MessageCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarClock, Check, Loader2, MessageCircle } from 'lucide-react';
 
 import { Button } from '@components/ui/button';
 import { Checkbox } from '@components/ui/checkbox';
@@ -14,7 +14,7 @@ import {
 } from '@components/ui/table';
 import { cn } from '@lib/utils';
 
-import { duration, euros, grade } from './format';
+import { conflictText, dayConflictLabel, duration, euros, grade } from './format';
 import {
   levelOf,
   maxTheme,
@@ -135,35 +135,19 @@ export const RecommendationTable = ({
               <SortableHead sortKey="hourlyRateCents" sort={sort} align="right">
                 Uurtarief
               </SortableHead>
-              <SortableHead
-                sortKey="trainerTravelCostCents"
-                sort={sort}
-                align="right"
-              >
+              <SortableHead sortKey="trainerTravelCostCents" sort={sort} align="right">
                 Reiskosten
               </SortableHead>
-              <SortableHead
-                sortKey="travelMarginCents"
-                sort={sort}
-                align="right"
-              >
+              <SortableHead sortKey="travelMarginCents" sort={sort} align="right">
                 Reismarge
               </SortableHead>
               <SortableHead sortKey="totalCostCents" sort={sort} align="right">
                 Totale kosten
               </SortableHead>
-              <SortableHead
-                sortKey="assignmentsThisMonth"
-                sort={sort}
-                align="right"
-              >
+              <SortableHead sortKey="assignmentsThisMonth" sort={sort} align="right">
                 Opdr. deze maand
               </SortableHead>
-              <SortableHead
-                sortKey="assignmentsThisYear"
-                sort={sort}
-                align="right"
-              >
+              <SortableHead sortKey="assignmentsThisYear" sort={sort} align="right">
                 Opdr. dit jaar
               </SortableHead>
             </>
@@ -274,7 +258,7 @@ const SortableHead = ({ sortKey, sort, align, children }: SortableHeadProps) => 
  * quality.
  */
 const ScoreCell = ({ value }: { value: number | null }) => (
-  <TableCell className={cn(value === null && 'text-muted-foreground italic')}>
+  <TableCell className={cn(value === null && 'italic text-muted-foreground')}>
     {grade(value)}
   </TableCell>
 );
@@ -337,6 +321,18 @@ const TrainerRow = ({
 
   const isPicking = picking === row.trainerItemId;
 
+  const conflicts = row.dayConflicts ?? [];
+  const dagLabel = dayConflictLabel(conflicts);
+  /**
+   * De tooltip draagt de volledige lijst, want de regel toont er hooguit twee. Ook de
+   * grens van wat we weten staat erin: buiten het ingestelde agendabord ziet de scan
+   * niets, dus géén label betekent niet "gecontroleerd vrij".
+   */
+  const dagTooltip =
+    conflicts.length === 0
+      ? undefined
+      : `Staat deze dag al ingepland op: ${conflicts.map(conflictText).join(' | ')}`;
+
   return (
     <TableRow
       // `bg-accent`, not `bg-primary-lighter` — the latter is a CSS variable this project
@@ -358,6 +354,21 @@ const TrainerRow = ({
             </span>
           )}
         </span>
+        {/*
+          Onder de naam, niet in een eigen kolom. De tabel is vijftien kolommen breed en er
+          is horizontaal niets over; verticaal wel, en de regel verschijnt alleen op de
+          paar rijen die hem hebben. Een vlag, geen filter: twee sessies op één dag is bij
+          ITG legitiem, dus wegfilteren zou geldige opties weghalen zonder zichtbare reden.
+        */}
+        {dagLabel !== null && (
+          <span
+            className="mt-0.5 flex items-start gap-1 text-xs text-amber-700 dark:text-amber-500"
+            title={dagTooltip}
+          >
+            <CalendarClock className="mt-px size-3 shrink-0" />
+            {dagLabel}
+          </span>
+        )}
       </TableCell>
       {canViewFull && (
         <>
@@ -368,7 +379,10 @@ const TrainerRow = ({
             title={themeBreakdown(row, 'evaluationCount')}
           />
           <CountCell value={row.overallEvaluationCount ?? null} />
-          <CountCell value={maxTheme(row, 'timesTaught')} title={themeBreakdown(row, 'timesTaught')} />
+          <CountCell
+            value={maxTheme(row, 'timesTaught')}
+            title={themeBreakdown(row, 'timesTaught')}
+          />
         </>
       )}
       <TableCell>{duration(row.roundTripDurationMinutes)}</TableCell>

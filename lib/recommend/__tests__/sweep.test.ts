@@ -38,7 +38,11 @@ describe('sweepPending', () => {
     await stuck(store);
     const pub = publisher();
 
-    const result = await sweepPending({ store, publisher: pub, nowMs: () => FIRST_SWEEP_DELAY_MS - 1 });
+    const result = await sweepPending({
+      store,
+      publisher: pub,
+      nowMs: () => FIRST_SWEEP_DELAY_MS - 1,
+    });
 
     expect(result.republished).toBe(0);
     expect(pub.published).toEqual([]);

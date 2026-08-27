@@ -15,6 +15,8 @@ const ITEM = '5029726254';
 
 const FULL: Capabilities = { view: true, plan: true, full: true };
 const RESTRICTED: Capabilities = { view: true, plan: false, full: false };
+/** Mag kiezen, mag geen tarieven zien — de gebruiker die op Kies drukt. */
+const PLANNER: Capabilities = { view: true, plan: true, full: false };
 
 function harness(now: () => number = () => 1_000) {
   const kv = createMemoryKvStore(now);
@@ -66,7 +68,17 @@ function workload(
   };
 }
 
-const scanOf = (scan: AgendaScan): CachePeek<AgendaScan> => ({ kind: 'hit', value: scan });
+/**
+ * Deze tests bouwen een scan met de hand en gaan alleen over de werklast, dus de
+ * dagvelden krijgen een lege standaard. Een test die wél over dagbotsingen gaat geeft ze
+ * expliciet mee en overschrijft die standaard.
+ */
+const scanOf = (
+  scan: Pick<AgendaScan, 'workload' | 'monthByItemId'> & Partial<AgendaScan>
+): CachePeek<AgendaScan> => ({
+  kind: 'hit',
+  value: { dateByItemId: new Map(), dayIndex: new Map(), ...scan },
+});
 
 describe('resolveView', () => {
   it('reports idle when the training has never been triggered', async () => {
@@ -90,7 +102,9 @@ describe('resolveView', () => {
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-      trainingMonth: null, duurTraining: null, travelPrecision: null,
+      trainingMonth: null,
+      duurTraining: null,
+      travelPrecision: null,
       rows: [storedRow({ trainerItemId: 't1', rank: 1 })],
     });
 
@@ -175,7 +189,10 @@ describe('resolveView', () => {
   it('distinguishes no_match from an absent computation', async () => {
     const h = harness();
     await bump(h);
-    await h.outcomes.claim(ITEM, 1, { kind: 'no_match', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+    await h.outcomes.claim(ITEM, 1, {
+      kind: 'no_match',
+      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+    });
 
     expect((await resolveView(h.deps, ITEM, FULL)).state).toEqual({
       kind: 'no_match',
@@ -213,7 +230,14 @@ describe('resolveView', () => {
       let now = 1_000;
       const h = harness(() => now);
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
 
       now += ROWS_TTL_MS + 1;
 
@@ -240,7 +264,14 @@ describe('resolveView', () => {
     it('does not report an older generation’s answer for a newer generation', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
       await bump(h); // a recalculate: generation 2, nothing stored yet
 
       expect((await resolveView(h.deps, ITEM, FULL)).state).toEqual({
@@ -273,7 +304,14 @@ describe('resolveView', () => {
 
     it('does not return the superseded generation as ready', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
 
       // Read generation 1, resolve its rows, then discover the current one is 2.
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 2]) };
@@ -286,11 +324,20 @@ describe('resolveView', () => {
 
     it('re-resolves against the new generation rather than giving up', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
       await h.outcomes.claim(ITEM, 2, {
         kind: 'ready',
-      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-        trainingMonth: null, duurTraining: null, travelPrecision: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        trainingMonth: null,
+        duurTraining: null,
+        travelPrecision: null,
         rows: [storedRow({ trainerItemId: 'newer' })],
       });
 
@@ -308,7 +355,14 @@ describe('resolveView', () => {
      */
     it('gives up after a few attempts and reports computing', async () => {
       const h = harness();
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
 
       const deps = { ...h.deps, queue: scriptedQueue([1, 2, 3, 4, 5, 6, 7, 8, 9]) };
 
@@ -323,17 +377,19 @@ describe('resolveView', () => {
    */
   describe('workload, resolved at read time', () => {
     const busy = staticAssignments([
-      { itemId: 'i1275', date: '2026-09-01', trainerItemIds: ['t1'] },
-      { itemId: 'i7107', date: '2026-09-20', trainerItemIds: ['t1'] },
-      { itemId: 'i5735', date: '2026-11-02', trainerItemIds: ['t1'] },
+      { itemId: 'i1275', date: '2026-09-01', trainerItemIds: ['t1'], times: null, client: null },
+      { itemId: 'i7107', date: '2026-09-20', trainerItemIds: ['t1'], times: null, client: null },
+      { itemId: 'i5735', date: '2026-11-02', trainerItemIds: ['t1'], times: null, client: null },
     ]);
 
     async function readyList(h: ReturnType<typeof harness>) {
       await bump(h);
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
-      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-        trainingMonth: '2026-09', duurTraining: null, travelPrecision: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        trainingMonth: '2026-09',
+        duurTraining: null,
+        travelPrecision: null,
         rows: [storedRow({ trainerItemId: 't1' })],
       });
     }
@@ -363,10 +419,34 @@ describe('resolveView', () => {
         {
           ...h.deps,
           assignments: staticAssignments([
-            { itemId: 'i1275', date: '2026-09-01', trainerItemIds: ['t1'] },
-            { itemId: 'i7107', date: '2026-09-20', trainerItemIds: ['t1'] },
-            { itemId: 'i5735', date: '2026-11-02', trainerItemIds: ['t1'] },
-            { itemId: 'i7699', date: '2026-09-28', trainerItemIds: ['t1'] },
+            {
+              itemId: 'i1275',
+              date: '2026-09-01',
+              trainerItemIds: ['t1'],
+              times: null,
+              client: null,
+            },
+            {
+              itemId: 'i7107',
+              date: '2026-09-20',
+              trainerItemIds: ['t1'],
+              times: null,
+              client: null,
+            },
+            {
+              itemId: 'i5735',
+              date: '2026-11-02',
+              trainerItemIds: ['t1'],
+              times: null,
+              client: null,
+            },
+            {
+              itemId: 'i7699',
+              date: '2026-09-28',
+              trainerItemIds: ['t1'],
+              times: null,
+              client: null,
+            },
           ]),
         },
         ITEM,
@@ -415,7 +495,13 @@ describe('resolveView', () => {
           assignments: workload(
             scanOf({
               workload: buildAssignmentIndex([
-                { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
+                {
+                  itemId: 'other',
+                  date: '2026-09-01',
+                  trainerItemIds: ['t1'],
+                  times: null,
+                  client: null,
+                },
               ]),
               // Scanned, and it has no date any more.
               monthByItemId: new Map([[ITEM, null]]),
@@ -443,7 +529,13 @@ describe('resolveView', () => {
           assignments: workload(
             scanOf({
               workload: buildAssignmentIndex([
-                { itemId: 'other', date: '2026-09-01', trainerItemIds: ['t1'] },
+                {
+                  itemId: 'other',
+                  date: '2026-09-01',
+                  trainerItemIds: ['t1'],
+                  times: null,
+                  client: null,
+                },
               ]),
               monthByItemId: new Map(),
             })
@@ -454,6 +546,180 @@ describe('resolveView', () => {
       );
 
       expect(state.kind === 'ready' && state.rows[0]).toMatchObject({ assignmentsThisMonth: 1 });
+    });
+
+    /**
+     * De dagbotsingen komen uit dezelfde scan en dezelfde `peek`. Deze test loopt door de
+     * hele weg — scan, resolver, DTO — omdat juist de bedrading ertussen misgaat.
+     */
+    it('meldt wat de trainer die dag al heeft', async () => {
+      const h = harness();
+      await readyList(h);
+      const scan = staticAssignments([
+        {
+          itemId: ITEM,
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '13:00-16:00',
+          client: 'Calduran',
+        },
+        {
+          itemId: 'ander',
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '09:30-12:30',
+          client: 'Probiblio',
+        },
+      ]);
+
+      const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        dayConflicts: [{ itemId: 'ander', client: 'Probiblio', times: '09:30-12:30' }],
+      });
+    });
+
+    /**
+     * Zonder deze uitsluiting krijgt élke gekoppelde trainer een waarschuwing over de
+     * sessie die de planner op dat moment vóór zich heeft.
+     */
+    it('rekent de training zelf niet als botsing', async () => {
+      const h = harness();
+      await readyList(h);
+      const scan = staticAssignments([
+        {
+          itemId: ITEM,
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '13:00-16:00',
+          client: 'Calduran',
+        },
+      ]);
+
+      const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({ dayConflicts: [] });
+    });
+
+    /**
+     * Geen datum, geen bewering. Anders dan bij de maand is er geen opgeslagen terugval
+     * voor de dag, en een botsing verzinnen uit een verouderde datum is erger dan zwijgen.
+     */
+    it('claimt niets voor een training die de scan niet zag', async () => {
+      const h = harness();
+      await readyList(h);
+
+      /**
+       * De scan kent `other` op 1 september mét deze trainer, maar kent ITEM helemaal
+       * niet. Zou de resolver een dag verzinnen in plaats van te zwijgen, dan komt die
+       * training er als botsing uit — en dáár faalt deze test op.
+       */
+      const scan = staticAssignments([
+        {
+          itemId: 'other',
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '09:30-12:30',
+          client: 'Probiblio',
+        },
+      ]);
+
+      const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({ dayConflicts: [] });
+    });
+
+    /**
+     * De Kies-knop hangt aan `plan`, dus de waarschuwing erachter ook.
+     *
+     * Zat het label achter `full`, dan miste precies de gebruiker die de koppeling maakt
+     * hem — en die koppeling is de handeling waar de waarschuwing voor bestaat.
+     */
+    it('geeft de dagbotsingen ook aan een planner zonder kostenkolommen', async () => {
+      const h = harness();
+      await readyList(h);
+      const scan = staticAssignments([
+        {
+          itemId: ITEM,
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '13:00-16:00',
+          client: 'Calduran',
+        },
+        {
+          itemId: 'ander',
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '09:30-12:30',
+          client: 'Probiblio',
+        },
+      ]);
+
+      const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, PLANNER);
+
+      /**
+       * Het feit wél, de inhoud niet.
+       *
+       * `plan` is account-breed en zegt niets over toegang tot het agendabord, dus de
+       * klantnaam en het tijdstip van een ándere training horen hier niet te staan. Wat
+       * blijft is de waarschuwing zelf, bij de knop waar hij voor bestaat.
+       */
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        dayConflicts: [{ itemId: 'ander', client: null, times: null }],
+      });
+      // En nog steeds geen tarieven: de kostenkolommen blijven aan `full` hangen.
+      expect(state.kind === 'ready' && state.rows[0]).not.toHaveProperty('hourlyRateCents');
+      expect(state.kind === 'ready' && state.rows[0]).not.toHaveProperty('assignmentsThisMonth');
+    });
+
+    /** En een `full`-lezer krijgt de inhoud wél — anders is het label zinloos geworden. */
+    it('geeft klant en tijd alleen aan een full-lezer', async () => {
+      const h = harness();
+      await readyList(h);
+      const scan = staticAssignments([
+        {
+          itemId: ITEM,
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '13:00-16:00',
+          client: 'Calduran',
+        },
+        {
+          itemId: 'ander',
+          date: '2026-09-01',
+          trainerItemIds: ['t1'],
+          times: '09:30-12:30',
+          client: 'Probiblio',
+        },
+      ]);
+
+      const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, FULL);
+
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
+        dayConflicts: [{ itemId: 'ander', client: 'Probiblio', times: '09:30-12:30' }],
+      });
+    });
+
+    /**
+     * Lezen wat er ligt mag; een bordscan op zijn naam starten niet. Die regel is ouder
+     * dan het label en blijft letterlijk overeind — hij ziet bij een koude cache gewoon
+     * geen waarschuwing.
+     */
+    it('laat een planner zonder kostenkolommen geen scan aftrappen', async () => {
+      const h = harness();
+      await readyList(h);
+      const assignments = workload({ kind: 'miss' });
+      const warmed: Promise<unknown>[] = [];
+
+      const { state } = await resolveView(
+        { ...h.deps, assignments, warm: (task) => warmed.push(task) },
+        ITEM,
+        PLANNER
+      );
+
+      expect(warmed).toHaveLength(0);
+      expect(assignments.refreshes()).toBe(0);
+      expect(state.kind === 'ready' && state.rows[0]).toMatchObject({ dayConflicts: [] });
     });
 
     /** A restricted caller has no workload columns, so their page view must not scan. */
@@ -506,11 +772,7 @@ describe('resolveView', () => {
       const assignments = workload({ kind: 'failed' });
       const warmed: Promise<unknown>[] = [];
 
-      await resolveView(
-        { ...h.deps, assignments, warm: (task) => warmed.push(task) },
-        ITEM,
-        FULL
-      );
+      await resolveView({ ...h.deps, assignments, warm: (task) => warmed.push(task) }, ITEM, FULL);
 
       expect(assignments.refreshes()).toBe(0);
       expect(warmed).toHaveLength(0);
@@ -537,8 +799,10 @@ describe('resolveView', () => {
       await bump(h);
       await h.outcomes.claim(ITEM, 1, {
         kind: 'ready',
-      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-        trainingMonth: null, duurTraining: null, travelPrecision: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        trainingMonth: null,
+        duurTraining: null,
+        travelPrecision: null,
         rows: [
           storedRow({ trainerItemId: 't1', rank: 1 }),
           storedRow({ trainerItemId: 't2', rank: 2 }),
@@ -565,7 +829,14 @@ describe('resolveView', () => {
     it('does not carry marks across a recalculate', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow({ trainerItemId: 't1' })],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
       await h.approached.write({
         mondayItemId: ITEM,
         generation: 1,
@@ -575,7 +846,14 @@ describe('resolveView', () => {
       });
 
       await bump(h);
-      await h.outcomes.claim(ITEM, 2, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow({ trainerItemId: 't1' })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 2, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow({ trainerItemId: 't1' })],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
 
       const { state } = await resolveView(h.deps, ITEM, FULL);
 
@@ -587,15 +865,22 @@ describe('resolveView', () => {
     it('gives a full caller the money, and a restricted one none of it', async () => {
       const h = harness();
       await bump(h);
-      await h.outcomes.claim(ITEM, 1, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+      await h.outcomes.claim(ITEM, 1, {
+        kind: 'ready',
+        duurTraining: null,
+        travelPrecision: null,
+        rows: [storedRow()],
+        trainingMonth: null,
+        settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+      });
 
       const full = await resolveView(h.deps, ITEM, FULL);
       const restricted = await resolveView(h.deps, ITEM, RESTRICTED);
 
       expect(full.state.kind === 'ready' && full.state.rows[0]).toHaveProperty('totalCostCents');
-      expect(
-        restricted.state.kind === 'ready' && restricted.state.rows[0]
-      ).not.toHaveProperty('totalCostCents');
+      expect(restricted.state.kind === 'ready' && restricted.state.rows[0]).not.toHaveProperty(
+        'totalCostCents'
+      );
     });
 
     /**
@@ -614,8 +899,9 @@ describe('resolveView', () => {
         canPlan: true,
         canViewFull: true,
       });
-      expect((await resolveView(h.deps, ITEM, { ...NO_CAPABILITIES, view: true, plan: true })).caps)
-        .toEqual({ canPlan: true, canViewFull: false });
+      expect(
+        (await resolveView(h.deps, ITEM, { ...NO_CAPABILITIES, view: true, plan: true })).caps
+      ).toEqual({ canPlan: true, canViewFull: false });
     });
   });
 });

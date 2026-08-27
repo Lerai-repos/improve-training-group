@@ -1,10 +1,5 @@
 {
-  "regions": [
-    "fra1",
-    "lhr1",
-    "cdg1",
-    "arn1"
-  ],
+  "regions": ["fra1", "lhr1", "cdg1", "arn1"],
   "crons": [
     {
       "path": "/api/cron/publish-pending",
@@ -12,7 +7,7 @@
     },
     {
       "path": "/api/cron/refresh-workload",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/eval-stats",

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildAssignmentIndex,
-  countsFor,
-  monthKeyOf,
   NO_ASSIGNMENTS,
+  buildAgendaScan,
+  buildAssignmentIndex,
+  conflictsFor,
+  countsFor,
+  dayKeyOf,
+  monthKeyOf,
   readAgendaScan,
 } from '../assignments';
 
@@ -18,11 +21,11 @@ import {
  */
 
 const rows = [
-  { itemId: 'i1661', date: '2026-09-15', trainerItemIds: ['a', 'b'] },
-  { itemId: 'i5400', date: '2026-09-30', trainerItemIds: ['a'] },
-  { itemId: 'i6451', date: '2026-10-01', trainerItemIds: ['a'] },
-  { itemId: 'i2281', date: '2025-09-01', trainerItemIds: ['a'] },
-  { itemId: 'undated', date: null, trainerItemIds: ['a'] },
+  { itemId: 'i1661', date: '2026-09-15', trainerItemIds: ['a', 'b'], times: null, client: null },
+  { itemId: 'i5400', date: '2026-09-30', trainerItemIds: ['a'], times: null, client: null },
+  { itemId: 'i6451', date: '2026-10-01', trainerItemIds: ['a'], times: null, client: null },
+  { itemId: 'i2281', date: '2025-09-01', trainerItemIds: ['a'], times: null, client: null },
+  { itemId: 'undated', date: null, trainerItemIds: ['a'], times: null, client: null },
 ];
 
 describe('monthKeyOf', () => {
@@ -63,7 +66,9 @@ describe('countsFor', () => {
 
   it('ignores trainings with no date', () => {
     // Five rows for `a`, but the undated one belongs to no month.
-    expect(countsFor(index, 'a', '2026-09').thisYear + countsFor(index, 'a', '2025-09').thisYear).toBe(4);
+    expect(
+      countsFor(index, 'a', '2026-09').thisYear + countsFor(index, 'a', '2025-09').thisYear
+    ).toBe(4);
   });
 
   it('is zero for a trainer with nothing booked, and for a training with no date', () => {
@@ -78,7 +83,7 @@ describe('readAgendaScan', () => {
   it('follows the cursor and counts across pages', async () => {
     const documents: string[] = [];
     const client = {
-      query: <T,>(document: string): Promise<T> => {
+      query: <T>(document: string): Promise<T> => {
         documents.push(document);
         const first = documents.length === 1;
         const body = first
@@ -141,9 +146,11 @@ describe('readAgendaScan', () => {
     let asked = '';
     await readAgendaScan(
       {
-        query: <T,>(document: string): Promise<T> => {
+        query: <T>(document: string): Promise<T> => {
           asked = document;
-          return Promise.resolve(JSON.parse(JSON.stringify({ boards: [{ items_page: page([], null) }] })));
+          return Promise.resolve(
+            JSON.parse(JSON.stringify({ boards: [{ items_page: page([], null) }] }))
+          );
         },
       },
       { boardId: '1', dateColumnId: 'datum_x', trainerColumnIds: ['rel_y'] }
@@ -161,7 +168,7 @@ describe('readAgendaScan', () => {
   it('throws on an unreadable reply rather than reporting nobody is busy', async () => {
     await expect(
       readAgendaScan(
-        { query: <T,>(): Promise<T> => Promise.resolve(JSON.parse('{"nope":1}')) },
+        { query: <T>(): Promise<T> => Promise.resolve(JSON.parse('{"nope":1}')) },
         { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/unreadable page/);
@@ -172,6 +179,95 @@ describe('readAgendaScan', () => {
    * recognise rather than erroring. A renamed date column drops every training out of
    * every month; a retyped relation returns no ids. Both come out as a plausible zero.
    */
+  /**
+   * `Bedrijf` is een MIRROR, en een mirror geeft `text: null` met de waarde in
+   * `display_value`. Zonder dat fragment komt de klantnaam op élke rij leeg terug en
+   * verliest het label stilzwijgend zijn halve nut — precies wat de trainingskop al
+   * eerder overkwam.
+   */
+  it('leest de klantnaam uit display_value, niet uit text', async () => {
+    const documents: string[] = [];
+    const client = {
+      query: <T>(document: string): Promise<T> => {
+        documents.push(document);
+        return Promise.resolve({
+          boards: [
+            {
+              items_page: page(
+                [
+                  {
+                    id: '1',
+                    column_values: [
+                      { id: 'datum_1', text: '2026-09-15' },
+                      { id: 'rel', linked_item_ids: ['a'] },
+                      { id: 'tijd', text: '09:30-12:30' },
+                      { id: 'bedrijf', text: null, display_value: 'Probiblio' },
+                    ],
+                  },
+                ],
+                null
+              ),
+            },
+          ],
+        } as T);
+      },
+    };
+
+    const scan = await readAgendaScan(client, {
+      boardId: 'b',
+      dateColumnId: 'datum_1',
+      trainerColumnIds: ['rel'],
+      timesColumnId: 'tijd',
+      clientColumnId: 'bedrijf',
+    });
+
+    expect(documents[0]).toContain('... on MirrorValue { display_value }');
+    expect(conflictsFor(scan, 'a', '2026-09-15', 'geen')).toEqual([
+      { itemId: '1', client: 'Probiblio', times: '09:30-12:30' },
+    ]);
+  });
+
+  /**
+   * Anders dan de datum- en relatiekolom zijn dit decoratieve velden: een hernoemde
+   * `Tijden` hoort een tijd te kosten, niet de hele scan — en daarmee de werklastkolommen
+   * waar de klacht over ging.
+   */
+  it('overleeft een ontbrekende tijd- en klantkolom', async () => {
+    const client = {
+      query: <T>(): Promise<T> =>
+        Promise.resolve({
+          boards: [
+            {
+              items_page: page(
+                [
+                  {
+                    id: '1',
+                    column_values: [
+                      { id: 'datum_1', text: '2026-09-15' },
+                      { id: 'rel', linked_item_ids: ['a'] },
+                    ],
+                  },
+                ],
+                null
+              ),
+            },
+          ],
+        } as T),
+    };
+
+    const scan = await readAgendaScan(client, {
+      boardId: 'b',
+      dateColumnId: 'datum_1',
+      trainerColumnIds: ['rel'],
+      timesColumnId: 'weg',
+      clientColumnId: 'ook-weg',
+    });
+
+    expect(conflictsFor(scan, 'a', '2026-09-15', 'geen')).toEqual([
+      { itemId: '1', client: null, times: null },
+    ]);
+  });
+
   describe('schema drift in the columns themselves', () => {
     const reply = (columns: unknown[]) => ({
       boards: [{ items_page: { cursor: null, items: [{ id: '1', column_values: columns }] } }],
@@ -179,14 +275,15 @@ describe('readAgendaScan', () => {
     const scanWith = (columns: unknown[]) =>
       readAgendaScan(
         {
-          query: <T,>(): Promise<T> =>
-            Promise.resolve(JSON.parse(JSON.stringify(reply(columns)))),
+          query: <T>(): Promise<T> => Promise.resolve(JSON.parse(JSON.stringify(reply(columns)))),
         },
         { boardId: '1', dateColumnId: 'datum_1', trainerColumnIds: ['rel'] }
       );
 
     it('throws when the date column is missing', async () => {
-      await expect(scanWith([{ id: 'rel', linked_item_ids: ['a'] }])).rejects.toThrow(/date column/);
+      await expect(scanWith([{ id: 'rel', linked_item_ids: ['a'] }])).rejects.toThrow(
+        /date column/
+      );
     });
 
     it('throws when the relation is missing or is not a relation', async () => {
@@ -194,7 +291,10 @@ describe('readAgendaScan', () => {
         /board relation/
       );
       await expect(
-        scanWith([{ id: 'datum_1', text: '2026-09-15' }, { id: 'rel', text: 'Jeroen' }])
+        scanWith([
+          { id: 'datum_1', text: '2026-09-15' },
+          { id: 'rel', text: 'Jeroen' },
+        ])
       ).rejects.toThrow(/board relation/);
     });
 
@@ -222,7 +322,7 @@ describe('readAgendaScan', () => {
     };
     await expect(
       readAgendaScan(
-        { query: <T,>(): Promise<T> => Promise.resolve(JSON.parse(JSON.stringify(body))) },
+        { query: <T>(): Promise<T> => Promise.resolve(JSON.parse(JSON.stringify(body))) },
         { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/repeated a pagination cursor/);
@@ -233,7 +333,7 @@ describe('readAgendaScan', () => {
     await expect(
       readAgendaScan(
         {
-          query: <T,>(): Promise<T> => {
+          query: <T>(): Promise<T> => {
             n += 1;
             const body =
               n === 1
@@ -265,7 +365,7 @@ describe('readAgendaScan', () => {
     await expect(
       readAgendaScan(
         {
-          query: <T,>(): Promise<T> => {
+          query: <T>(): Promise<T> => {
             n += 1;
             const body =
               n === 1
@@ -277,5 +377,86 @@ describe('readAgendaScan', () => {
         { boardId: '1', dateColumnId: 'd', trainerColumnIds: ['r'] }
       )
     ).rejects.toThrow(/duplicate item ids/);
+  });
+});
+
+describe('dagbotsingen', () => {
+  const rows = [
+    {
+      itemId: 'deze',
+      date: '2026-09-15',
+      trainerItemIds: ['t1'],
+      times: '13:00-16:00',
+      client: 'Calduran',
+    },
+    {
+      itemId: 'ander',
+      date: '2026-09-15',
+      trainerItemIds: ['t1', 't2'],
+      times: '09:30-12:30',
+      client: 'Probiblio',
+    },
+    {
+      itemId: 'andere-dag',
+      date: '2026-09-16',
+      trainerItemIds: ['t1'],
+      times: '09:30-12:30',
+      client: 'Gemeente Gouda',
+    },
+  ];
+
+  it('indexeert per trainer per dag, met klant en tijd', () => {
+    const scan = buildAgendaScan(rows);
+
+    expect(conflictsFor(scan, 't2', '2026-09-15', 'deze')).toEqual([
+      { itemId: 'ander', client: 'Probiblio', times: '09:30-12:30' },
+    ]);
+  });
+
+  /**
+   * Zonder deze uitsluiting botst elke gekoppelde trainer met de sessie die de planner op
+   * dat moment vóór zich heeft — een waarschuwing op precies de verkeerde rijen.
+   */
+  it('sluit de training zelf uit', () => {
+    const scan = buildAgendaScan(rows);
+
+    const uit = conflictsFor(scan, 't1', '2026-09-15', 'deze');
+
+    expect(uit.map((c) => c.itemId)).toEqual(['ander']);
+  });
+
+  it('telt een andere dag niet mee', () => {
+    const scan = buildAgendaScan(rows);
+
+    expect(conflictsFor(scan, 't1', '2026-09-17', 'deze')).toEqual([]);
+  });
+
+  /** Een training zonder datum hoort nergens; hij mag geen enkele dag vullen. */
+  it('negeert een training zonder datum', () => {
+    const scan = buildAgendaScan([
+      { itemId: 'x', date: null, trainerItemIds: ['t1'], times: null, client: null },
+    ]);
+
+    expect(scan.dayIndex.get('t1')).toBeUndefined();
+    expect(scan.dateByItemId.get('x')).toBeNull();
+  });
+
+  /**
+   * Gescand-maar-datumloos en nooit-gescand moeten uit elkaar te houden zijn, net als bij
+   * de maand: het eerste weet dat er geen dag is, het tweede weet niets.
+   */
+  it('houdt "gescand zonder datum" en "niet gescand" uit elkaar', () => {
+    const scan = buildAgendaScan([
+      { itemId: 'x', date: null, trainerItemIds: [], times: null, client: null },
+    ]);
+
+    expect(scan.dateByItemId.has('x')).toBe(true);
+    expect(scan.dateByItemId.has('nooit-gezien')).toBe(false);
+  });
+
+  it('leest de dag uit een Monday-datumcel', () => {
+    expect(dayKeyOf('2026-09-15')).toBe('2026-09-15');
+    expect(dayKeyOf('2026-09')).toBeNull();
+    expect(dayKeyOf(null)).toBeNull();
   });
 });

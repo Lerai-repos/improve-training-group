@@ -8,7 +8,9 @@ import { WORKLOAD_CRON_DEADLINE_MS } from '../deps';
 import { buildAgendaScan, countsFor } from '../assignments';
 import { createMemoryKvStore } from '../kv';
 
-const rows = [{ itemId: 'training-1', date: '2026-09-15', trainerItemIds: ['a'] }];
+const rows = [
+  { itemId: 'training-1', date: '2026-09-15', trainerItemIds: ['a'], times: null, client: null },
+];
 const scan = buildAgendaScan(rows);
 
 const noSleep = (): Promise<void> => Promise.resolve();
@@ -18,6 +20,8 @@ const encoded = (value: typeof scan): string =>
   JSON.stringify({
     workload: [...value.workload].map(([trainer, months]) => [trainer, [...months]]),
     months: [...value.monthByItemId],
+    dates: [...value.dateByItemId],
+    days: [...value.dayIndex].map(([trainer, days]) => [trainer, [...days]]),
   });
 
 function harness(load: () => Promise<typeof scan>) {
@@ -58,7 +62,7 @@ describe('createCachedAssignments', () => {
     });
     await cache.read();
 
-    expect(await kv.ttl('assignments:5087396949')).toEqual({
+    expect(await kv.ttl('assignments:v2:5087396949')).toEqual({
       kind: 'expires',
       ms: ASSIGNMENTS_TTL_MS,
     });
@@ -115,7 +119,7 @@ describe('createCachedAssignments', () => {
 
     await expect(h.cache.read()).rejects.toThrow(/unreadable page/);
     // Something IS remembered — but as "unavailable", not as a scan with nobody in it.
-    expect(await h.kv.get('assignments:5087396949')).not.toBeNull();
+    expect(await h.kv.get('assignments:v2:5087396949')).not.toBeNull();
     await expect(h.cache.read()).rejects.toThrow(/unavailable/);
   });
 
@@ -205,8 +209,8 @@ describe('createCachedAssignments', () => {
   it('round-trips a board containing undated trainings', async () => {
     let scans = 0;
     const withUndated = buildAgendaScan([
-      { itemId: 'dated', date: '2026-09-15', trainerItemIds: ['a'] },
-      { itemId: 'undated', date: null, trainerItemIds: ['a'] },
+      { itemId: 'dated', date: '2026-09-15', trainerItemIds: ['a'], times: null, client: null },
+      { itemId: 'undated', date: null, trainerItemIds: ['a'], times: null, client: null },
     ]);
     const h = harness(() => {
       scans += 1;
@@ -264,7 +268,7 @@ describe('createCachedAssignments', () => {
       scans += 1;
       return Promise.resolve(scan);
     });
-    await h.kv.set('assignments:5087396949', '{not json');
+    await h.kv.set('assignments:v2:5087396949', '{not json');
 
     await h.cache.read();
 
@@ -279,8 +283,8 @@ describe('createCachedAssignments', () => {
  */
 describe('the workload refresh', () => {
   const other = buildAgendaScan([
-    { itemId: 'training-2', date: '2026-09-20', trainerItemIds: ['a'] },
-    { itemId: 'training-3', date: '2026-09-21', trainerItemIds: ['a'] },
+    { itemId: 'training-2', date: '2026-09-20', trainerItemIds: ['a'], times: null, client: null },
+    { itemId: 'training-3', date: '2026-09-21', trainerItemIds: ['a'], times: null, client: null },
   ]);
 
   it('fills an empty cache', async () => {
@@ -291,9 +295,9 @@ describe('the workload refresh', () => {
 
     const peeked = await h.cache.peek();
     expect(peeked.kind).toBe('hit');
-    expect(peeked.kind === 'hit' && countsFor(peeked.value.workload, 'a', '2026-09').thisMonth).toBe(
-      1
-    );
+    expect(
+      peeked.kind === 'hit' && countsFor(peeked.value.workload, 'a', '2026-09').thisMonth
+    ).toBe(1);
   });
 
   it('replaces a cached scan with the newer one', async () => {
@@ -305,9 +309,9 @@ describe('the workload refresh', () => {
     await h.cache.refresh();
 
     const peeked = await h.cache.peek();
-    expect(peeked.kind === 'hit' && countsFor(peeked.value.workload, 'a', '2026-09').thisMonth).toBe(
-      2
-    );
+    expect(
+      peeked.kind === 'hit' && countsFor(peeked.value.workload, 'a', '2026-09').thisMonth
+    ).toBe(2);
   });
 
   /**
@@ -320,7 +324,9 @@ describe('the workload refresh', () => {
    */
   it('leaves a cached scan untouched when the rescan fails', async () => {
     let fail = false;
-    const h = harness(() => (fail ? Promise.reject(new Error('Monday down')) : Promise.resolve(scan)));
+    const h = harness(() =>
+      fail ? Promise.reject(new Error('Monday down')) : Promise.resolve(scan)
+    );
     await h.cache.refresh();
 
     fail = true;
@@ -382,7 +388,7 @@ describe('the workload refresh', () => {
 
     await expect(cache.refresh()).rejects.toThrow('Monday down');
 
-    const ttl = await kv.ttl('assignments:5087396949');
+    const ttl = await kv.ttl('assignments:v2:5087396949');
     expect(ttl.kind).toBe('expires');
     expect(ttl.kind === 'expires' && ttl.ms).toBeLessThan(ASSIGNMENTS_TTL_MS);
   });
@@ -471,7 +477,7 @@ describe('the workload refresh', () => {
           turns += 1;
           if (turns === HOLDER_GIVES_UP_AFTER) {
             // The warm-up's deadline expires: it records its cold failure, then releases.
-            await kv.set('assignments:5087396949', '"unavailable"', { ttlMs: 30_000 });
+            await kv.set('assignments:v2:5087396949', '"unavailable"', { ttlMs: 30_000 });
             await kv.del('assignments-lock:5087396949');
           }
         },
@@ -535,7 +541,7 @@ describe('the workload refresh', () => {
           turns += 1;
           // Sentinel first, lock released only a turn later — the gap that matters.
           if (turns === 2) {
-            await kv.set('assignments:5087396949', '"unavailable"', { ttlMs: 30_000 });
+            await kv.set('assignments:v2:5087396949', '"unavailable"', { ttlMs: 30_000 });
           }
           if (turns === 4) {
             await kv.del('assignments-lock:5087396949');
@@ -585,7 +591,7 @@ describe('the workload refresh', () => {
         },
         // While we wait, the holder records its failure and releases the lock.
         sleep: async () => {
-          await kv.set('assignments:5087396949', '"unavailable"', { ttlMs: 30_000 });
+          await kv.set('assignments:v2:5087396949', '"unavailable"', { ttlMs: 30_000 });
           await kv.del('assignments-lock:5087396949');
         },
       });
@@ -611,7 +617,7 @@ describe('the workload refresh', () => {
           return Promise.resolve(scan);
         },
         sleep: async () => {
-          await kv.set('assignments:5087396949', encoded(scan), { ttlMs: 60_000 });
+          await kv.set('assignments:v2:5087396949', encoded(scan), { ttlMs: 60_000 });
           await kv.del('assignments-lock:5087396949');
         },
       });
@@ -684,10 +690,15 @@ describe('the workload refresh', () => {
     const cron = config.crons?.find((entry) => entry.path === '/api/cron/refresh-workload');
     expect(cron, 'the refresh cron must be scheduled').toBeDefined();
 
-    const minutes = /^\*\/(\d+) \* \* \* \*$/.exec(cron?.schedule ?? '');
-    expect(minutes, `unexpected schedule ${cron?.schedule}`).not.toBeNull();
+    // Twee vormen, allebei expliciet: de stap-vorm (`*/n * * * *`) en elke minuut
+    // (`* * * * *`). Alles daarbuiten faalt met opzet — een cadans die dit patroon niet
+    // matcht hoort hier gelezen te worden, niet stilzwijgend als "prima" door te glippen.
+    const schedule = cron?.schedule ?? '';
+    const elkeMinuut = schedule === '* * * * *';
+    const minutes = /^\*\/(\d+) \* \* \* \*$/.exec(schedule);
+    expect(elkeMinuut || minutes !== null, `unexpected schedule ${schedule}`).toBe(true);
 
-    const intervalMs = Number(minutes?.[1]) * 60 * 1000;
+    const intervalMs = (elkeMinuut ? 1 : Number(minutes?.[1])) * 60 * 1000;
     /**
      * Three intervals is not three chances: a value written at T0 with a life of exactly
      * three intervals expires *as* the third run starts, and that run still needs its

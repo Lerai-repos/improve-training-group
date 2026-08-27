@@ -27,9 +27,15 @@ const EUR = new Intl.NumberFormat('nl-NL', {
   maximumFractionDigits: 2,
 });
 
-const GRADE = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const GRADE = new Intl.NumberFormat('nl-NL', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 
-const HOURS = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const HOURS = new Intl.NumberFormat('nl-NL', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 const CENTS_PER_EURO = 100;
 const MINUTES_PER_HOUR = 60;
@@ -73,4 +79,44 @@ export const FAILURE_STAGE_LABELS: Record<string, string> = {
 
 export function failureMessage(stage: string): string {
   return FAILURE_STAGE_LABELS[stage] ?? `De berekening is gestopt bij: ${stage}.`;
+}
+
+/**
+ * Hoeveel botsingen er in de regel zelf passen.
+ *
+ * De tabel is vijftien kolommen breed en dit staat ónder de naam, dus de ruimte is
+ * verticaal genoeg maar horizontaal krap. Twee is wat ITG in de praktijk heeft — ochtend
+ * plus middag, zie de twee-sessies-op-één-dag-regel — en al het overige wordt geteld in
+ * plaats van uitgeschreven. De volledige lijst staat in de tooltip.
+ */
+const MAX_INLINE_CONFLICTS = 2;
+
+/** `Probiblio, 09:30-12:30`, met weglating van wat er niet is. */
+export function conflictText(conflict: { client: string | null; times: string | null }): string {
+  return [conflict.client, conflict.times]
+    .filter((deel) => deel !== null && deel !== '')
+    .join(', ');
+}
+
+/**
+ * De regel onder de naam: wát die dag al staat, niet of het botst.
+ *
+ * `Tijden` is vrije tekst zonder vormgarantie, dus er wordt niets geparsed en niets
+ * geconcludeerd. Twee sessies op één dag is bij ITG legitiem; de planner leest de tijden
+ * en beslist zelf.
+ */
+export function dayConflictLabel(
+  conflicts: readonly { client: string | null; times: string | null }[]
+): string | null {
+  if (conflicts.length === 0) {
+    return null;
+  }
+  const beschreven = conflicts.map(conflictText).filter((tekst) => tekst !== '');
+  if (beschreven.length === 0) {
+    // Bekend dat er iets staat, onbekend wát — nog steeds het melden waard.
+    return 'Al ingepland';
+  }
+  const getoond = beschreven.slice(0, MAX_INLINE_CONFLICTS).join(' · ');
+  const rest = beschreven.length - MAX_INLINE_CONFLICTS;
+  return rest > 0 ? `Al ingepland — ${getoond} +${rest}` : `Al ingepland — ${getoond}`;
 }

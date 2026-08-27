@@ -13,7 +13,8 @@
  * |---|---|
  * | `view` | see the list at all (`GET`) |
  * | `plan`  | recalculate, and set `Benaderd` |
- * | `full`  | see rates, totals and scores rather than the restricted shape |
+ * | `full`  | see rates, totals and scores rather than the restricted shape, plus the
+ *   client and time of a trainer's other trainings that same day |
  *
  * A ladder — `view ⊂ plan ⊂ full` — is the tempting shape and the wrong one: it makes
  * "may see exact rates" imply "may spend money on recomputation and edit shared state",
@@ -37,6 +38,30 @@
  * *pick*, because that writes client-side as the logged-in user — but they do not govern
  * our read. Narrowing it means naming users in the map instead.
  *
+ * ## What `full` grants beyond money, and why that was a deliberate choice
+ *
+ * The dagbotsing-label shows what else a trainer has on the day being planned. The bare
+ * FACT travels with `plan`, because that is what the Kies-button hangs on and a warning
+ * belongs with the action it warns about. The **client name and the time** travel with
+ * `full`, and that is a widening of "rates, totals and scores" rather than something the
+ * old wording already covered.
+ *
+ * It is recorded here because the account-wide caveat above applies to it in full: `full`
+ * is no more board-scoped than `plan` is, so this reaches ITG account members who cannot
+ * open the Agenda board. The reasoning ITG accepted (27-Aug-2026):
+ *
+ * - the same policy already grants **every trainer's hourly rate** on this key, and a
+ *   booking is markedly less sensitive than remuneration;
+ * - the restricted shape already carries `assignmentsThisMonth` and `assignmentsThisYear`,
+ *   which are counts derived from this same Agenda scan, so board-derived data was never
+ *   the line `full` drew;
+ * - verifying real board access would need the user's own token on our read path, and we
+ *   read with a service token — which is exactly why the pick writes client-side instead.
+ *
+ * What this is NOT: a statement that holding `full` proves Agenda-board access. It does
+ * not. Anyone narrowing this later should gate the detail on its own capability rather
+ * than reading board access into an existing one.
+ *
  * Unset still means NOBODY has access. An empty configuration must deny rather than
  * expose trainer rates, so opening it up stays an explicit act.
  */
@@ -54,7 +79,7 @@ export interface Capabilities {
   view: boolean;
   /** May recalculate and set `Benaderd`. */
   plan: boolean;
-  /** May see rates, totals and scores. */
+  /** May see rates, totals and scores, plus same-day schedule details of other trainings. */
   full: boolean;
 }
 
@@ -77,7 +102,9 @@ export function parseCapabilityList(raw: string, source: string): ReadonlySet<Ca
       continue;
     }
     if (!isCapability(name)) {
-      throw new Error(`${source}: unknown capability "${name}" (expected ${CAPABILITIES.join(', ')})`);
+      throw new Error(
+        `${source}: unknown capability "${name}" (expected ${CAPABILITIES.join(', ')})`
+      );
     }
     caps.add(name);
   }
@@ -169,9 +196,17 @@ export function capabilityPolicyFromEnv(): CapabilityPolicy {
    * otherwise validate cleanly while granting the whole account a capability none of them
    * can reach — and the symptom, everyone getting 403, looks nothing like the cause.
    */
-  assertReachable('MONDAY_RECOMMENDATION_DEFAULT_CAPS', capabilitiesFor(NOBODY, policy), 'the default');
+  assertReachable(
+    'MONDAY_RECOMMENDATION_DEFAULT_CAPS',
+    capabilitiesFor(NOBODY, policy),
+    'the default'
+  );
   for (const [userId] of policy.map) {
-    assertReachable('MONDAY_RECOMMENDATION_CAPS', capabilitiesFor(userId, policy), `user ${userId}`);
+    assertReachable(
+      'MONDAY_RECOMMENDATION_CAPS',
+      capabilitiesFor(userId, policy),
+      `user ${userId}`
+    );
   }
 
   return policy;

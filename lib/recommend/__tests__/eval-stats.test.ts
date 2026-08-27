@@ -123,7 +123,9 @@ describe('staleness', () => {
     const kv = createMemoryKvStore();
     await write(kv, [row()], 'niet een datum');
 
-    await expect(readTrainerThemeStats(createStatsStore(kv))).rejects.toThrow(/unreadable writtenAt/);
+    await expect(readTrainerThemeStats(createStatsStore(kv))).rejects.toThrow(
+      /unreadable writtenAt/
+    );
   });
 });
 

@@ -94,7 +94,12 @@ function deps(over: Partial<ServiceDeps> = {}): { deps: ServiceDeps; spies: Spie
     addressFormatter: {
       format: () => {
         spies.addressCalls += 1;
-        return Promise.resolve({ kind: 'travel_required', formatted: 'Dest 1', city: 'Utrecht', precision: 'exact' as const });
+        return Promise.resolve({
+          kind: 'travel_required',
+          formatted: 'Dest 1',
+          city: 'Utrecht',
+          precision: 'exact' as const,
+        });
       },
     },
     travelProvider: {

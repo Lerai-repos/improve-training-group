@@ -89,7 +89,10 @@ describe('checkWhatsappColumns', () => {
 
   it('reports a relation repointed at another board', () => {
     const board = healthyBoard();
-    board.set(spec('themaRelation').id, { type: 'board_relation', settingsStr: '{"boardIds":[42]}' });
+    board.set(spec('themaRelation').id, {
+      type: 'board_relation',
+      settingsStr: '{"boardIds":[42]}',
+    });
 
     expect(checkWhatsappColumns(allPresent(), board, SPECS)).toEqual([
       { field: 'themaRelation', columnId: spec('themaRelation').id, reason: 'settings' },

@@ -5,8 +5,21 @@ import type { OutcomeStore } from './outcome';
 import type { QueueStore } from './queue-store';
 import { log } from '@lib/logger';
 
-import { countsFor } from './assignments';
-import { toPublicRows, type PublicRow, type WorkloadLookup } from './view-dto';
+import { conflictsFor, countsFor } from './assignments';
+
+import type { DayConflict } from './assignments';
+import {
+  toPublicRows,
+  type DayConflictLookup,
+  type PublicRow,
+  type WorkloadLookup,
+} from './view-dto';
+
+/** Workload and day conflicts come from one scan, so they are resolved from one `peek`. */
+interface ScanLookups {
+  workload: WorkloadLookup;
+  dayConflicts: DayConflictLookup;
+}
 import type { CachedAssignments } from './assignment-cache';
 
 /**
@@ -90,7 +103,7 @@ export interface ViewDeps {
    *
    * Only used to warm a cold workload cache. Optional because nothing depends on it:
    * without it the miss simply stays a miss until the cron's next run, which is at most
-   * five minutes. A floating promise instead of this would be killed the moment the
+   * the cron interval. A floating promise instead of this would be killed the moment the
    * serverless response is flushed, so the scan would be started and never finished —
    * the same Monday cost as a real refresh, with none of the benefit.
    */
@@ -204,12 +217,17 @@ async function resolveState(
     detail.rows.map((row) => row.trainerItemId)
   );
 
-  const workload = await resolveWorkload(deps, mondayItemId, detail.trainingMonth, caps);
+  const { workload, dayConflicts } = await resolveWorkload(
+    deps,
+    mondayItemId,
+    detail.trainingMonth,
+    caps
+  );
 
   return {
     kind: 'ready',
     generation,
-    rows: toPublicRows(detail.rows, marked, caps, workload),
+    rows: toPublicRows(detail.rows, marked, caps, workload, dayConflicts),
     duurTraining: detail.duurTraining,
     // Only a caller who can see the travel columns can be misled by them.
     travelPrecision: caps.full ? detail.travelPrecision : null,
@@ -227,9 +245,16 @@ async function resolveWorkload(
   mondayItemId: string,
   storedMonth: string | null,
   caps: Capabilities
-): Promise<WorkloadLookup> {
-  const none: WorkloadLookup = () => null;
-  if (!caps.full || deps.assignments === undefined) {
+): Promise<ScanLookups> {
+  const none: ScanLookups = { workload: () => null, dayConflicts: () => [] };
+  /**
+   * `plan` is genoeg voor de dagbotsingen, `full` blijft nodig voor de werklastkolommen.
+   *
+   * Die twee hangen aan verschillende dingen: de kolommen tonen tarieven en kosten, het
+   * label toont een datum en een klantnaam die al op het bord staan. Ze samen achter
+   * `full` zetten laat precies de gebruiker die op Kies drukt de waarschuwing missen.
+   */
+  if (deps.assignments === undefined || !(caps.full || caps.plan)) {
     return none;
   }
   try {
@@ -249,7 +274,14 @@ async function resolveWorkload(
        * every poll — the view refreshes every 20 seconds, from every open tab — from
        * starting the same doomed scan for as long as Monday is down.
        */
-      if (peeked.kind === 'miss') {
+      /**
+       * Alleen een `full`-lezer warmt de cache op.
+       *
+       * De oorspronkelijke regel was dat een beperkte lezer nooit een bordscan op zijn
+       * naam mag starten. Die regel blijft letterlijk overeind: hij leest wat er ligt en
+       * ziet bij een misser geen label, maar hij zet geen scan in gang.
+       */
+      if (peeked.kind === 'miss' && caps.full) {
         deps.warm?.(deps.assignments.refresh());
       }
       return none;
@@ -274,7 +306,41 @@ async function resolveWorkload(
     if (month === null || month === undefined) {
       return none;
     }
-    return (trainerItemId) => countsFor(scan.workload, trainerItemId, month);
+    /**
+     * The day comes from the SAME scan, and only from it.
+     *
+     * There is no stored fallback for the date the way there is for the month, and that is
+     * the honest outcome: an item the scan did not cover has no day we can trust, so it
+     * reports no conflicts rather than guessing from a stale one. `conflictsFor` drops the
+     * training itself, or every linked trainer would collide with the very session on
+     * screen.
+     */
+    const day = scan.dateByItemId.get(mondayItemId) ?? null;
+
+    /**
+     * Wie geen tarieven mag zien, krijgt het FEIT zonder de inhoud.
+     *
+     * `plan` zegt niets over toegang tot het agendabord: de standaardrechten zijn
+     * account-breed en niet bord-gebonden, dus een `plan`-houder kan iemand zijn die dat
+     * bord helemaal niet mag openen (zie `capabilities.ts`). Klantnaam en tijdstip van een
+     * ándere training zijn bordgegevens; die horen dus achter `full`.
+     *
+     * Wat overblijft is "deze trainer staat die dag al ergens", en dat is precies wat de
+     * waarschuwing moet doen bij de knop die eraan hangt. Het label maakt daar vanzelf
+     * "Al ingepland" van — dezelfde weg als een hernoemde kolom.
+     */
+    const zichtbaar = (botsing: DayConflict): DayConflict =>
+      caps.full ? botsing : { itemId: botsing.itemId, client: null, times: null };
+    return {
+      // De kolommen blijven `full`-only; alleen het label zakt door naar `plan`.
+      workload: caps.full
+        ? (trainerItemId) => countsFor(scan.workload, trainerItemId, month)
+        : () => null,
+      dayConflicts:
+        day === null
+          ? () => []
+          : (trainerItemId) => conflictsFor(scan, trainerItemId, day, mondayItemId).map(zichtbaar),
+    };
   } catch (error) {
     // Degrade, never zero: the list is still correct and worth showing.
     log.warn('recommendations: workload unavailable, rendering it as unknown', {

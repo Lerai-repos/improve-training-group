@@ -88,7 +88,10 @@ describe('handleRecalculate', () => {
     const h = harness();
 
     await handleRecalculate(h.recalculate, { mondayItemId: ITEM, body: { actionId: ACTION } });
-    await handleRecalculate(h.recalculate, { mondayItemId: ITEM, body: { actionId: 'f6e5d4c3b2a1' } });
+    await handleRecalculate(h.recalculate, {
+      mondayItemId: ITEM,
+      body: { actionId: 'f6e5d4c3b2a1' },
+    });
 
     expect(await h.store.readGeneration(ITEM)).toBe(2);
   });
@@ -131,7 +134,10 @@ describe('handleRecalculate', () => {
     const h = harness();
 
     for (const actionId of ['short', `x:${ITEM}:1`, 'a'.repeat(65), '', 'has spaces']) {
-      const result = await handleRecalculate(h.recalculate, { mondayItemId: ITEM, body: { actionId } });
+      const result = await handleRecalculate(h.recalculate, {
+        mondayItemId: ITEM,
+        body: { actionId },
+      });
       expect(result.status).toBe(400);
     }
     expect(h.published).toEqual([]);
@@ -141,7 +147,9 @@ describe('handleRecalculate', () => {
     const h = harness();
 
     for (const body of [null, {}, { actionId: 42 }, 'nope']) {
-      expect((await handleRecalculate(h.recalculate, { mondayItemId: ITEM, body })).status).toBe(400);
+      expect((await handleRecalculate(h.recalculate, { mondayItemId: ITEM, body })).status).toBe(
+        400
+      );
     }
   });
 
@@ -161,7 +169,9 @@ describe('handleApproached', () => {
     await h.outcomes.claim(ITEM, 1, {
       kind: 'ready',
       settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
-      trainingMonth: null, duurTraining: null, travelPrecision: null,
+      trainingMonth: null,
+      duurTraining: null,
+      travelPrecision: null,
       rows: trainerIds.map((trainerItemId, index) => storedRow({ trainerItemId, rank: index + 1 })),
     });
   }
@@ -242,7 +252,10 @@ describe('handleApproached', () => {
   it('refuses when there is no ranked list to annotate', async () => {
     const h = harness();
     await h.store.enqueueOrGet({ triggerUuid: 'u1', mondayItemId: ITEM, nowMs: 0 });
-    await h.outcomes.claim(ITEM, 1, { kind: 'no_match', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } });
+    await h.outcomes.claim(ITEM, 1, {
+      kind: 'no_match',
+      settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+    });
 
     const result = await handleApproached(h.approachedDeps, {
       mondayItemId: ITEM,

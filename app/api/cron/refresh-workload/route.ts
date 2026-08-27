@@ -15,10 +15,15 @@ const RUN_DEADLINE_MS = 240_000;
 /**
  * GET /api/cron/refresh-workload — rescan the Agenda board and refill the workload cache.
  *
- * Every five minutes (`vercel.json`), against a cache that lives fifteen. That ratio is
- * the fix, not the scan: three consecutive runs have to fail before "opdrachten deze
- * maand" and "opdrachten dit jaar" can go blank, and until then a slightly older count
- * is served instead of nothing.
+ * Every minute (`vercel.json`), against a cache that lives twenty. That ratio is the fix,
+ * not the scan: many consecutive runs have to fail before "opdrachten deze maand" and
+ * "opdrachten dit jaar" can go blank, and until then a slightly older count is served
+ * instead of nothing.
+ *
+ * A minute rather than five, because this snapshot also feeds the dagbotsing-label, and a
+ * warning that arrives late is worse than a count that does. Two paginated calls per run
+ * (~840 items at 500 per page) is ~2.900 per day against a 25.000/day budget, and
+ * `publish-pending` already runs on the same cadence.
  *
  * Before this existed the scan ran on the planner's own request under a six-second
  * budget while taking 5.5–8.5 seconds, so it lost about one time in three and the
@@ -50,7 +55,7 @@ export async function GET(request: Request): Promise<NextResponse> {
        * The likeliest holder is a planner's own warm-up on the request path, and that
        * one budgets six seconds against a scan that needs eight. Accepting `locked` as
        * success would let a warm-up time out and leave both columns blank for the next
-       * five minutes while this route reported 200. So it waits for the holder and takes
+       * minutes while this route reported 200. So it waits for the holder and takes
        * over with its own sixty-second budget if nothing came of it.
        */
       deps.assignments.refresh({ awaitContended: true })

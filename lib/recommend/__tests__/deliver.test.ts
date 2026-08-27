@@ -42,9 +42,7 @@ describe('deliverOutcome', () => {
     );
 
     expect(result).toEqual({ delivered: true, repairPublished: false });
-    expect(writer.writes).toEqual([
-      { itemId: ITEM, label: 'GEREED', idempotencyKey: `${ITEM}:1` },
-    ]);
+    expect(writer.writes).toEqual([{ itemId: ITEM, label: 'GEREED', idempotencyKey: `${ITEM}:1` }]);
     expect(pub.published).toEqual([]);
   });
 
@@ -82,7 +80,11 @@ describe('deliverOutcome', () => {
       publisher: pub,
       newRepairId: () => 'r1',
       writer: {
-        async writeStatus(itemId: string, label: 'GEREED' | 'GEEN MATCH' | 'FOUT', opts?: { idempotencyKey?: string }) {
+        async writeStatus(
+          itemId: string,
+          label: 'GEREED' | 'GEEN MATCH' | 'FOUT',
+          opts?: { idempotencyKey?: string }
+        ) {
           // A second trigger lands while our mutation is in flight.
           await store.enqueueOrGet({ triggerUuid: 'racer', mondayItemId: ITEM, nowMs: 0 });
           await racingWriter.writeStatus(itemId, label, opts);
@@ -120,7 +122,11 @@ describe('deliverOutcome', () => {
       newRepairId: () => 'r1',
       publisher: { publish: () => Promise.reject(new Error('QStash unavailable')) },
       writer: {
-        async writeStatus(itemId: string, label: 'GEREED' | 'GEEN MATCH' | 'FOUT', opts?: { idempotencyKey?: string }) {
+        async writeStatus(
+          itemId: string,
+          label: 'GEREED' | 'GEEN MATCH' | 'FOUT',
+          opts?: { idempotencyKey?: string }
+        ) {
           await store.enqueueOrGet({ triggerUuid: 'racer', mondayItemId: ITEM, nowMs: 0 });
           await writer.writeStatus(itemId, label, opts);
         },
@@ -162,7 +168,11 @@ describe('deliverOutcome', () => {
       publisher: pub,
       newRepairId: () => `attempt-${(attempt += 1)}`,
       writer: {
-        async writeStatus(itemId: string, label: 'GEREED' | 'GEEN MATCH' | 'FOUT', opts?: { idempotencyKey?: string }) {
+        async writeStatus(
+          itemId: string,
+          label: 'GEREED' | 'GEEN MATCH' | 'FOUT',
+          opts?: { idempotencyKey?: string }
+        ) {
           // ONE newer trigger arrives, so both in-flight executions see the same
           // `after` — which is exactly when a target-keyed id would collide.
           if (!bumped) {
@@ -193,7 +203,11 @@ describe('deliverOutcome', () => {
       queue: store,
       publisher: pub,
       writer: {
-        async writeStatus(itemId: string, label: 'GEREED' | 'GEEN MATCH' | 'FOUT', opts?: { idempotencyKey?: string }) {
+        async writeStatus(
+          itemId: string,
+          label: 'GEREED' | 'GEEN MATCH' | 'FOUT',
+          opts?: { idempotencyKey?: string }
+        ) {
           await store.enqueueOrGet({ triggerUuid: 'racer', mondayItemId: ITEM, nowMs: 0 });
           await writer.writeStatus(itemId, label, opts);
         },

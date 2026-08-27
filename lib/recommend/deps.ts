@@ -147,6 +147,9 @@ function workloadCache(kv: KvStore, board: string, deadlineMs: number): CachedAs
           boardId: board,
           dateColumnId: AGENDA_2026_COLUMNS.datum,
           trainerColumnIds: trainerRelationIds(AGENDA_2026_COLUMNS),
+          // Decoratie voor het dagbotsing-label: welke training, en hoe laat.
+          timesColumnId: AGENDA_2026_COLUMNS.tijd,
+          clientColumnId: AGENDA_2026_COLUMNS.companyMirror,
         }
       );
     },
@@ -346,30 +349,32 @@ export async function buildWorkerDeps(): Promise<{
   return {
     settings: provenanceOf(settings),
     deps: {
-    reader: createMondayReader(client),
-    roster: await readRoster(client, ITEM_FIELDS),
-    evaluations,
-    addressFormatter: createAddressFormatter(
-      createOpenRouterCompletion(requireEnv('OPENROUTER_API_KEY'))
-    ),
-    travelProvider: createRoutesProvider(
-      createGoogleRoutesTransport(requireEnv('GOOGLE_MAPS_API_KEY'))
-    ),
-    // Shared across invocations now, so a cold start no longer re-pays for routes
-    // another instance already looked up. Only keyed fingerprints and distances are
-    // stored — never a raw address.
-    travelCache: createTravelCache(createKvTravelCacheStore(createUpstashKvStore(createRedisClient()))),
-    // The town the address step resolved, kept for the WhatsApp message to read later.
-    // Best-effort on both sides: nothing in a run depends on it.
-    cityStore: createCityStore(createUpstashKvStore(createRedisClient())),
-    statusWriter: createMondayStatusWriter({
-      token,
-      apiVersion: MONDAY_API_VERSION,
-      boardId: agendaBoardId(),
-    }),
-    ack: ACK,
-    config: buildEngineConfig({ settings, ackVersion: ACK_VERSION }),
-    owner: newWorkerOwner(),
+      reader: createMondayReader(client),
+      roster: await readRoster(client, ITEM_FIELDS),
+      evaluations,
+      addressFormatter: createAddressFormatter(
+        createOpenRouterCompletion(requireEnv('OPENROUTER_API_KEY'))
+      ),
+      travelProvider: createRoutesProvider(
+        createGoogleRoutesTransport(requireEnv('GOOGLE_MAPS_API_KEY'))
+      ),
+      // Shared across invocations now, so a cold start no longer re-pays for routes
+      // another instance already looked up. Only keyed fingerprints and distances are
+      // stored — never a raw address.
+      travelCache: createTravelCache(
+        createKvTravelCacheStore(createUpstashKvStore(createRedisClient()))
+      ),
+      // The town the address step resolved, kept for the WhatsApp message to read later.
+      // Best-effort on both sides: nothing in a run depends on it.
+      cityStore: createCityStore(createUpstashKvStore(createRedisClient())),
+      statusWriter: createMondayStatusWriter({
+        token,
+        apiVersion: MONDAY_API_VERSION,
+        boardId: agendaBoardId(),
+      }),
+      ack: ACK,
+      config: buildEngineConfig({ settings, ackVersion: ACK_VERSION }),
+      owner: newWorkerOwner(),
     },
   };
 }

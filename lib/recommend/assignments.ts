@@ -33,6 +33,9 @@ import { unionLinkedIds } from '@lib/monday/decode';
 /** `YYYY-MM`, exactly as Airtable's `Maandsleutel`. */
 export type MonthKey = string;
 
+/** `YYYY-MM-DD` — the same cell, one aggregation step earlier than the month. */
+export type DayKey = string;
+
 export interface AssignmentCounts {
   thisMonth: number;
   thisYear: number;
@@ -60,6 +63,13 @@ export interface AgendaScan {
    * month frozen in its stored rows.
    */
   monthByItemId: ReadonlyMap<string, MonthKey | null>;
+  /**
+   * Every scanned training's exact date, for the same reason the month is here: it is
+   * volatile, and a frozen one would report a conflict on a day the training left.
+   */
+  dateByItemId: ReadonlyMap<string, DayKey | null>;
+  /** trainer item id → day → the trainings that trainer already has on it. */
+  dayIndex: ReadonlyMap<string, ReadonlyMap<DayKey, readonly DayConflict[]>>;
 }
 
 /**
@@ -75,6 +85,20 @@ export function monthKeyOf(date: string | null | undefined): MonthKey | null {
   }
   const match = /^(\d{4})-(\d{2})/.exec(date.trim());
   return match ? `${match[1]}-${match[2]}` : null;
+}
+
+/**
+ * The day key for a Monday date cell.
+ *
+ * Same prefix trick as `monthKeyOf`, and the same reason: Monday renders `YYYY-MM-DD`, so
+ * there is nothing to parse and no timezone to get wrong.
+ */
+export function dayKeyOf(date: string | null | undefined): DayKey | null {
+  if (typeof date !== 'string') {
+    return null;
+  }
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(date.trim());
+  return match ? match[1] : null;
 }
 
 export function yearOf(month: MonthKey): string {
@@ -106,17 +130,40 @@ export interface AssignmentRow {
   itemId: string;
   date: string | null;
   trainerItemIds: readonly string[];
+  /** `Tijden`, verbatim ("09:30-12:30"). Free text — never parsed, only shown. */
+  times: string | null;
+  /** The `Bedrijf` mirror, so a conflict can say WHICH training it collides with. */
+  client: string | null;
+}
+
+/**
+ * One training a trainer already has on a given day.
+ *
+ * Deliberately carries no verdict. `Tijden` is free text with no format guarantee, so
+ * deciding whether 09:30-12:30 truly overlaps the session being planned would mean parsing
+ * it — a different project. Two sessions on one day is legitimate at ITG anyway (morning
+ * plus afternoon), so the honest output is the fact, not a judgement: here is what else is
+ * on that day, you decide.
+ */
+export interface DayConflict {
+  readonly itemId: string;
+  readonly client: string | null;
+  readonly times: string | null;
 }
 
 export function buildAgendaScan(rows: readonly AssignmentRow[]): AgendaScan {
   const workload = new Map<string, Map<MonthKey, number>>();
   const monthByItemId = new Map<string, MonthKey | null>();
+  const dateByItemId = new Map<string, DayKey | null>();
+  const dayIndex = new Map<string, Map<DayKey, DayConflict[]>>();
 
   for (const row of rows) {
     const month = monthKeyOf(row.date);
+    const day = dayKeyOf(row.date);
     // Recorded either way — an undated training is scanned and monthless, which is a
     // different fact from one the scan never saw.
     monthByItemId.set(row.itemId, month);
+    dateByItemId.set(row.itemId, day);
     if (month === null) {
       continue;
     }
@@ -124,9 +171,39 @@ export function buildAgendaScan(rows: readonly AssignmentRow[]): AgendaScan {
       const months = workload.get(trainerItemId) ?? new Map<MonthKey, number>();
       months.set(month, (months.get(month) ?? 0) + 1);
       workload.set(trainerItemId, months);
+
+      /**
+       * The day index is built from the SAME pass, which is the whole reason this is
+       * cheap: no extra read, no extra call, one more aggregation over rows we already
+       * walk. A dated month always yields a dated day, so this needs no second guard.
+       */
+      if (day !== null) {
+        const days = dayIndex.get(trainerItemId) ?? new Map<DayKey, DayConflict[]>();
+        const onDay = days.get(day) ?? [];
+        onDay.push({ itemId: row.itemId, client: row.client, times: row.times });
+        days.set(day, onDay);
+        dayIndex.set(trainerItemId, days);
+      }
     }
   }
-  return { workload, monthByItemId };
+  return { workload, monthByItemId, dateByItemId, dayIndex };
+}
+
+/**
+ * What else this trainer has on this day, excluding the training being planned.
+ *
+ * Excluding it is not a detail: a trainer already linked to THIS item would otherwise
+ * always collide with themselves, and every linked trainer would carry a warning about
+ * the very session the planner is looking at.
+ */
+export function conflictsFor(
+  scan: AgendaScan,
+  trainerItemId: string,
+  day: DayKey,
+  exceptItemId: string
+): readonly DayConflict[] {
+  const onDay = scan.dayIndex.get(trainerItemId)?.get(day) ?? [];
+  return onDay.filter((entry) => entry.itemId !== exceptItemId);
 }
 
 /** Kept for tests that only care about the counts. */
@@ -143,6 +220,8 @@ const pageSchema = z.object({
         z.object({
           id: z.string(),
           text: z.string().nullable().optional(),
+          /** Mirrors return `text: null` and put the value here. */
+          display_value: z.string().nullable().optional(),
           linked_item_ids: z.array(z.union([z.string(), z.number()])).optional(),
         })
       ),
@@ -165,6 +244,17 @@ interface ColumnIds {
    * rest van dit bestand tegen beschermt.
    */
   trainerColumnIds: readonly string[];
+  /**
+   * `Tijden` and `Bedrijf`, and both are OPTIONAL — deliberately unlike the two above.
+   *
+   * This file fails closed everywhere else, because a missing date or relation produces a
+   * plausible workload of zero that nobody can tell from a quiet month. These two are
+   * different in kind: they only decorate the day label. A renamed `Tijden` costs a time
+   * next to "al ingepland"; failing the whole scan over it would take down the workload
+   * columns Peter complained about in the first place, to protect a caption.
+   */
+  timesColumnId?: string;
+  clientColumnId?: string;
 }
 
 function readPage(
@@ -174,7 +264,9 @@ function readPage(
 ): { rows: AssignmentRow[]; cursor: string | null } {
   const container =
     first && typeof raw === 'object' && raw !== null && 'boards' in raw
-      ? (Array.isArray(raw.boards) ? raw.boards[0]?.items_page : undefined)
+      ? Array.isArray(raw.boards)
+        ? raw.boards[0]?.items_page
+        : undefined
       : typeof raw === 'object' && raw !== null && 'next_items_page' in raw
         ? raw.next_items_page
         : undefined;
@@ -208,7 +300,9 @@ function readPage(
      * missing column, or a relation that is not a relation, is schema drift.
      */
     if (date === undefined) {
-      throw new Error(`Agenda scan: date column "${columns.dateColumnId}" is missing from item ${item.id}`);
+      throw new Error(
+        `Agenda scan: date column "${columns.dateColumnId}" is missing from item ${item.id}`
+      );
     }
     /**
      * Elke genoemde kolom moet terugkomen, niet alleen de eerste. Ontbreekt de
@@ -223,10 +317,25 @@ function readPage(
       }
     );
 
+    /**
+     * Absent column, absent value and empty string all collapse to null: the label simply
+     * leaves that part out. There is nothing here worth distinguishing.
+     */
+    const decorative = (id: string | undefined): string | null => {
+      if (id === undefined) {
+        return null;
+      }
+      const cell = byId.get(id);
+      const value = cell?.display_value ?? cell?.text ?? '';
+      return value.trim() === '' ? null : value.trim();
+    };
+
     return {
       itemId: String(item.id),
       date: date.text ?? null,
       trainerItemIds,
+      times: decorative(columns.timesColumnId),
+      client: decorative(columns.clientColumnId),
     };
   });
   return { rows, cursor: parsed.data.cursor };
@@ -244,7 +353,13 @@ const MAX_PAGES = 8;
  */
 export async function readAgendaScan(
   client: QueryClient,
-  input: { boardId: string; dateColumnId: string; trainerColumnIds: readonly string[] }
+  input: {
+    boardId: string;
+    dateColumnId: string;
+    trainerColumnIds: readonly string[];
+    timesColumnId?: string;
+    clientColumnId?: string;
+  }
 ): Promise<AgendaScan> {
   // The column ids travel with the call rather than sitting in module state: they differ
   // per Agenda board year — the trap that made 202 trainings look trainer-less during the
@@ -252,10 +367,24 @@ export async function readAgendaScan(
   if (input.trainerColumnIds.length === 0) {
     throw new Error('Agenda scan: geen trainerkolom opgegeven; dat zou iedereen als vrij tellen');
   }
-  const columnIds = [input.dateColumnId, ...input.trainerColumnIds]
+  const columnIds = [
+    input.dateColumnId,
+    ...input.trainerColumnIds,
+    input.timesColumnId,
+    input.clientColumnId,
+  ]
+    .filter((id): id is string => id !== undefined)
     .map((id) => `"${id}"`)
     .join(',');
-  const fields = `id column_values(ids:[${columnIds}]){ id text ... on BoardRelationValue { linked_item_ids } }`;
+  /**
+   * `... on MirrorValue { display_value }` is not optional decoration.
+   *
+   * `Bedrijf` is a mirror, and a mirror returns `text: null` with the value in
+   * `display_value`. Without this fragment the client name comes back empty on every row
+   * and the label silently loses half its point — the exact failure the training header
+   * already hit once.
+   */
+  const fields = `id column_values(ids:[${columnIds}]){ id text ... on BoardRelationValue { linked_item_ids } ... on MirrorValue { display_value } }`;
   const all: AssignmentRow[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
@@ -308,5 +437,7 @@ export async function readAgendaScan(
    * authoritative — understating every trainer's workload, plausibly. The board is ~800
    * items against a 4000-item budget, so reaching this means something changed.
    */
-  throw new Error(`Agenda scan: more than ${MAX_PAGES * PAGE_SIZE} items, refusing a partial index`);
+  throw new Error(
+    `Agenda scan: more than ${MAX_PAGES * PAGE_SIZE} items, refusing a partial index`
+  );
 }

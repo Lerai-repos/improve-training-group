@@ -34,7 +34,6 @@ const qual = (
   conflicted: false,
 });
 
-
 describe('toStoredRows', () => {
   /**
    * The whole point of storing ids instead of names: a breach of the key/value store
@@ -82,7 +81,12 @@ describe('toStoredRows', () => {
    * from ~95 themes each until 2026-08-04.
    */
   it('reports an unassessed theme as null rather than red', () => {
-    const [row] = toStoredRows([ranked('t1', 1)], [qual('t1', 'th1', 'green')], ['th1', 'th2'], null);
+    const [row] = toStoredRows(
+      [ranked('t1', 1)],
+      [qual('t1', 'th1', 'green')],
+      ['th1', 'th2'],
+      null
+    );
 
     expect(row.themes[0].qualification).toBe('green');
     expect(row.themes[1].qualification).toBeNull();

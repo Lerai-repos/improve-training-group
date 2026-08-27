@@ -6,9 +6,24 @@ import { storedRow } from './stored-row.fixture';
 
 const ITEM = '5029726254';
 
-const READY: OutcomeClaim = { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow()], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } };
-const NO_MATCH: OutcomeClaim = { kind: 'no_match', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } };
-const FAILED: OutcomeClaim = { kind: 'failed', stage: 'travel', message: 'unreachable', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } };
+const READY: OutcomeClaim = {
+  kind: 'ready',
+  duurTraining: null,
+  travelPrecision: null,
+  rows: [storedRow()],
+  trainingMonth: null,
+  settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+};
+const NO_MATCH: OutcomeClaim = {
+  kind: 'no_match',
+  settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+};
+const FAILED: OutcomeClaim = {
+  kind: 'failed',
+  stage: 'travel',
+  message: 'unreachable',
+  settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+};
 
 /**
  * One immutable outcome per (training, generation). Without it, every QStash retry,
@@ -259,13 +274,27 @@ describe('createOutcomeStore', () => {
     }
 
     it('leaves all three keys absent when the rows are malformed', async () => {
-      expect(await keysAfter({ kind: 'ready', duurTraining: null, travelPrecision: null, rows: [storedRow({ totalCostCents: NaN })], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).toEqual(
-        []
-      );
+      expect(
+        await keysAfter({
+          kind: 'ready',
+          duurTraining: null,
+          travelPrecision: null,
+          rows: [storedRow({ totalCostCents: NaN })],
+          trainingMonth: null,
+          settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        })
+      ).toEqual([]);
     });
 
     it('leaves all three keys absent when a failure has no stage', async () => {
-      expect(await keysAfter({ kind: 'failed', stage: '', message: 'boom', settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).toEqual([]);
+      expect(
+        await keysAfter({
+          kind: 'failed',
+          stage: '',
+          message: 'boom',
+          settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        })
+      ).toEqual([]);
     });
 
     /**
@@ -273,14 +302,32 @@ describe('createOutcomeStore', () => {
      * rows would store an artifact contradicting the very label it is stored beside.
      */
     it('leaves all three keys absent for a ready claim with no rows', async () => {
-      expect(await keysAfter({ kind: 'ready', duurTraining: null, travelPrecision: null, rows: [], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).toEqual([]);
+      expect(
+        await keysAfter({
+          kind: 'ready',
+          duurTraining: null,
+          travelPrecision: null,
+          rows: [],
+          trainingMonth: null,
+          settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        })
+      ).toEqual([]);
     });
 
     it('does not disturb an outcome already claimed for another generation', async () => {
       const store = createOutcomeStore(createMemoryKvStore());
       await store.claim(ITEM, 1, READY);
 
-      await expect(store.claim(ITEM, 2, { kind: 'ready', duurTraining: null, travelPrecision: null, rows: [], trainingMonth: null, settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' } })).rejects.toThrow();
+      await expect(
+        store.claim(ITEM, 2, {
+          kind: 'ready',
+          duurTraining: null,
+          travelPrecision: null,
+          rows: [],
+          trainingMonth: null,
+          settings: { boardId: 'settings-board', readAt: 0, fingerprint: 'test' },
+        })
+      ).rejects.toThrow();
 
       expect(await store.read(ITEM, 1)).toBe('GEREED');
       expect(await store.readCompletedGeneration(ITEM)).toBe(1);

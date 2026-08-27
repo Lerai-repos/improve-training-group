@@ -56,10 +56,22 @@ describe('createKvTravelCacheStore', () => {
    * Rejecting it here makes it a miss, so the provider call overwrites it.
    */
   const rejected: Array<[string, unknown]> = [
-    ['an unrecognised condition', { condition: 'old-format', distanceKm: 1, durationMinutes: 1, fetchedAtMs: 1 }],
-    ['ROUTE_EXISTS with null metrics', { condition: 'ROUTE_EXISTS', distanceKm: null, durationMinutes: null, fetchedAtMs: 1 }],
-    ['ROUTE_EXISTS with a negative distance', { condition: 'ROUTE_EXISTS', distanceKm: -5, durationMinutes: 1, fetchedAtMs: 1 }],
-    ['ROUTE_NOT_FOUND carrying metrics', { condition: 'ROUTE_NOT_FOUND', distanceKm: 10, durationMinutes: 5, fetchedAtMs: 1 }],
+    [
+      'an unrecognised condition',
+      { condition: 'old-format', distanceKm: 1, durationMinutes: 1, fetchedAtMs: 1 },
+    ],
+    [
+      'ROUTE_EXISTS with null metrics',
+      { condition: 'ROUTE_EXISTS', distanceKm: null, durationMinutes: null, fetchedAtMs: 1 },
+    ],
+    [
+      'ROUTE_EXISTS with a negative distance',
+      { condition: 'ROUTE_EXISTS', distanceKm: -5, durationMinutes: 1, fetchedAtMs: 1 },
+    ],
+    [
+      'ROUTE_NOT_FOUND carrying metrics',
+      { condition: 'ROUTE_NOT_FOUND', distanceKm: 10, durationMinutes: 5, fetchedAtMs: 1 },
+    ],
   ];
 
   it.each(rejected)('treats %s as a miss', async (_label, entry) => {

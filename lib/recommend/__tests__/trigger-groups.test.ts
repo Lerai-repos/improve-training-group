@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  HERPLANNEN_GROUP_ID,
-  INPLANNEN_GROUP_ID,
-  triggerGroupIds,
-} from '@lib/monday/board-config';
+import { HERPLANNEN_GROUP_ID, INPLANNEN_GROUP_ID, triggerGroupIds } from '@lib/monday/board-config';
 
 /**
  * The groups a move must land in to trigger a run.

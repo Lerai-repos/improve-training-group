@@ -1,4 +1,4 @@
-import type { AssignmentCounts } from './assignments';
+import type { AssignmentCounts, DayConflict } from './assignments';
 import type { Capabilities } from './capabilities';
 import type { StoredRow, StoredRowTheme } from './view-row';
 
@@ -20,6 +20,13 @@ import type { StoredRow, StoredRowTheme } from './view-row';
 
 /** Everything a `full` caller may see. */
 export interface FullRow {
+  /**
+   * Andere trainingen die deze trainer op dezelfde dag al heeft. Leeg is de normale stand.
+   *
+   * Een vlag, geen oordeel: twee sessies op één dag is bij ITG legitiem (ochtend plus
+   * middag), dus wegfilteren zou geldige opties weghalen zonder dat de planner ziet waarom.
+   */
+  dayConflicts?: readonly DayConflict[];
   trainerItemId: string;
   rank: number;
   themes: StoredRowTheme[];
@@ -66,6 +73,20 @@ export interface RestrictedRow {
   rank: number;
   roundTripDurationMinutes: number;
   approached: boolean;
+  /**
+   * Ook hier, want de Kies-knop hangt aan `plan` en niet aan `full`.
+   *
+   * Die knop koppelt een trainer aan een training. De waarschuwing erachter laten hangen
+   * aan een ándere capability betekent dat precies de gebruiker die de handeling doet hem
+   * niet ziet.
+   *
+   * **In deze vorm staat alleen het FEIT.** `resolveWorkload` haalt klantnaam en tijdstip
+   * eruit voor iedereen zonder `full`. Eerder stond hier dat die twee "al op het bord
+   * staan dat deze gebruiker mag lezen" — dat was onjuist: capabilities zijn account-breed
+   * en niet bord-gebonden, dus `plan` bewijst geen toegang tot het agendabord. Zie
+   * `capabilities.ts`, dat óók vastlegt waarom `full` die details wél krijgt.
+   */
+  dayConflicts?: readonly DayConflict[];
 }
 
 export type PublicRow = FullRow | RestrictedRow;
@@ -73,7 +94,8 @@ export type PublicRow = FullRow | RestrictedRow;
 export function toFullRow(
   row: StoredRow,
   approached: boolean,
-  workload: AssignmentCounts | null = null
+  workload: AssignmentCounts | null = null,
+  dayConflicts: readonly DayConflict[] = []
 ): FullRow {
   return {
     trainerItemId: row.trainerItemId,
@@ -92,15 +114,21 @@ export function toFullRow(
     totalCostCents: row.totalCostCents,
     assignmentsThisMonth: workload?.thisMonth ?? null,
     assignmentsThisYear: workload?.thisYear ?? null,
+    dayConflicts,
     approached,
   };
 }
 
-export function toRestrictedRow(row: StoredRow, approached: boolean): RestrictedRow {
+export function toRestrictedRow(
+  row: StoredRow,
+  approached: boolean,
+  dayConflicts: readonly DayConflict[] = []
+): RestrictedRow {
   return {
     trainerItemId: row.trainerItemId,
     rank: row.rank,
     roundTripDurationMinutes: row.roundTripDurationMinutes,
+    dayConflicts,
     approached,
   };
 }
@@ -114,15 +142,30 @@ export function toRestrictedRow(row: StoredRow, approached: boolean): Restricted
 /** Looks up a trainer's current workload; null when it could not be determined. */
 export type WorkloadLookup = (trainerItemId: string) => AssignmentCounts | null;
 
+/**
+ * What else this trainer has on the training's own day. Empty when unknown.
+ *
+ * Empty and "nothing else that day" deliberately look the same. The label is additive —
+ * absence of a warning has never meant "verified free", and a scan that could not resolve
+ * the day must not start claiming it did.
+ */
+export type DayConflictLookup = (trainerItemId: string) => readonly DayConflict[];
+
 export function toPublicRows(
   rows: readonly StoredRow[],
   approached: ReadonlySet<string>,
   caps: Capabilities,
-  workload: WorkloadLookup = () => null
+  workload: WorkloadLookup = () => null,
+  dayConflicts: DayConflictLookup = () => []
 ): PublicRow[] {
   return rows.map((row) =>
     caps.full
-      ? toFullRow(row, approached.has(row.trainerItemId), workload(row.trainerItemId))
-      : toRestrictedRow(row, approached.has(row.trainerItemId))
+      ? toFullRow(
+          row,
+          approached.has(row.trainerItemId),
+          workload(row.trainerItemId),
+          dayConflicts(row.trainerItemId)
+        )
+      : toRestrictedRow(row, approached.has(row.trainerItemId), dayConflicts(row.trainerItemId))
   );
 }

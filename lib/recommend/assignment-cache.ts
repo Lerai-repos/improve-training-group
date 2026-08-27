@@ -34,18 +34,19 @@ import type { KvStore } from './kv';
  * That margin is the whole fix for "de kolommen blijven heel vaak leeg". The scan takes
  * 5.5–8.5 seconds against a board of 839 trainings (nine sequential pages of 100), so
  * when it ran on the planner's own request under a six-second budget it lost roughly one
- * time in three, and the columns went blank. With the cron refreshing every five minutes,
- * several consecutive runs have to fail before this value can expire, and until it does a
- * slightly older number is served instead of nothing.
+ * time in three, and the columns went blank. With the cron refreshing every minute, many
+ * consecutive runs have to fail before this value can expire, and until it does a slightly
+ * older number is served instead of nothing.
  *
- * Twenty rather than fifteen, because three intervals is not three chances. A value
- * written at T0 with a fifteen-minute life expires *as* the T+15 run begins, and that run
- * still needs its 5.5–8.5 seconds — so two failures could leave a gap even though the
- * third run succeeded. The extra interval turns "three attempts" into three attempts that
- * each have time to finish.
+ * The TTL is a SURVIVAL margin, not the freshness target — those are two different
+ * numbers and conflating them is what makes this look worse than it is. Freshness is the
+ * cron interval (one minute); this twenty is how long a value keeps answering while
+ * refreshes fail, and it is deliberately many intervals rather than a tight three, because
+ * an interval is not a chance: a value that expires *as* the next run begins still leaves
+ * a gap while that run takes its 5.5–8.5 seconds.
  *
- * Workload changes when somebody is booked, so twenty minutes of staleness is invisible to
- * a planner, and strictly better than the alternative of being correct or absent.
+ * Workload changes when somebody is booked, and a stale count is strictly better than the
+ * alternative of being correct or absent.
  */
 export const ASSIGNMENTS_TTL_MS = 20 * 60 * 1000;
 
@@ -69,12 +70,33 @@ const cachedSchema = z.object({
    * time and leaves concurrent waiters showing `—` after a perfectly good refresh.
    */
   months: z.array(z.tuple([z.string(), z.string().nullable()])),
+  /** Same nullability, same reason: an undated training is scanned and dateless. */
+  dates: z.array(z.tuple([z.string(), z.string().nullable()])),
+  days: z.array(
+    z.tuple([
+      z.string(),
+      z.array(
+        z.tuple([
+          z.string(),
+          z.array(
+            z.object({
+              itemId: z.string(),
+              client: z.string().nullable(),
+              times: z.string().nullable(),
+            })
+          ),
+        ])
+      ),
+    ])
+  ),
 });
 
 function encode(scan: AgendaScan): string {
   return JSON.stringify({
     workload: [...scan.workload].map(([trainer, months]) => [trainer, [...months]]),
     months: [...scan.monthByItemId],
+    dates: [...scan.dateByItemId],
+    days: [...scan.dayIndex].map(([trainer, days]) => [trainer, [...days]]),
   });
 }
 
@@ -95,6 +117,8 @@ function decode(raw: string | null): AgendaScan | null {
   return {
     workload: new Map(result.data.workload.map(([trainer, months]) => [trainer, new Map(months)])),
     monthByItemId: new Map(result.data.months),
+    dateByItemId: new Map(result.data.dates),
+    dayIndex: new Map(result.data.days.map(([trainer, days]) => [trainer, new Map(days)])),
   };
 }
 
@@ -128,7 +152,15 @@ export function createCachedAssignments(deps: CachedAssignmentsDeps): CachedAssi
   return createSharedCache<AgendaScan>({
     kv: deps.kv,
     load: deps.load,
-    key: `assignments:${deps.boardId}`,
+    /**
+     * `v2`, because the cached shape gained the day index.
+     *
+     * The strict schema would already reject a v1 payload and degrade to a miss, but the
+     * refresh cron writes every minute and a deploy has both versions live at once.
+     * A distinct key means the two never meet, instead of every reader burning a rejected
+     * decode until the old entry expires.
+     */
+    key: `assignments:v2:${deps.boardId}`,
     // Unchanged from before the extraction, on purpose — see `lockKey` in shared-cache.
     lockKey: `assignments-lock:${deps.boardId}`,
     encode,

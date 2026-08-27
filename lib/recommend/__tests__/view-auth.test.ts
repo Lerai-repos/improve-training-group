@@ -32,7 +32,10 @@ async function tokenFor(userId: string, accountId = ACCOUNT): Promise<string> {
 
 describe('readBearerToken', () => {
   const withHeader = (value: string | null): Request =>
-    new Request('https://example.test/api', value === null ? {} : { headers: { authorization: value } });
+    new Request(
+      'https://example.test/api',
+      value === null ? {} : { headers: { authorization: value } }
+    );
 
   it('reads a bearer token, case-insensitively and trimmed', () => {
     expect(readBearerToken(withHeader('Bearer abc.def.ghi'))).toBe('abc.def.ghi');
@@ -61,7 +64,10 @@ describe('authorizeToken', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      caller: { session: { userId: PLANNER, accountId: ACCOUNT }, caps: { view: true, plan: true } },
+      caller: {
+        session: { userId: PLANNER, accountId: ACCOUNT },
+        caps: { view: true, plan: true },
+      },
     });
   });
 

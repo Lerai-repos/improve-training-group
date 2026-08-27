@@ -169,7 +169,9 @@ describe('handleWhatsappGet', () => {
       read.boardColumns.set(id('klant'), { type: 'mirror', settingsStr: '{"boardIds":[999]}' });
       read.itemName = null;
 
-      const data = ok(await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM));
+      const data = ok(
+        await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM)
+      );
 
       expect(String(data.generated)).not.toContain('De verkeerde klant BV');
       expect((data.warnings as string[]).join(' ')).toMatch(/klant/);
@@ -184,7 +186,9 @@ describe('handleWhatsappGet', () => {
       // The Bedrijf mirror drifted, but the item name still supplies a klant line.
       read.boardColumns.set(id('klant'), { type: 'mirror', settingsStr: '{"boardIds":[999]}' });
 
-      const data = ok(await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM));
+      const data = ok(
+        await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM)
+      );
 
       expect(String(data.generated)).toContain('Rabobank');
       const warning = (data.warnings as string[]).find((w) => w.includes('klant'));
@@ -197,7 +201,9 @@ describe('handleWhatsappGet', () => {
       read.boardColumns.set(id('klant'), { type: 'mirror', settingsStr: '{"boardIds":[999]}' });
       read.itemName = null;
 
-      const data = ok(await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM));
+      const data = ok(
+        await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM)
+      );
 
       expect((data.warnings as string[]).find((w) => w.includes('klant'))).toMatch(/weggelaten/);
     });
@@ -210,7 +216,9 @@ describe('handleWhatsappGet', () => {
       const read = trainingRead();
       read.boardColumns.set(id('trainers'), { type: 'text', settingsStr: null });
 
-      const data = ok(await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM));
+      const data = ok(
+        await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM)
+      );
 
       expect(String(data.generated)).not.toContain('trainers');
       const warning = (data.warnings as string[]).find((w) => w.includes('trainers'));
@@ -222,7 +230,10 @@ describe('handleWhatsappGet', () => {
       const read = trainingRead();
       read.present.delete(id('tijden'));
 
-      const result = await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM);
+      const result = await handleWhatsappGet(
+        deps({ reader: { read: () => Promise.resolve(read) } }),
+        ITEM
+      );
 
       expect(result.status).toBe(200);
     });
@@ -232,7 +243,9 @@ describe('handleWhatsappGet', () => {
     const read = trainingRead();
     read.values.delete(id('deelnemers'));
 
-    const data = ok(await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM));
+    const data = ok(
+      await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM)
+    );
 
     expect((data.warnings as string[]).join(' ')).toMatch(/deelnemers/);
   });
@@ -240,13 +253,19 @@ describe('handleWhatsappGet', () => {
   it('refuses an item on another board', async () => {
     const read = trainingRead({ boardId: '999' });
 
-    const result = await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(read) } }), ITEM);
+    const result = await handleWhatsappGet(
+      deps({ reader: { read: () => Promise.resolve(read) } }),
+      ITEM
+    );
 
     expect(result.status).toBe(403);
   });
 
   it('reports a training that is not there', async () => {
-    const result = await handleWhatsappGet(deps({ reader: { read: () => Promise.resolve(null) } }), ITEM);
+    const result = await handleWhatsappGet(
+      deps({ reader: { read: () => Promise.resolve(null) } }),
+      ITEM
+    );
     expect(result.status).toBe(404);
   });
 
@@ -283,19 +302,25 @@ describe('authorizeItemBoard', () => {
   it('looks the board up when nothing is memoised', async () => {
     const readBoardId = vi.fn(() => Promise.resolve(BOARD));
 
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(true);
+    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
+      true
+    );
     expect(readBoardId).toHaveBeenCalledOnce();
   });
 
   it('refuses an item on another board', async () => {
     const readBoardId = () => Promise.resolve('999');
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(false);
+    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
+      false
+    );
   });
 
   /** A nonexistent id resolves to no board, and nothing is writable without one. */
   it('refuses an item that does not exist', async () => {
     const readBoardId = () => Promise.resolve(null);
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(false);
+    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
+      false
+    );
   });
 
   it('does not memoise a refusal it could not verify', async () => {
@@ -336,7 +361,9 @@ describe('authorizeItemBoard', () => {
     await kv.set(`board-of:${ITEM}`, '999');
     const readBoardId = vi.fn(() => Promise.resolve(BOARD));
 
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(false);
+    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
+      false
+    );
     expect(readBoardId).not.toHaveBeenCalled();
   });
 });
@@ -345,7 +372,9 @@ describe('handleWhatsappSave', () => {
   it('stores the edit and returns the new token', async () => {
     const d = deps();
 
-    const data = ok(await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN }));
+    const data = ok(
+      await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN })
+    );
 
     expect(data.saved).toEqual({ edited: 'D', base: 'S' });
     expect(data.token).not.toBe(ABSENT_TOKEN);
@@ -354,7 +383,11 @@ describe('handleWhatsappSave', () => {
   it('refuses an item on another board', async () => {
     const d = deps({ boards: { readBoardId: () => Promise.resolve('999') } });
 
-    const result = await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN });
+    const result = await handleWhatsappSave(d, ITEM, {
+      edited: 'D',
+      base: 'S',
+      token: ABSENT_TOKEN,
+    });
 
     expect(result.status).toBe(403);
   });
@@ -362,7 +395,11 @@ describe('handleWhatsappSave', () => {
   it('refuses a nonexistent item', async () => {
     const d = deps({ boards: { readBoardId: () => Promise.resolve(null) } });
 
-    const result = await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN });
+    const result = await handleWhatsappSave(d, ITEM, {
+      edited: 'D',
+      base: 'S',
+      token: ABSENT_TOKEN,
+    });
 
     expect(result.status).toBe(403);
   });
@@ -384,7 +421,9 @@ describe('handleWhatsappSave', () => {
   /** Clearing the box is a revert, not a stored empty string. */
   it('treats an emptied edit as a discard', async () => {
     const d = deps();
-    const saved = ok(await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN }));
+    const saved = ok(
+      await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN })
+    );
 
     const result = await handleWhatsappSave(d, ITEM, {
       edited: '   ',
@@ -416,9 +455,15 @@ describe('handleWhatsappSave', () => {
     /** Redis committed, the reply was lost, the client retried. Not a colleague. */
     it('reports success for a retried identical save', async () => {
       const d = deps();
-      const first = ok(await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN }));
+      const first = ok(
+        await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN })
+      );
 
-      const retry = await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN });
+      const retry = await handleWhatsappSave(d, ITEM, {
+        edited: 'D',
+        base: 'S',
+        token: ABSENT_TOKEN,
+      });
 
       expect(retry.status).toBe(200);
       expect(ok(retry).token).toBe(first.token);
@@ -429,7 +474,9 @@ describe('handleWhatsappSave', () => {
 describe('handleWhatsappDiscard', () => {
   it('reverts to the generated message', async () => {
     const d = deps();
-    const saved = ok(await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN }));
+    const saved = ok(
+      await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN })
+    );
 
     const result = await handleWhatsappDiscard(d, ITEM, { token: String(saved.token) });
 
@@ -439,7 +486,9 @@ describe('handleWhatsappDiscard', () => {
 
   it('is idempotent when its response was lost', async () => {
     const d = deps();
-    const saved = ok(await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN }));
+    const saved = ok(
+      await handleWhatsappSave(d, ITEM, { edited: 'D', base: 'S', token: ABSENT_TOKEN })
+    );
     await handleWhatsappDiscard(d, ITEM, { token: String(saved.token) });
 
     expect((await handleWhatsappDiscard(d, ITEM, { token: String(saved.token) })).status).toBe(200);

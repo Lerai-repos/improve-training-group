@@ -30,7 +30,10 @@ describe('parseAiResponse', () => {
       ['an object', '{"outcome":"travel_required","formatted":"X 1","city":{"name":"Utrecht"}}'],
       ['an array', '{"outcome":"travel_required","formatted":"X 1","city":["Utrecht"]}'],
       ['a blank string', '{"outcome":"travel_required","formatted":"X 1","city":"   "}'],
-      ['an absurd length', `{"outcome":"travel_required","formatted":"X 1","city":"${'x'.repeat(500)}"}`],
+      [
+        'an absurd length',
+        `{"outcome":"travel_required","formatted":"X 1","city":"${'x'.repeat(500)}"}`,
+      ],
     ])('%s becomes null and leaves the rest intact', (_label, raw) => {
       expect(parseAiResponse(raw)).toEqual({
         kind: 'travel_required',
@@ -44,12 +47,19 @@ describe('parseAiResponse', () => {
     it('normalises a missing city to null rather than undefined', () => {
       const d = parseAiResponse('{"outcome":"travel_required","formatted":"X 1"}');
 
-      expect(d).toEqual({ kind: 'travel_required', formatted: 'X 1', city: null, precision: 'exact' });
+      expect(d).toEqual({
+        kind: 'travel_required',
+        formatted: 'X 1',
+        city: null,
+        precision: 'exact',
+      });
       expect(d.kind === 'travel_required' && 'city' in d && d.city === null).toBe(true);
     });
 
     it('trims a city the model padded', () => {
-      const d = parseAiResponse('{"outcome":"travel_required","formatted":"X 1","city":" Boxmeer "}');
+      const d = parseAiResponse(
+        '{"outcome":"travel_required","formatted":"X 1","city":" Boxmeer "}'
+      );
       expect(d).toMatchObject({ city: 'Boxmeer' });
     });
 

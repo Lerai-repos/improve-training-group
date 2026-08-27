@@ -17,7 +17,12 @@ function recordingPublisher(): JobPublisher & { published: PublishedJob[] } {
   };
 }
 
-function harness(): { queue: ReturnType<typeof createRunQueue>; store: QueueStore; kv: KvStore; publisher: ReturnType<typeof recordingPublisher> } {
+function harness(): {
+  queue: ReturnType<typeof createRunQueue>;
+  store: QueueStore;
+  kv: KvStore;
+  publisher: ReturnType<typeof recordingPublisher>;
+} {
   const kv = createMemoryKvStore(() => 1_000);
   const store = createQueueStore(kv);
   const publisher = recordingPublisher();
@@ -32,9 +37,7 @@ describe('enqueue', () => {
     const result = await queue.enqueue(trigger);
 
     expect(result).toEqual({ accepted: true, generation: 1 });
-    expect(publisher.published).toEqual([
-      { triggerUuid: 'u1', mondayItemId: ITEM, generation: 1 },
-    ]);
+    expect(publisher.published).toEqual([{ triggerUuid: 'u1', mondayItemId: ITEM, generation: 1 }]);
   });
 
   it('marks the record published, applying the dedup TTL only then', async () => {
@@ -103,9 +106,7 @@ describe('enqueue', () => {
       const retry = await createRunQueue(store, working, () => 1_000).enqueue(trigger);
 
       expect(retry).toEqual({ accepted: true, generation: 1 });
-      expect(working.published).toEqual([
-        { triggerUuid: 'u1', mondayItemId: ITEM, generation: 1 },
-      ]);
+      expect(working.published).toEqual([{ triggerUuid: 'u1', mondayItemId: ITEM, generation: 1 }]);
       // No second generation was burnt by the failed attempt.
       expect(await store.readGeneration(ITEM)).toBe(1);
     });

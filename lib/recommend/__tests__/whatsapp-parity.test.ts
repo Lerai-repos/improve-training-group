@@ -63,7 +63,9 @@ function ourLine(field: Comparable, value: string | null): string | null {
   if (value === null) {
     return null;
   }
-  const [line] = formatWhatsappMessage({ ...EMPTY, [field]: value }).text.split('\n').slice(2);
+  const [line] = formatWhatsappMessage({ ...EMPTY, [field]: value })
+    .text.split('\n')
+    .slice(2);
   return line ?? null;
 }
 
@@ -103,7 +105,8 @@ describe('parity with the messages n8n actually sent', () => {
       const expected = String(fields['Whatsapp Bericht']).split('\n');
       // Klant is last, after any optional trainers/actors lines and anything the planner
       // appended, so it is matched anywhere rather than at a fixed index.
-      const hit = field === 'klant' ? expected.includes(ours) : expected[LINE_INDEX[field]] === ours;
+      const hit =
+        field === 'klant' ? expected.includes(ours) : expected[LINE_INDEX[field]] === ours;
       if (hit) {
         matched += 1;
       }

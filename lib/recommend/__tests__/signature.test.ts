@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { authorizeBearer } from '../authorize';
 import { verifyWebhookToken } from '../signature';
 
-
 describe('verifyWebhookToken', () => {
   const base = 'https://x.dev/api/webhooks/monday/recommendations';
   it('accepts the exact ?token and rejects everything else', () => {

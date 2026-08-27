@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  TRAINER_COLUMNS,
-  TRAINER_ENGINE_COLUMNS,
-  TRAINERS_BOARD,
-} from '@lib/monday/board-config';
+import { TRAINER_COLUMNS, TRAINER_ENGINE_COLUMNS, TRAINERS_BOARD } from '@lib/monday/board-config';
 
 import { NOTK_PLACEHOLDER_ITEM_ID, readRoster, toRoster } from '../roster';
 

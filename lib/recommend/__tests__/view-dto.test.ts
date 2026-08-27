@@ -74,11 +74,25 @@ describe('the public row shapes', () => {
     it('carries no monetary field of any kind', () => {
       const row = toRestrictedRow(storedRow(), false);
 
+      /**
+       * Een exacte sleutellijst, want de bescherming zit hem in wat er NIET in staat.
+       *
+       * `dayConflicts` staat hier bewust, maar LEEGGEMAAKT: `resolveWorkload` haalt de
+       * klantnaam en het tijdstip eruit voor iedereen zonder `full`, omdat `plan`
+       * account-breed is en geen toegang tot het agendabord bewijst. Wat overblijft is
+       * het feit dat er die dag iets staat. Wie deze lijst uitbreidt hoort dezelfde
+       * afweging te maken — er staat een reden bij of het veld hoort er niet.
+       */
       expect(Object.keys(row).sort()).toEqual(
-        ['approached', 'rank', 'roundTripDurationMinutes', 'trainerItemId'].sort()
+        ['approached', 'dayConflicts', 'rank', 'roundTripDurationMinutes', 'trainerItemId'].sort()
       );
       const monetary = Object.keys(row).filter((key) => /cents|fee|cost|rate/i.test(key));
       expect(monetary).toEqual([]);
+    });
+
+    /** En het draagt nog steeds niets van de dag als er niets te melden is. */
+    it('laat dayConflicts leeg als er die dag niets anders staat', () => {
+      expect(toRestrictedRow(storedRow(), false).dayConflicts).toEqual([]);
     });
 
     it('carries no scores either', () => {
@@ -100,9 +114,9 @@ describe('the public row shapes', () => {
       expect(toPublicRows(rows, new Set(), FULL)[0]).toHaveProperty('hourlyRateCents');
       expect(toPublicRows(rows, new Set(), RESTRICTED)[0]).not.toHaveProperty('hourlyRateCents');
       // `view` alone is still restricted — `full` is what unlocks the money.
-      expect(toPublicRows(rows, new Set(), { ...NO_CAPABILITIES, view: true })[0]).not.toHaveProperty(
-        'hourlyRateCents'
-      );
+      expect(
+        toPublicRows(rows, new Set(), { ...NO_CAPABILITIES, view: true })[0]
+      ).not.toHaveProperty('hourlyRateCents');
     });
 
     it('marks only the trainers that were approached', () => {

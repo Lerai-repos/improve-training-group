@@ -5,7 +5,10 @@ import { createQueueStore, PUBLISHED_TTL_MS, type QueueStore } from '../queue-st
 
 const ITEM = '5029726254';
 
-function store(now: () => number = () => 1_000): { queue: QueueStore; kv: ReturnType<typeof createMemoryKvStore> } {
+function store(now: () => number = () => 1_000): {
+  queue: QueueStore;
+  kv: ReturnType<typeof createMemoryKvStore>;
+} {
   const kv = createMemoryKvStore(now);
   return { queue: createQueueStore(kv), kv };
 }

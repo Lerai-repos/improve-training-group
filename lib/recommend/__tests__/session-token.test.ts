@@ -159,9 +159,9 @@ describe('verifySessionToken', () => {
   it('refuses ids that are not plain numeric', async () => {
     // Whitespace and signs are how a lookalike id gets past a loose comparison.
     for (const account_id of [` ${ACCOUNT} `, `+${ACCOUNT}`, `${ACCOUNT}\n`, 1.5, -1]) {
-      expect(await verifySessionToken(await token({ dat: { account_id, user_id: 1 } }), config)).toEqual(
-        { ok: false, reason: 'missing_claims' }
-      );
+      expect(
+        await verifySessionToken(await token({ dat: { account_id, user_id: 1 } }), config)
+      ).toEqual({ ok: false, reason: 'missing_claims' });
     }
   });
 

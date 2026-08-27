@@ -26,6 +26,16 @@ export interface BaseRow {
   rank: number;
   roundTripDurationMinutes: number;
   approached: boolean;
+  /**
+   * Andere trainingen die deze trainer op dezelfde dag al heeft.
+   *
+   * Op `BaseRow` en niet op `Row`, want dit hangt aan `plan`: wie op Kies mag drukken
+   * hoort de waarschuwing te zien, ook zonder de kostenkolommen.
+   *
+   * Leeg of afwezig is de normale stand en betekent NIET "gecontroleerd vrij": buiten het
+   * ingestelde agendabord ziet de scan niets, en een telefonische afspraak staat nergens.
+   */
+  dayConflicts?: DayConflict[];
 }
 
 /** What a `full` caller additionally receives. All optional — a restricted row has none. */
@@ -45,6 +55,13 @@ export interface Row extends BaseRow {
   /** Legacy "Opdrachten deze maand / dit jaar" — the month/year of THIS training. */
   assignmentsThisMonth?: number | null;
   assignmentsThisYear?: number | null;
+}
+
+/** Eén training op dezelfde dag. `Tijden` is vrije tekst en wordt alleen getoond. */
+export interface DayConflict {
+  itemId: string;
+  client: string | null;
+  times: string | null;
 }
 
 export type ViewState =

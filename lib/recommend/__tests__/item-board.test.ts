@@ -57,7 +57,7 @@ describe('createItemBoardReader', () => {
   it('asks for one id and nothing else', async () => {
     const calls: Array<{ document: string; variables?: Record<string, unknown> }> = [];
     const reader = createItemBoardReader({
-      query: <T,>(document: string, variables?: Record<string, unknown>) => {
+      query: <T>(document: string, variables?: Record<string, unknown>) => {
         calls.push({ document, variables });
         return Promise.resolve<T>(
           JSON.parse(JSON.stringify({ items: [{ id: ITEM, board: { id: BOARD } }] }))
