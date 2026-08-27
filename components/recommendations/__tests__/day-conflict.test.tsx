@@ -9,10 +9,23 @@ import { conflictText, dayConflictLabel } from '../format';
  * planned in"* — dus tonen, niet filteren en niet anders sorteren. De tekst zegt wát er
  * die dag staat en trekt geen conclusie, want `Tijden` is vrije tekst en twee sessies op
  * één dag is bij ITG legitiem.
+ *
+ * **De klantnaam bereikt deze functie in productie niet meer.** ITG wilde hem van de regel
+ * af (27-Aug-2026) en `resolveWorkload` haalt hem er nu voor iedereen uit. Deze functie
+ * blijft algemeen — hij laat weg wat er niet is — zodat het terugzetten één regel is en
+ * niet een nieuwe opmaakregel. De klant-gevallen hieronder toetsen dus de functie, niet
+ * de vorm die de planner ziet.
  */
 
 describe('dayConflictLabel', () => {
-  it('noemt de klant en de tijd', () => {
+  /** Wat de planner werkelijk ziet sinds 27-Aug-2026: het tijdstip, zonder klantnaam. */
+  it('noemt het tijdstip', () => {
+    expect(dayConflictLabel([{ client: null, times: '09:30-12:30' }])).toBe(
+      'Al ingepland — 09:30-12:30'
+    );
+  });
+
+  it('voegt klant en tijd samen als er wél een klant is', () => {
     expect(dayConflictLabel([{ client: 'Probiblio', times: '09:30-12:30' }])).toBe(
       'Al ingepland — Probiblio, 09:30-12:30'
     );

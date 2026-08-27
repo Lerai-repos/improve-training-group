@@ -80,11 +80,11 @@ export interface RestrictedRow {
    * aan een ándere capability betekent dat precies de gebruiker die de handeling doet hem
    * niet ziet.
    *
-   * **In deze vorm staat alleen het FEIT.** `resolveWorkload` haalt klantnaam en tijdstip
-   * eruit voor iedereen zonder `full`. Eerder stond hier dat die twee "al op het bord
-   * staan dat deze gebruiker mag lezen" — dat was onjuist: capabilities zijn account-breed
-   * en niet bord-gebonden, dus `plan` bewijst geen toegang tot het agendabord. Zie
-   * `capabilities.ts`, dat óók vastlegt waarom `full` die details wél krijgt.
+   * **In deze vorm staat alleen het FEIT.** `resolveWorkload` haalt het tijdstip eruit
+   * voor iedereen zonder `full`, en de klantnaam voor iedereen. Eerder stond hier dat die
+   * twee "al op het bord staan dat deze gebruiker mag lezen" — dat was onjuist:
+   * capabilities zijn account-breed en niet bord-gebonden, dus `plan` bewijst geen toegang
+   * tot het agendabord. Zie `capabilities.ts`.
    */
   dayConflicts?: readonly DayConflict[];
 }

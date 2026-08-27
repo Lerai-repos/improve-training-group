@@ -318,19 +318,27 @@ async function resolveWorkload(
     const day = scan.dateByItemId.get(mondayItemId) ?? null;
 
     /**
-     * Wie geen tarieven mag zien, krijgt het FEIT zonder de inhoud.
+     * De klantnaam gaat er voor IEDEREEN af; het tijdstip alleen voor wie `full` heeft.
      *
-     * `plan` zegt niets over toegang tot het agendabord: de standaardrechten zijn
-     * account-breed en niet bord-gebonden, dus een `plan`-houder kan iemand zijn die dat
-     * bord helemaal niet mag openen (zie `capabilities.ts`). Klantnaam en tijdstip van een
-     * ándere training zijn bordgegevens; die horen dus achter `full`.
+     * De klantnaam is eruit op verzoek van ITG (27-Aug-2026, via Peter): hij maakte de
+     * regel druk zonder de planner iets te vertellen wat hij niet al wist. Dat hij ook de
+     * enige echt gevoelige inhoud was — de naam van een dérde partij — is meegenomen: de
+     * scan leest hem nog wel, maar hij verlaat de server niet meer.
      *
-     * Wat overblijft is "deze trainer staat die dag al ergens", en dat is precies wat de
-     * waarschuwing moet doen bij de knop die eraan hangt. Het label maakt daar vanzelf
-     * "Al ingepland" van — dezelfde weg als een hernoemde kolom.
+     * Het tijdstip blijft achter `full`. `plan` zegt namelijk niets over toegang tot het
+     * agendabord — de standaardrechten zijn account-breed en niet bord-gebonden, dus een
+     * `plan`-houder kan iemand zijn die dat bord helemaal niet mag openen. Zie
+     * `capabilities.ts`.
+     *
+     * Wat een `plan`-houder overhoudt is "deze trainer staat die dag al ergens", en dat is
+     * precies wat de waarschuwing moet doen bij de knop die eraan hangt. Het label maakt
+     * daar vanzelf "Al ingepland" van — dezelfde weg als een hernoemde kolom.
      */
-    const zichtbaar = (botsing: DayConflict): DayConflict =>
-      caps.full ? botsing : { itemId: botsing.itemId, client: null, times: null };
+    const zichtbaar = (botsing: DayConflict): DayConflict => ({
+      itemId: botsing.itemId,
+      client: null,
+      times: caps.full ? botsing.times : null,
+    });
     return {
       // De kolommen blijven `full`-only; alleen het label zakt door naar `plan`.
       workload: caps.full

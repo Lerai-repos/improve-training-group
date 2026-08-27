@@ -575,7 +575,7 @@ describe('resolveView', () => {
       const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, FULL);
 
       expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
-        dayConflicts: [{ itemId: 'ander', client: 'Probiblio', times: '09:30-12:30' }],
+        dayConflicts: [{ itemId: 'ander', client: null, times: '09:30-12:30' }],
       });
     });
 
@@ -672,8 +672,13 @@ describe('resolveView', () => {
       expect(state.kind === 'ready' && state.rows[0]).not.toHaveProperty('assignmentsThisMonth');
     });
 
-    /** En een `full`-lezer krijgt de inhoud wél — anders is het label zinloos geworden. */
-    it('geeft klant en tijd alleen aan een full-lezer', async () => {
+    /**
+     * Een `full`-lezer krijgt het tijdstip; de klantnaam krijgt niemand meer.
+     *
+     * ITG wilde die naam van de regel af (27-Aug-2026) — hij maakte hem druk zonder iets
+     * toe te voegen. Hij verlaat de server dus niet meer, ook niet voor `full`.
+     */
+    it('geeft het tijdstip aan een full-lezer, maar nooit de klantnaam', async () => {
       const h = harness();
       await readyList(h);
       const scan = staticAssignments([
@@ -696,7 +701,7 @@ describe('resolveView', () => {
       const { state } = await resolveView({ ...h.deps, assignments: scan }, ITEM, FULL);
 
       expect(state.kind === 'ready' && state.rows[0]).toMatchObject({
-        dayConflicts: [{ itemId: 'ander', client: 'Probiblio', times: '09:30-12:30' }],
+        dayConflicts: [{ itemId: 'ander', client: null, times: '09:30-12:30' }],
       });
     });
 

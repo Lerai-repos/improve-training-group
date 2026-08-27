@@ -14,7 +14,7 @@
  * | `view` | see the list at all (`GET`) |
  * | `plan`  | recalculate, and set `Benaderd` |
  * | `full`  | see rates, totals and scores rather than the restricted shape, plus the
- *   client and time of a trainer's other trainings that same day |
+ *   TIME of a trainer's other trainings that same day |
  *
  * A ladder — `view ⊂ plan ⊂ full` — is the tempting shape and the wrong one: it makes
  * "may see exact rates" imply "may spend money on recomputation and edit shared state",
@@ -42,9 +42,14 @@
  *
  * The dagbotsing-label shows what else a trainer has on the day being planned. The bare
  * FACT travels with `plan`, because that is what the Kies-button hangs on and a warning
- * belongs with the action it warns about. The **client name and the time** travel with
- * `full`, and that is a widening of "rates, totals and scores" rather than something the
- * old wording already covered.
+ * belongs with the action it warns about. The **time** travels with `full`, and that is a
+ * widening of "rates, totals and scores" rather than something the old wording already
+ * covered.
+ *
+ * The **client name of that other training reaches nobody.** It was on the label briefly
+ * and ITG took it off (27-Aug-2026) because it crowded the line; the scan still reads it,
+ * but `resolveWorkload` strips it for every caller, so the one genuinely third-party
+ * field never leaves the server.
  *
  * It is recorded here because the account-wide caveat above applies to it in full: `full`
  * is no more board-scoped than `plan` is, so this reaches ITG account members who cannot
@@ -79,7 +84,7 @@ export interface Capabilities {
   view: boolean;
   /** May recalculate and set `Benaderd`. */
   plan: boolean;
-  /** May see rates, totals and scores, plus same-day schedule details of other trainings. */
+  /** May see rates, totals and scores, plus the time of a trainer's other trainings that day. */
   full: boolean;
 }
 
