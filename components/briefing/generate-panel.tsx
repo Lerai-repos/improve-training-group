@@ -26,7 +26,13 @@ const ROL_LABEL: Record<'lead' | 'co' | 'acteur', string> = {
 
 export type GenerateState =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'bezig' }
+  /**
+   * `schrijft` onderscheidt de twee dingen die allebei "bezig" heten.
+   *
+   * Zonder dat verschil valt de knoptekst tijdens het schrijven terug op de tekst van de
+   * planstap, en meldt het scherm een controle terwijl er documenten de deur uit gaan.
+   */
+  | { readonly kind: 'bezig'; readonly schrijft: boolean }
   /** Gepland zonder botsingen: er kan gewoon geschreven worden. */
   | { readonly kind: 'gepland'; readonly plan: BriefingPlan }
   /** Gepland mét botsingen: hier hangt de bevestiging aan. */
@@ -63,13 +69,33 @@ export const GeneratePanel = ({
 }: GeneratePanelProps) => {
   const bezig = state.kind === 'bezig';
 
+  /**
+   * De knop heet naar wat de VOLGENDE druk doet, niet naar de sectie.
+   *
+   * De eerste druk plant: hij zoekt de klantmap op en kijkt wat er al ligt, en schrijft
+   * niets. Stond er "Genereren" op, dan drukte de adviseur op genereren, verscheen er een
+   * regel tekst, en bleef de map leeg — waarna de logische conclusie is dat het stuk is. Dat
+   * is precies hoe de eerste echte generatie op het bord verliep.
+   *
+   * De planstap zelf blijft bestaan, want die is het enige moment waarop iemand ziet wáár
+   * het document terechtkomt voordat het er staat.
+   */
+  const knopTekst =
+    state.kind === 'bezig'
+      ? state.schrijft
+        ? 'Genereren…'
+        : 'Controleren…'
+      : state.kind === 'gepland'
+        ? 'Ja, genereren'
+        : 'Plan controleren';
+
   return (
     <section className="grid gap-3 rounded-md border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-semibold">Genereren</h2>
         <Button size="sm" disabled={!kanGenereren || bezig} onClick={onGenerate}>
           {bezig && <Loader2 className="mr-2 size-3.5 animate-spin" />}
-          Genereren
+          {knopTekst}
         </Button>
       </div>
 
@@ -90,6 +116,10 @@ export const GeneratePanel = ({
             {!state.plan.folderExists && ' (map wordt aangemaakt)'}
           </p>
           <Bestanden namen={state.plan.filenames} />
+          <p className="text-muted-foreground">
+            Er is nog niets geschreven. Druk op{' '}
+            <span className="text-foreground">Ja, genereren</span> om door te gaan.
+          </p>
         </div>
       )}
 

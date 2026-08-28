@@ -7,7 +7,7 @@
  * `duurTekst` levert, levert een leeg document op zonder dat er iets faalt.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -27,11 +27,33 @@ import type { BriefingDocumentData } from './compose';
 /** De delimiters waar de sjablonen op zijn gebouwd. */
 const CMD_DELIMITER: [string, string] = ['+++', '+++'];
 
-/** Waar de sjablonen staan, naast dit bestand. */
-export const TEMPLATES_DIR = path.join(__dirname, 'templates');
+/**
+ * De map waarin `templates/` en `assets/` liggen.
+ *
+ * NIET zomaar `__dirname`, en dat is een Vercel-eigenaardigheid die lokaal onzichtbaar is.
+ * Next bundelt dit bestand ÍN de route die het importeert, waardoor `__dirname` in productie
+ * `/var/task/.next/server/app/api/briefing/[itemId]/generate` wordt — een map waar nooit een
+ * sjabloon heeft gestaan. `outputFileTracingIncludes` in `next.config.ts` kopieert de
+ * bestanden mee met hun pad vanaf de projectwortel, en dát is wat `process.cwd()` oplevert
+ * (`/var/task`). Lokaal, in vitest en in de scripts is cwd óók de projectwortel, dus dit pad
+ * klopt overal.
+ *
+ * De terugval op `__dirname` blijft staan voor het geval iets ons vanuit een andere
+ * werkmap draait; ontbreekt het daar óók, dan valt het op bij de eerste render in plaats van
+ * bij het laden van de module.
+ */
+function briefingResourceDir(): string {
+  const vanafWortel = path.join(process.cwd(), 'lib', 'briefing');
+  return existsSync(path.join(vanafWortel, 'templates')) ? vanafWortel : __dirname;
+}
+
+const RESOURCE_DIR = briefingResourceDir();
+
+/** Waar de sjablonen staan. */
+export const TEMPLATES_DIR = path.join(RESOURCE_DIR, 'templates');
 
 /** Waar de afbeeldingen staan die de blokken kunnen meebrengen. */
-export const ASSETS_DIR = path.join(__dirname, 'assets');
+export const ASSETS_DIR = path.join(RESOURCE_DIR, 'assets');
 
 /** Breedte van het cyclusschema in de briefing, in centimeters. */
 const DIAGRAM_WIDTH_CM = 16;
@@ -100,6 +122,16 @@ export async function renderBriefing(
   options: { templatesDir?: string; assetsDir?: string } = {}
 ): Promise<Uint8Array> {
   const file = templatePath(label, options.templatesDir);
+  if (!existsSync(file)) {
+    /**
+     * Een kale ENOENT noemt wél het pad maar niet de oorzaak, en de oorzaak is bijna altijd
+     * dezelfde: de sjablonen zijn niet meegekopieerd naar de serverless-bundel.
+     */
+    throw new Error(
+      `Briefing: sjabloon ${label} niet gevonden op ${file}. Staat lib/briefing/templates in ` +
+        'outputFileTracingIncludes van next.config.ts?'
+    );
+  }
   const template = await readFile(file);
   const assetsDir = options.assetsDir ?? ASSETS_DIR;
   const gebruikt = new Set<string>();

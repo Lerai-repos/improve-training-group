@@ -95,7 +95,8 @@ export function useGenerate(
       volgnummer.current += 1;
       const mijn = volgnummer.current;
       lopend.current.set(itemId, mijn);
-      zet(itemId, { kind: 'bezig' });
+      // `schrijft` zodat de knop tijdens het schrijven niet de tekst van de planstap toont.
+      zet(itemId, { kind: 'bezig', schrijft: confirmExisting });
 
       void (async () => {
         /**
