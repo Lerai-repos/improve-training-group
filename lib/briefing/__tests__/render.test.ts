@@ -25,6 +25,7 @@ const TRAINING: BriefingTraining = {
   brie: 'Aanmaken',
   opdrachtgever: 'Probiblio',
   themas: ['Verbindend communiceren'],
+  trainingscodeMc: '',
   themaInhoud: '',
   klanttitel: 'Verbindend communiceren',
   duur: '3',
@@ -184,6 +185,7 @@ describe('renderBriefing', () => {
     const training: BriefingTraining = {
       ...TRAINING,
       opdrachtgever: 'Probiblio',
+      trainingscodeMc: '',
       themaInhoud:
         'Plenaire opening, kennismaking en introductie tot het onderwerp.\n' +
         'Reflectie: hoe staat het er nu voor met feedback binnen {organisatie} en binnen deze groep?',

@@ -20,6 +20,7 @@ const PROBIBLIO: BriefingTraining = {
   label: 'IT',
   brie: 'Verzonden',
   opdrachtgever: 'Probiblio',
+  trainingscodeMc: '',
   themas: ['Verbindend communiceren'],
   themaInhoud: '',
   klanttitel: 'Verbindend communiceren',
@@ -89,8 +90,28 @@ describe('composeBriefing', () => {
    */
   it('markeert elke bron die nog niet is aangesloten', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
-    expect(openIssues(data)).toHaveLength(6);
+    expect(openIssues(data)).toHaveLength(5);
     expect(data.reis).toContain('km en reistijd');
+  });
+
+  /**
+   * Vijf en niet zes sinds de MC-codes zijn aangesloten (27-Aug-2026).
+   *
+   * Een leeg codeveld is GEEN openstaande bron: 19 van de 100 thema's hebben geen Monday
+   * Challenge, en dat is een eindtoestand. Er een `«…»`-regel van maken zou onze koppeling
+   * voorgoed onaf laten lijken en de trainer iets onwaars vertellen.
+   */
+  it('rekent een leeg codeveld niet als openstaande bron', () => {
+    const data = composeBriefing({ ...PROBIBLIO, trainingscodeMc: '' }, EMPTY_CHECKLIST);
+
+    expect(data.trainingscodeMc).toBe('');
+    expect(openIssues(data).some((t) => t.includes('trainingscode'))).toBe(false);
+  });
+
+  it('zet de code van de training in de gegevenstabel', () => {
+    const data = composeBriefing({ ...PROBIBLIO, trainingscodeMc: 'IT-58' }, EMPTY_CHECKLIST);
+
+    expect(data.trainingscodeMc).toBe('IT-58');
   });
 
   /**
@@ -119,7 +140,7 @@ describe('composeBriefing', () => {
   it('houdt een lege achtergrondkolom zichtbaar in het document', () => {
     const data = composeBriefing({ ...PROBIBLIO, achtergrond: '   ' }, EMPTY_CHECKLIST);
     expect(data.achtergrond[0]).toContain('achtergrondinformatie');
-    expect(openIssues(data)).toHaveLength(7);
+    expect(openIssues(data)).toHaveLength(6);
   });
 
   /** De aanroeper mag hem nog steeds overschrijven — de kolom is de bron, niet de baas. */

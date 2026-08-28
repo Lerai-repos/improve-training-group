@@ -117,6 +117,43 @@ export const OPPORTUNITY_COLUMNS = {
  * een leeg veld achter, en dat is niet te onderscheiden van een thema dat nooit een skelet
  * heeft gekregen.
  */
+/**
+ * De MC-productcode per label, één kolom per label op het Themabord.
+ *
+ * Acht kolommen en niet één, want de code verschilt per thema ÉN per label: "Verbindend
+ * communiceren" is IT-58 maar JE-60, TT-27, SST-45 en CC-64. Er zit geen gedeelde nummering
+ * in, dus afleiden uit labelcode plus themanummer kan niet — gemeten, en door ITG bevestigd.
+ *
+ * Aangemaakt met `scripts/themas-mc-codes.ts`, gevuld met `scripts/themas-mc-seed.ts`.
+ *
+ * ## FT en TMT staan er MET OPZET niet in
+ *
+ * ITG's werkblad heeft een negende blok, `Losse labels`: `Feedback Trainer → FT-1` en
+ * `Time Management Trainer → TMT-1`. Dat zijn codes voor een héél label, zonder thema — ze
+ * passen dus niet in een kolom per thema, en er is geen bordthema om ze aan te hangen.
+ *
+ * Belangrijker: **die challenges bestaan nog niet.** Dirkje, 27-Aug-2026: *"deze challenges
+ * zijn nog helemaal niet gemaakt... We hebben die automatisering alleen nog niet klaar dus
+ * die bestaat nog niet."* `FT-1` op een briefing zetten zou de trainer vragen iets aan te
+ * bieden dat ITG niet heeft — dezelfde fout als het wegschrijven van `NOG MAKEN`.
+ *
+ * Een FT-briefing krijgt dus een lege Trainingscode-regel, en dat is de bedoeling. Wie hier
+ * later een `FT`-kolom bijzet lost een probleem op dat niet bestaat en introduceert een
+ * verzonnen product; vraag eerst aan ITG of de challenge inmiddels wél gemaakt is. TMT is
+ * bovendien geen briefinglabel (`SUPPORTED_LABELS` kent het niet), dus die speelt helemaal
+ * niet mee.
+ */
+export const THEMAS_MC_COLUMNS: Readonly<Record<string, string>> = {
+  IT: 'itg_mc_it',
+  JE: 'itg_mc_je',
+  TT: 'itg_mc_tt',
+  SST: 'itg_mc_sst',
+  FV: 'itg_mc_fv',
+  WJ: 'itg_mc_wj',
+  CC: 'itg_mc_cc',
+  CP: 'itg_mc_cp',
+};
+
 export const THEMAS_COLUMNS = {
   /**
    * De concept-inhoud per thema: de 85 skeletten uit `ITG - Training skeletten 2024.docx`.

@@ -13,6 +13,7 @@ const PROBIBLIO: BriefingTraining = {
   brie: 'Aanmaken',
   opdrachtgever: 'Probiblio',
   themas: ['Verbindend communiceren'],
+  trainingscodeMc: '',
   themaInhoud: '',
   klanttitel: 'Verbindend communiceren',
   duur: '3',

@@ -18,12 +18,15 @@ import { assertColumns } from '@lib/monday/schema-check';
 
 import { agendaBoardId, THEMAS_BOARD } from '@lib/monday/board-config';
 
+import { formatTrainingCode } from './mc-codes';
+
 import {
   BRIEFING_AGENDA_COLUMNS,
   CONTACT_COLUMNS,
   OPPORTUNITY_BOARD,
   OPPORTUNITY_COLUMNS,
   THEMAS_COLUMNS,
+  THEMAS_MC_COLUMNS,
   TRAINER_ACTEURS_GROUP,
 } from './columns';
 
@@ -231,7 +234,9 @@ const text = (item: RawItem, id: string): string => {
  */
 async function readThemas(
   client: MondayGraphQLClient,
-  ids: readonly string[]
+  ids: readonly string[],
+  /** De MC-kolom van dít label, of `undefined` bij een label dat er geen heeft. */
+  mcColumn: string | undefined
 ): Promise<Map<string, BriefingThema>> {
   if (ids.length === 0) {
     return new Map();
@@ -249,7 +254,20 @@ async function readThemas(
   if (themasBoard === undefined) {
     throw new Error(`Briefing: Themas-bord ${THEMAS_BOARD} niet gevonden of niet toegankelijk.`);
   }
-  assertColumns(themasBoard, [{ id: THEMAS_COLUMNS.conceptInhoud, type: 'long_text' }]);
+  /**
+   * De MC-kolom hoort er ook bij ZODRA het label er een heeft.
+   *
+   * Twee gevallen die niet op één hoop mogen. `mcColumn === undefined` betekent "dit label
+   * kent geen MC-kolom" (een onbekend label als `Email`) en levert terecht geen code op.
+   * Maar is de kolom wél geconfigureerd en staat hij niet op het bord — verwijderd,
+   * hernoemd, van type veranderd, of de provisioning is nooit gedraaid — dan laat Monday hem
+   * stil weg en lezen we `''`. Dat is niet te onderscheiden van "dit thema heeft geen Monday
+   * Challenge", en dus verdwijnen 361 codes zonder dat er iets faalt.
+   */
+  assertColumns(themasBoard, [
+    { id: THEMAS_COLUMNS.conceptInhoud, type: 'long_text' },
+    ...(mcColumn === undefined ? [] : [{ id: mcColumn, type: 'text' as const }]),
+  ]);
   const data = await client.query<{
     items: Array<{
       id: string | number;
@@ -260,7 +278,13 @@ async function readThemas(
     `query ($ids: [ID!], $cols: [String!]) {
        items(ids: $ids) { id name column_values(ids: $cols) { id text } }
      }`,
-    { ids: [...ids], cols: [THEMAS_COLUMNS.conceptInhoud] }
+    {
+      ids: [...ids],
+      cols:
+        mcColumn === undefined
+          ? [THEMAS_COLUMNS.conceptInhoud]
+          : [THEMAS_COLUMNS.conceptInhoud, mcColumn],
+    }
   );
   const found = new Map(
     (data.items ?? []).map((item) => [
@@ -276,6 +300,18 @@ async function readThemas(
         conceptInhoud: (
           item.column_values.find((c) => c.id === THEMAS_COLUMNS.conceptInhoud)?.text ?? ''
         ).trim(),
+        /**
+         * De MC-code voor HET LABEL van deze training, of leeg.
+         *
+         * Leeg is de normale stand voor 19 van de 100 thema's: die hebben geen Monday
+         * Challenge. Anders dan bij `conceptInhoud` wordt de kolom hier niet in het
+         * bordschema afgedwongen — een onbekend label heeft simpelweg geen kolom, en dat
+         * mag geen briefing tegenhouden.
+         */
+        mcCode:
+          mcColumn === undefined
+            ? ''
+            : (item.column_values.find((c) => c.id === mcColumn)?.text ?? '').trim(),
       },
     ])
   );
@@ -564,7 +600,7 @@ export async function readBriefingTraining(
   const amId = people.length > 0 ? String(people[0].id) : null;
 
   const [themaItems, trainers, accountmanager, opportunity] = await Promise.all([
-    readThemas(client, themaIds),
+    readThemas(client, themaIds, THEMAS_MC_COLUMNS[text(item, C.label).trim().toUpperCase()]),
     readTrainers(client, trainerIds, coSet),
     readAccountmanager(client, amId),
     readContact(client, opportunityItemId, text(item, C.contactpersoonNaam)),
@@ -579,6 +615,10 @@ export async function readBriefingTraining(
     brie: text(item, C.brie),
     opdrachtgever: text(item, C.opdrachtgever),
     themas: themaIds.map((id) => themaItems.get(id)?.naam ?? id),
+    trainingscodeMc: formatTrainingCode(
+      themaIds.map((id) => themaItems.get(id)?.mcCode ?? ''),
+      text(item, C.taal)
+    ),
     themaInhoud: themaIds
       .map((id) => themaItems.get(id)?.conceptInhoud ?? '')
       .filter((t) => t !== '')

@@ -28,6 +28,7 @@ const trainingVoor = (itemId: string, over: Partial<BriefingTraining> = {}): Bri
   brie: 'Aanmaken',
   opdrachtgever: `Klant ${itemId}`,
   themas: ['Improvisatietheater'],
+  trainingscodeMc: '',
   themaInhoud: 'Opening.',
   klanttitel: 'Improvisatietheater',
   duur: '2',

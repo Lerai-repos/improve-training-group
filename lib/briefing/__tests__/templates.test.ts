@@ -177,6 +177,7 @@ const TRAINING: BriefingTraining = {
   label: 'IT',
   brie: 'Aanmaken',
   opdrachtgever: 'Probiblio',
+  trainingscodeMc: '',
   themas: ['Verbindend communiceren'],
   themaInhoud: 'Plenaire opening.\nOefenen met de praktijk.',
   klanttitel: 'Verbindend communiceren',

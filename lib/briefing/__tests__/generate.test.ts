@@ -26,6 +26,7 @@ const TRAINING: BriefingTraining = {
   brie: 'Aanmaken',
   opdrachtgever: 'Welzijn Ermelo',
   themas: ['Feedback geven'],
+  trainingscodeMc: '',
   themaInhoud: 'Plenaire opening.',
   klanttitel: 'Elkaar aanspreken op gedrag',
   duur: '2',

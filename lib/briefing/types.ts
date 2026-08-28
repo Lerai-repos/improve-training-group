@@ -59,9 +59,22 @@ export interface BriefingThema {
   readonly naam: string;
   /** `itg_conceptinhoud`: de standaardbullets, één per regel. Leeg is normaal. */
   readonly conceptInhoud: string;
+  /**
+   * De Monday Challenge-productcode voor het label van déze training. Leeg is normaal:
+   * 19 van de 100 thema's hebben geen challenge.
+   */
+  readonly mcCode: string;
 }
 
 export interface BriefingTraining {
+  /**
+   * De Trainingscode MC zoals hij in de gegevenstabel komt.
+   *
+   * Al samengesteld: meerdere thema's met ` & ` aaneen, en `-ENG` per code bij een
+   * Engelstalige training. Leeg betekent "dit thema heeft geen Monday Challenge" en dat is
+   * een lege regel in het document, geen melding — ITG vult zelf aan waar er wél een hoort.
+   */
+  readonly trainingscodeMc: string;
   readonly itemId: string;
   readonly naam: string;
   /** Labelafkorting uit `status23`, bv. `IT`. Bepaalt welk sjabloon en welke huisstijl. */

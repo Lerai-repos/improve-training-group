@@ -152,7 +152,6 @@ const MISSING = {
   ),
   inventarisatie: notConnected('inventarisatie klant', 'Google Form van het label'),
   reis: notConnected('km en reistijd', 'route van de trainer naar de locatie'),
-  trainingscodeMc: notConnected('trainingscode MC', 'nog niet belegd, zie 06-briefing.md'),
 } as const;
 
 /**
@@ -194,7 +193,15 @@ export function composeBriefing(
     klantcontactmoment: clientContactFor(training, extras.recipient),
     evaluatie: formatEvaluation(training.evaluatie),
     iecode: formatIeCode(training.ieCode),
-    trainingscodeMc: extras.trainingscodeMc ?? MISSING.trainingscodeMc,
+    /**
+     * Van de training, en LEEG als er geen challenge is.
+     *
+     * Geen `«nog niet aangesloten»` meer: de koppeling bestaat, en 19 van de 100 thema's
+     * hebben gewoon geen Monday Challenge. Daar een melding neerzetten laat ons werk
+     * voorgoed onaf lijken en zegt de trainer iets onwaars. ITG vult zelf aan waar er wél
+     * een code hoort te komen.
+     */
+    trainingscodeMc: extras.trainingscodeMc ?? training.trainingscodeMc,
     achtergrond: achtergrondAlineas(training, extras),
     extraInfo: extras.extraInfo ?? [MISSING.extraInfo],
     mondayChallenge: extras.mondayChallenge ?? false,

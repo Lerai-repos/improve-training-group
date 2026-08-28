@@ -59,6 +59,10 @@ interface FakeOpts {
   dropConceptColumn?: boolean;
   conceptColumnType?: string;
   conceptInhoud?: Record<string, string>;
+  /** Bootst een verwijderde of omgezette MC-kolom na. */
+  dropMcColumn?: boolean;
+  mcColumnType?: string;
+  mcCode?: Record<string, string>;
   /** Bootst een hernoemde/verwijderde telefoonkolom op het trainersbord na. */
   dropPhoneColumn?: boolean;
   /** Draait het antwoord van items(ids:) om, zoals Monday mag doen. */
@@ -154,7 +158,10 @@ function client(item: unknown, opts: FakeOpts = {}) {
           .map((id) => ({
             id,
             name: id === '900' ? 'Verbindend communiceren' : `Thema ${id}`,
-            column_values: [{ id: 'itg_conceptinhoud', text: opts.conceptInhoud?.[id] ?? null }],
+            column_values: [
+              { id: 'itg_conceptinhoud', text: opts.conceptInhoud?.[id] ?? null },
+              ...(opts.dropMcColumn ? [] : [{ id: 'itg_mc_it', text: opts.mcCode?.[id] ?? null }]),
+            ],
           })),
       } as T);
     }
@@ -168,16 +175,29 @@ function client(item: unknown, opts: FakeOpts = {}) {
               id: '5067928440',
               name: "Thema's",
               groups: [],
-              columns: opts.dropConceptColumn
-                ? []
-                : [
-                    {
-                      id: 'itg_conceptinhoud',
-                      title: 'Concept inhoud',
-                      type: opts.conceptColumnType ?? 'long_text',
-                      settings_str: null,
-                    },
-                  ],
+              columns: [
+                ...(opts.dropConceptColumn
+                  ? []
+                  : [
+                      {
+                        id: 'itg_conceptinhoud',
+                        title: 'Concept inhoud',
+                        type: opts.conceptColumnType ?? 'long_text',
+                        settings_str: null,
+                      },
+                    ]),
+                // De MC-kolom van het label uit `agendaItem()` (IT), tenzij een test hem weghaalt.
+                ...(opts.dropMcColumn
+                  ? []
+                  : [
+                      {
+                        id: 'itg_mc_it',
+                        title: 'MC-code IT',
+                        type: opts.mcColumnType ?? 'text',
+                        settings_str: null,
+                      },
+                    ]),
+              ],
             },
           ]
         : ids[0] === '1279052045'
@@ -688,6 +708,65 @@ describe('readBriefingTraining', () => {
     await expect(
       readBriefingTraining(client(agendaItem(), { dropConceptColumn: true }), '1')
     ).rejects.toThrow(/missing column itg_conceptinhoud/);
+  });
+
+  /**
+   * Twee gevallen die op precies één ding na identiek zijn.
+   *
+   * Een leeg codeveld hoort te bestaan: 19 van de 100 thema's hebben geen Monday Challenge.
+   * Een WEGGEHAALDE kolom levert dezelfde lege waarde op, want Monday laat een onbekend
+   * kolom-id gewoon weg — en dan verdwijnen 361 codes zonder dat er iets faalt, met een
+   * lege Trainingscode-regel die eruitziet alsof dat thema er geen heeft.
+   */
+  it('werpt als de MC-kolom van dit label verdwenen is', async () => {
+    await expect(
+      readBriefingTraining(client(agendaItem(), { dropMcColumn: true }), '1')
+    ).rejects.toThrow(/missing column itg_mc_it/);
+  });
+
+  it('werpt als de MC-kolom een ander type heeft gekregen', async () => {
+    await expect(
+      readBriefingTraining(client(agendaItem(), { mcColumnType: 'long_text' }), '1')
+    ).rejects.toThrow(/itg_mc_it is type 'long_text'/);
+  });
+
+  /**
+   * Een label zonder MC-kolom is iets ánders dan een verdwenen kolom. `Email` staat op één
+   * training op het bord en hoort geen briefing tegen te houden op een kolom die voor dat
+   * label nooit heeft bestaan.
+   */
+  it('eist geen MC-kolom voor een label dat er geen kent', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem({ [C.label]: { text: 'TMT' } }), { dropMcColumn: true }),
+      '1'
+    );
+
+    expect(t.trainingscodeMc).toBe('');
+  });
+
+  /**
+   * FT is een ECHT briefinglabel met een sjabloon, en krijgt toch geen code.
+   *
+   * ITG's werkblad heeft `Feedback Trainer → FT-1` in het blok `Losse labels`: een code voor
+   * een heel label, zonder thema. Die past niet in een kolom-per-thema, maar dat is niet de
+   * reden dat hij hier leeg blijft. Dirkje (27-Aug-2026): die challenge is *"nog helemaal
+   * niet gemaakt"*. `FT-1` afdrukken zou de trainer vragen iets aan te bieden dat niet
+   * bestaat. Deze test legt die keuze vast zodat niemand hem per ongeluk "repareert".
+   */
+  it('laat de code leeg voor FT, want die challenge bestaat nog niet', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem({ [C.label]: { text: 'FT' } }), { dropMcColumn: true }),
+      '1'
+    );
+
+    expect(t.trainingscodeMc).toBe('');
+  });
+
+  /** Leeg is de normale eindtoestand en mag nooit als een fout landen. */
+  it('leest een leeg codeveld als "geen challenge", niet als fout', async () => {
+    const t = await readBriefingTraining(client(agendaItem()), '1');
+
+    expect(t.trainingscodeMc).toBe('');
   });
 
   it('werpt als de concept-kolom een ander type heeft gekregen', async () => {
