@@ -272,6 +272,50 @@ describe('resolveBriefingLocation', () => {
       expect(uit.kind === 'refused' && uit.reason).toContain('gok hier niet');
     });
 
+    /**
+     * Zonder klantnaam is er geen klantmap, en het pad valt dan terug op de map eróver.
+     *
+     * `join` laat lege segmenten weg, dus een lege naam levert niet een fout op maar het
+     * pad van de KLANTENMAP ZELF — een map die bestaat, zodat er niets wordt aangemaakt,
+     * niets faalt, en de briefing tussen de mappen van alle andere klanten belandt. Gemeten
+     * op het echte bord: 10 van de 264 komende trainingen hebben geen Opdrachtgever, omdat
+     * die kolom een spiegel is van een Opportunity die niet gekoppeld is.
+     */
+    it('weigert een training zonder klantnaam in plaats van de klantenmap te kiezen', async () => {
+      const uit = await resolveBriefingLocation(lister(JE), { ...invoer, klant: '' });
+
+      expect(uit.kind).toBe('refused');
+      expect(uit.kind === 'refused' && uit.reason).toContain('Opdrachtgever');
+    });
+
+    it('weigert ook een klantnaam die alleen uit spaties bestaat', async () => {
+      const uit = await resolveBriefingLocation(lister(JE), { ...invoer, klant: '   ' });
+
+      expect(uit.kind).toBe('refused');
+    });
+
+    /**
+     * `sanitiseItemName` haalt punten en tildes van de randen. Een naam die daar niets van
+     * overhoudt is dus óók leeg, ook al zag de cel er gevuld uit.
+     */
+    it('weigert een naam die na saneren niets overhoudt', async () => {
+      const uit = await resolveBriefingLocation(lister(JE), { ...invoer, klant: '...' });
+
+      expect(uit.kind).toBe('refused');
+      expect(uit.kind === 'refused' && uit.reason).toContain('Opdrachtgever');
+    });
+
+    /** De jaarmap verandert er niets aan: dan zou hij dáár in belanden. */
+    it('weigert ook wanneer er een jaarmap is om in te vallen', async () => {
+      const uit = await resolveBriefingLocation(lister(TT), {
+        ...invoer,
+        label: 'TT',
+        klant: '',
+      });
+
+      expect(uit.kind).toBe('refused');
+    });
+
     it('gokt ook niet tussen twee labelmappen met hetzelfde label', async () => {
       const uit = await resolveBriefingLocation(
         lister({ ...JE, General: ['1. JE', '7. JE'] }),

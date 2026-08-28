@@ -70,6 +70,30 @@ export async function resolveBriefingLocation(
   lister: FolderLister,
   input: LocationInput
 ): Promise<LocationResult> {
+  /**
+   * Geen klantnaam, geen bestemming — en dit moet vóór alles.
+   *
+   * `join` laat lege segmenten weg, dus een lege klantnaam levert geen pad naar een
+   * klantmap op maar het pad van de map eróver: de jaarmap, of anders de klantenmap zelf.
+   * Die bestaat al, dus er wordt niets aangemaakt, er faalt niets, en de briefing komt
+   * tussen de mappen van alle andere klanten van dat label te staan. Van alle manieren
+   * waarop dit mis kan gaan is dat de enige die niemand ziet.
+   *
+   * Leeg is hier geen theoretisch geval: `opdrachtgever` is een spiegel van de gekoppelde
+   * Opportunity, en op het echte bord hebben 10 van de 264 komende trainingen er geen. Het
+   * item ziet er dan volledig ingevuld uit — de naam noemt de klant gewoon — en de tab meldt
+   * de lege cel bewust zonder te blokkeren, omdat het in het document een «…»-regel wordt.
+   * Dat is de juiste keuze voor een regel tekst en de verkeerde voor een pad.
+   */
+  if (sanitiseItemName(input.klant) === '') {
+    return {
+      kind: 'refused',
+      reason:
+        'Deze training heeft geen Opdrachtgever, dus er is geen klantmap om de briefing in te zetten. ' +
+        'Meestal komt dat doordat er geen Opportunity aan de training gekoppeld is.',
+    };
+  }
+
   const labelMatch = matchLabelFolder(await lister.children(input.root), input.label);
   const labelNaam = vereis(labelMatch, `voor label "${input.label}"`, input.root);
   if (typeof labelNaam !== 'string') {
