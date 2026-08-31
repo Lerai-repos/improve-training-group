@@ -42,7 +42,6 @@ export interface GenerateContext {
   readonly historie: readonly HistoryRow[];
   /** De gemarkeerde updates van het agenda-item en de Opportunity. */
   readonly extraInfo: readonly string[];
-  readonly mondayChallenge: boolean;
   /** Km en reistijd per trainer-itemId. */
   readonly reis: ReadonlyMap<string, TravelInput>;
   /** Door de adviseur aangewezen acteurs. */
@@ -95,7 +94,6 @@ export async function generateBriefings(
   const gedeeld = {
     historie: context.historie,
     extraInfo: context.extraInfo,
-    mondayChallenge: context.mondayChallenge,
     roles: sessionFacts(training, checklist, { actorItemIds: context.actorItemIds }),
   };
 

@@ -15,7 +15,6 @@ import { createMemoryChecklistStore } from '../checklist-store';
 const ANTWOORD: SavedChecklist = {
   checklist: { ...EMPTY_CHECKLIST, trainingActor: true, homework: true },
   actorItemIds: ['2'],
-  mondayChallenge: false,
   actorAnswered: true,
 };
 
@@ -55,7 +54,6 @@ describe('checklist-store', () => {
     const uit = await store.save('1', {
       checklist: { ...EMPTY_CHECKLIST, trainingCycle: true },
       actorItemIds: [],
-      mondayChallenge: false,
       actorAnswered: true,
       token: leeg.token,
     });
@@ -102,7 +100,6 @@ describe('checklist-store', () => {
     const tweede = await store.save('1', {
       checklist: { ...EMPTY_CHECKLIST, trainingCycle: true },
       actorItemIds: [],
-      mondayChallenge: false,
       actorAnswered: true,
       token: eerste.token,
     });
@@ -115,7 +112,6 @@ describe('checklist-store', () => {
     const eigen = {
       checklist: { ...EMPTY_CHECKLIST, conceptInhoud: 'Eigen opening.\nEigen afsluiting.' },
       actorItemIds: [],
-      mondayChallenge: false,
       actorAnswered: true,
     };
     await store.save('1', { ...eigen, token: leeg.token });
@@ -136,7 +132,6 @@ describe('validateChecklist', () => {
       validateChecklist({
         checklist: { ...EMPTY_CHECKLIST, ownGroup: true, sameGroup: true },
         actorItemIds: [],
-        mondayChallenge: false,
         actorAnswered: true,
       })
     ).toMatch(/niet allebei/);
@@ -147,7 +142,6 @@ describe('validateChecklist', () => {
       validateChecklist({
         checklist: { ...EMPTY_CHECKLIST, trainingActor: false },
         actorItemIds: ['2'],
-        mondayChallenge: false,
         actorAnswered: true,
       })
     ).toMatch(/acteurvraag op nee/);
@@ -158,7 +152,6 @@ describe('validateChecklist', () => {
       validateChecklist({
         checklist: { ...EMPTY_CHECKLIST, conceptInhoud: 'x'.repeat(20_001) },
         actorItemIds: [],
-        mondayChallenge: false,
         actorAnswered: true,
       })
     ).toMatch(/hoogstens/);

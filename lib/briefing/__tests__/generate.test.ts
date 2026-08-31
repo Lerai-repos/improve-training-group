@@ -53,7 +53,6 @@ const TRAINING: BriefingTraining = {
 const CONTEXT = {
   historie: [],
   extraInfo: [],
-  mondayChallenge: false,
   reis: new Map(),
   actorItemIds: [],
 };

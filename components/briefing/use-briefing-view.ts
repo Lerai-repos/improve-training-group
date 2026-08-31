@@ -69,7 +69,6 @@ export interface UseBriefingView {
   readonly locked: boolean;
   setChecklist(next: Partial<BriefingChecklist>): void;
   setActorItemIds(next: readonly string[]): void;
-  setMondayChallenge(next: boolean): void;
   /** De acteurvraag beantwoorden. Zet ook `actorAnswered`, ook bij hetzelfde antwoord. */
   answerActor(werktMee: boolean): void;
   /** Het onleesbare record bewust overschrijven. */
@@ -409,13 +408,6 @@ export function useBriefingView(
     [wijzig]
   );
 
-  const setMondayChallenge = useCallback(
-    (next: boolean) => {
-      wijzig((huidig) => ({ ...huidig, mondayChallenge: next }));
-    },
-    [wijzig]
-  );
-
   /**
    * De acteurvraag beantwoorden, ook als het antwoord hetzelfde blijft.
    *
@@ -527,7 +519,6 @@ export function useBriefingView(
     locked,
     setChecklist,
     setActorItemIds,
-    setMondayChallenge,
     answerActor,
     unlock,
     refresh,

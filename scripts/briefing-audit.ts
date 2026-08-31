@@ -76,7 +76,6 @@ async function render(
     const uit = await generateBriefings(training, view.checklist, {
       historie,
       extraInfo: extraInfo.lines,
-      mondayChallenge: false,
       reis: new Map(),
       actorItemIds: view.actorItemIds,
     });
@@ -116,7 +115,6 @@ async function beoordeel(client: Client, itemId: string, boardId: string): Promi
   const view = buildTabView(training, {
     checklist: { ...EMPTY_CHECKLIST, trainingActor: voorstel },
     actorItemIds: [],
-    mondayChallenge: false,
     actorAnswered: true,
   });
 

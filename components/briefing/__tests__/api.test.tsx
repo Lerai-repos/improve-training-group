@@ -111,7 +111,6 @@ describe('saveChecklist', () => {
           trainingActor: false,
         },
         actorItemIds: [],
-        mondayChallenge: false,
         actorAnswered: true,
         token: 'oud',
       })

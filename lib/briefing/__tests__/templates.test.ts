@@ -35,6 +35,16 @@ const TABLE_MARKER = '+++opdrachtgever+++';
 const CONCEPT_LINE = '+++$b+++';
 /** De alinea die per blokregel herhaald wordt, in de opsommingsvariant. */
 const BLOCK_LINE = '+++$r.tekst+++';
+/** De titel van een blok, in beide lussen dezelfde tekst. */
+const BLOCK_TITLE = '+++$blk.titel+++';
+/**
+ * ITG's aansporing over de Monday Challenges — op het STAARTJE, niet op de hele zin.
+ *
+ * Word knipt de zin op in runs (de spellingcontrole zet `Monday` in een eigen run), dus de
+ * volledige tekst staat nergens aaneengesloten in de XML. `aan te bieden` overleeft dat en
+ * komt verder in geen enkel sjabloon voor.
+ */
+const MC_BANNER = 'aan te bieden';
 
 /**
  * Een markering opzoeken op kleur.
@@ -118,6 +128,61 @@ describe.each(LABELS)('sjabloon %s', (label) => {
    */
   it('heeft geen gele markering meer', () => {
     expect(templateXml(label)).not.toMatch(highlight('yellow'));
+  });
+
+  /**
+   * Precies ÉÉN aansporing over de Monday Challenges, plus de kolom in de tabel.
+   *
+   * Er stonden er even drie: de cyaan regel die met het tekstvak wordt opgetild, de
+   * `Trainingscode MC`-rij in de tabel, én een derde die `body.py` onder de
+   * achtergrondinformatie zette. Tim, 28-Aug-2026: *"the cyan one and the one in the table
+   * are correct"*.
+   *
+   * Deze telling is de enige bewaking daarop. De tekst is in alle drie de gevallen dezelfde,
+   * dus een sjabloon dat opnieuw gegenereerd wordt met een oudere `body.py` levert een
+   * document op dat prima opent en waarin niets kapot lijkt — er staat alleen twee keer
+   * hetzelfde.
+   */
+  it('heeft één losse Monday Challenges-regel, naast de tabelrij', () => {
+    const xml = templateXml(label);
+    const banners = xml.split(MC_BANNER).length - 1;
+
+    expect(banners).toBe(1);
+    // En de tabelkolom staat er los van; die hoort er wél te zijn.
+    expect(xml).toContain('+++trainingscodeMc+++');
+  });
+
+  /**
+   * De regel is ONVOORWAARDELIJK, en dat is een keuze.
+   *
+   * Hij komt uit ITG's eigen brondocument en staat er dus op elke briefing, ook zonder
+   * Monday Challenge. De conditionele variant is vervallen samen met het vinkje; stond hij
+   * hier weer achter een `IF`, dan verwijst dat naar een veld dat niemand meer vult en
+   * verdwijnt de regel stilletjes uit élke briefing.
+   */
+  it('zet de Monday Challenges-regel niet achter een IF', () => {
+    const xml = templateXml(label);
+
+    expect(xml).not.toContain('mondayChallenge');
+  });
+
+  /**
+   * Beide bloklussen geven hun titel dezelfde kop.
+   *
+   * De rolblokken erfden `Kop1` van de alinea `Concept inhoud`, de gewone blokken niet —
+   * dus `Leadtrainer` was een kop en `Vaste klant`, `Huiswerkopdracht` en `Voorbereidende
+   * opdracht` gewone tekst, in hetzelfde document. Zichtbaar zodra je het opent, en door
+   * geen enkele test gedekt: de tekst was immers hetzelfde.
+   */
+  it('geeft de titel van élk blok de kopstijl', () => {
+    const xml = templateXml(label);
+    const eerste = positionOf(xml, BLOCK_TITLE);
+    const tweede = positionOf(xml.slice(eerste + 1), BLOCK_TITLE) + eerste + 1;
+
+    for (const at of [eerste, tweede]) {
+      // Met of zonder spatie vóór de sluitende schuine streep; beide zijn geldige XML.
+      expect(paragraphAt(xml, at)).toMatch(/<w:pStyle[^>]*w:val="Kop1"/);
+    }
   });
 
   /** Cyaan blijft juist wél staan: dat is de opmerking over de Monday Challenges. */

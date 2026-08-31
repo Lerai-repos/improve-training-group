@@ -624,7 +624,12 @@ describe('useBriefingView', () => {
     expect(tweedeGet).toBeGreaterThan(saveEnd);
   });
 
-  it('houdt de acteurkeuze en de Monday Challenge bij', async () => {
+  /**
+   * Stond hier eerst op de Monday Challenge-schakelaar; die is vervallen toen de harde
+   * regel uit het sjabloon ging. De eigenschap die het bewees — een keuze buiten de
+   * vinkjes om bereikt de opslag — hangt nu aan de acteurkeuze.
+   */
+  it('houdt de acteurkeuze bij', async () => {
     const monday = fakeMonday(CTX('900'));
     const api = fakeApi({});
     const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
@@ -633,11 +638,11 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setMondayChallenge(true);
+      result.current.setActorItemIds(['4242']);
     });
     await waitFor(() => {
       expect(api.writes).toHaveLength(1);
     });
-    expect(api.writes[0]?.input.mondayChallenge).toBe(true);
+    expect(api.writes[0]?.input.actorItemIds).toEqual(['4242']);
   });
 });

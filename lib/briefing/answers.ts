@@ -22,14 +22,6 @@ export interface SavedChecklist {
   readonly checklist: BriefingChecklist;
   readonly actorItemIds: readonly string[];
   /**
-   * Is er een Monday Challenge voor deze training?
-   *
-   * Niet in `BriefingChecklist`, omdat het geen blok aan- of uitzet maar één harde regel onder
-   * de achtergrondinformatie. Dirkje: *"Als deze er is, dan moet je dit altijd achterzetten.
-   * Gewoon hard."*
-   */
-  readonly mondayChallenge: boolean;
-  /**
    * Heeft een mens de acteurvraag beantwoord?
    *
    * Expliciet, en niet afgeleid uit "er staat iets opgeslagen". Dat laatste maakte het
@@ -54,7 +46,6 @@ export const EMPTY_SAVED: SavedChecklist = {
     trainingActor: false,
   },
   actorItemIds: [],
-  mondayChallenge: false,
   actorAnswered: false,
 };
 

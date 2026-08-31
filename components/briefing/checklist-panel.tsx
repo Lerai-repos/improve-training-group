@@ -217,10 +217,8 @@ export interface ChecklistPanelProps {
   readonly acteurVoorstel: boolean;
   readonly personen: readonly TabPerson[];
   readonly actorItemIds: readonly string[];
-  readonly mondayChallenge: boolean;
   onChecklist(next: Partial<BriefingChecklist>): void;
   onActors(next: readonly string[]): void;
-  onMondayChallenge(next: boolean): void;
   onAnswerActor(werktMee: boolean): void;
 }
 
@@ -230,10 +228,8 @@ export const ChecklistPanel = ({
   acteurVoorstel,
   personen,
   actorItemIds,
-  mondayChallenge,
   onChecklist,
   onActors,
-  onMondayChallenge,
   onAnswerActor,
 }: ChecklistPanelProps) => {
   const zetCyclus = (next: boolean) => {
@@ -283,13 +279,6 @@ export const ChecklistPanel = ({
           uitleg="Deelnemers krijgen vooraf een reflectieopdracht."
           checked={checklist.preparatoryAssignment}
           onChange={zetVoorbereidend}
-        />
-        <Vraag
-          id="challenge"
-          label="Monday Challenge"
-          uitleg="Zet de harde regel onder de achtergrondinformatie: vergeet de Challenges niet."
-          checked={mondayChallenge}
-          onChange={onMondayChallenge}
         />
       </div>
     </section>

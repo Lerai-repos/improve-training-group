@@ -130,7 +130,6 @@ async function main(): Promise<void> {
             const view = buildTabView(training, {
               checklist: { ...EMPTY_CHECKLIST, trainingActor: voorstel },
               actorItemIds: [],
-              mondayChallenge: false,
               actorAnswered: true,
             });
             /**

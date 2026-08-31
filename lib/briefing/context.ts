@@ -39,7 +39,6 @@ export interface ContextResult {
 
 export interface ContextInput {
   readonly actorItemIds: readonly string[];
-  readonly mondayChallenge: boolean;
   /** De ontvangers waarvoor km en reistijd nodig zijn. */
   readonly trainerItemIds: readonly string[];
   /** Hoeveel eerdere/komende sessies het blok `Vaste klant` toont. */
@@ -177,7 +176,6 @@ export async function buildGenerateContext(
     context: {
       historie,
       extraInfo: extraInfo.lines,
-      mondayChallenge: input.mondayChallenge,
       reis,
       actorItemIds: input.actorItemIds,
     },

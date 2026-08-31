@@ -29,7 +29,6 @@ const bodySchema = z.object({
     conceptInhoud: z.string().max(CONCEPT_MAX_LENGTH).optional(),
   }),
   actorItemIds: z.array(z.string().min(1)).max(50),
-  mondayChallenge: z.boolean(),
   actorAnswered: z.boolean(),
   token: z.string().min(1),
 });
@@ -59,7 +58,6 @@ export async function PUT(
   const input = {
     checklist: parsed.data.checklist,
     actorItemIds: parsed.data.actorItemIds,
-    mondayChallenge: parsed.data.mondayChallenge,
     actorAnswered: parsed.data.actorAnswered,
   };
   const invalid = validateChecklist(input);

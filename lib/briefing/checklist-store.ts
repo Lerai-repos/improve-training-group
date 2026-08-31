@@ -74,8 +74,14 @@ const recordSchema = z.object({
   v: z.literal(1),
   checklist: checklistSchema,
   actorItemIds: z.array(z.string()),
-  // Toegevoegd ná de eerste versie: oudere records missen deze twee, en die lezen als "nee".
-  mondayChallenge: z.boolean().optional(),
+  /**
+   * Toegevoegd ná de eerste versie: oudere records missen dit veld, en dat leest als "nee".
+   *
+   * `mondayChallenge` stond hier ook. Dat veld is vervallen toen de harde regel onder de
+   * achtergrondinformatie uit het sjabloon ging: de aansporing staat nu onvoorwaardelijk
+   * bovenaan, uit ITG's eigen brondocument, dus er valt niets meer aan te zetten. Zod laat
+   * onbekende sleutels vallen, dus records die het veld nog dragen blijven gewoon leesbaar.
+   */
   actorAnswered: z.boolean().optional(),
   savedAt: z.string(),
 });
@@ -124,7 +130,6 @@ function decode(raw: string | null): Stored {
     saved: {
       checklist: result.data.checklist,
       actorItemIds: result.data.actorItemIds,
-      mondayChallenge: result.data.mondayChallenge ?? false,
       /**
        * Ontbreekt dit veld, dan is de vraag **niet** beantwoord.
        *
@@ -153,7 +158,6 @@ function encodeRecord(input: SavedChecklist, nowIso: string): string {
     v: 1,
     checklist: input.checklist,
     actorItemIds: [...input.actorItemIds],
-    mondayChallenge: input.mondayChallenge,
     actorAnswered: input.actorAnswered,
     savedAt: nowIso,
   });
@@ -174,7 +178,6 @@ function reconcile(current: string | null, input: SavedChecklist): ChecklistWrit
     JSON.stringify(snapshot.saved.checklist) === JSON.stringify(input.checklist) &&
     JSON.stringify([...snapshot.saved.actorItemIds].sort()) ===
       JSON.stringify([...input.actorItemIds].sort()) &&
-    snapshot.saved.mondayChallenge === input.mondayChallenge &&
     snapshot.saved.actorAnswered === input.actorAnswered;
 
   return zelfde

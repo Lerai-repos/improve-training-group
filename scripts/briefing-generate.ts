@@ -50,7 +50,7 @@ import { BRIE } from '@lib/briefing/types';
  *   pnpm briefing:generate <itemId> --uit ./ergens-anders
  *   pnpm briefing:generate <itemId> --concept ./eigen-bullets.txt
  *
- * Checklistvlaggen: --eigen-groep --zelfde-groep --cyclus --huiswerk --voorbereidend --challenge
+ * Checklistvlaggen: --eigen-groep --zelfde-groep --cyclus --huiswerk --voorbereidend
  * --acteur-is <itemId> wijst een gekoppelde persoon aan als acteur (mag meerdere keren).
  * De acteurvraag is verplicht: geef --acteur of --geen-acteur. Monday doet een voorstel,
  * maar beide signalen zijn onvolledig, dus het antwoord komt van de adviseur.
@@ -261,6 +261,21 @@ async function main(): Promise<void> {
   if (itemId === undefined) {
     throw new Error('Geef een item-id op: pnpm briefing:generate <itemId>');
   }
+  /**
+   * `--challenge` weigeren in plaats van negeren.
+   *
+   * De vlag zette de harde Monday Challenges-regel onder de achtergrondinformatie. Die regel
+   * is uit het sjabloon verdwenen — ITG's eigen brondocument zet de aansporing bovenaan, en
+   * onvoorwaardelijk — dus er valt niets meer aan te zetten. De parser kijkt alleen naar
+   * vlaggen die hij kent, dus zonder deze controle levert de oude aanroep hetzelfde document
+   * op zonder één woord uitleg, en dan zoek je het verschil in het document in plaats van hier.
+   */
+  if (argv.includes('--challenge')) {
+    throw new Error(
+      '--challenge bestaat niet meer: de Monday Challenges-regel staat nu altijd in de briefing, ' +
+        'boven de gegevenstabel. Laat de vlag weg.'
+    );
+  }
 
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
   const training = await readBriefingTraining(client, itemId, { boardId: agendaBoardId() });
@@ -355,7 +370,6 @@ async function main(): Promise<void> {
   const gedeeld = {
     historie,
     extraInfo: extraInfo.lines,
-    mondayChallenge: argv.includes('--challenge'),
     roles: sessionFacts(training, checklist, overrides),
   };
   /**

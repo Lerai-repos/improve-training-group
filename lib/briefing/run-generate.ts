@@ -48,7 +48,6 @@ export interface RunGenerateDeps {
     training: BriefingTraining,
     input: {
       actorItemIds: readonly string[];
-      mondayChallenge: boolean;
       trainerItemIds: readonly string[];
     }
   ): Promise<{ context: GenerateContext; notes: readonly ContextNote[] }>;
@@ -189,7 +188,6 @@ export async function runGenerate(
 
   const { context, notes } = await deps.buildContext(training, {
     actorItemIds: view.actorItemIds,
-    mondayChallenge: view.mondayChallenge,
     trainerItemIds: view.documenten.map((doc) => doc.itemId),
   });
 

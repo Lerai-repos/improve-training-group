@@ -59,7 +59,6 @@ const TRAINING: BriefingTraining = {
 const OPGESLAGEN: SavedChecklist = {
   checklist: EMPTY_CHECKLIST,
   actorItemIds: [],
-  mondayChallenge: false,
   actorAnswered: true,
 };
 
@@ -118,7 +117,6 @@ function bouw(over: Partial<RunGenerateDeps> & { bestanden?: readonly string[] }
         context: {
           historie: [],
           extraInfo: [],
-          mondayChallenge: false,
           reis: new Map(),
           actorItemIds: [],
         },

@@ -83,8 +83,6 @@ export interface BriefingExtras {
   readonly reis?: TravelInput;
   /** `IT-58`. Nog niet uitgezocht of deze afleidbaar is uit label en thema. */
   readonly trainingscodeMc?: string;
-  /** Zet de harde regel onder de achtergrondinformatie. */
-  readonly mondayChallenge?: boolean;
   /**
    * De rolverdeling, als de aanroeper die al heeft uitgerekend — bijvoorbeeld omdat de
    * adviseur zelf heeft aangewezen wie de acteur is. Zonder dit wordt hij hier bepaald uit
@@ -125,7 +123,6 @@ export interface BriefingDocumentData {
   readonly trainingscodeMc: string;
   readonly achtergrond: readonly string[];
   readonly extraInfo: readonly string[];
-  readonly mondayChallenge: boolean;
   readonly bullets: readonly string[];
   /**
    * De blokken die zeggen wélke rol de ontvanger heeft, apart van de rest.
@@ -204,7 +201,6 @@ export function composeBriefing(
     trainingscodeMc: extras.trainingscodeMc ?? training.trainingscodeMc,
     achtergrond: achtergrondAlineas(training, extras),
     extraInfo: extras.extraInfo ?? [MISSING.extraInfo],
-    mondayChallenge: extras.mondayChallenge ?? false,
     bullets: extras.bullets ??
       resolveConceptInhoud({
         themaTekst: training.themaInhoud,

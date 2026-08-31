@@ -49,7 +49,6 @@ const TRAINING: BriefingTraining = {
 const opgeslagen = (over: Partial<SavedChecklist> = {}): SavedChecklist => ({
   checklist: EMPTY_CHECKLIST,
   actorItemIds: [],
-  mondayChallenge: false,
   actorAnswered: true,
   ...over,
 });

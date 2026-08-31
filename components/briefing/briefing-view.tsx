@@ -209,10 +209,8 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
             acteurVoorstel={tab.acteurVoorstel}
             personen={tab.personen}
             actorItemIds={view.answers.actorItemIds}
-            mondayChallenge={view.answers.mondayChallenge}
             onChecklist={view.setChecklist}
             onActors={view.setActorItemIds}
-            onMondayChallenge={view.setMondayChallenge}
             onAnswerActor={view.answerActor}
           />
 

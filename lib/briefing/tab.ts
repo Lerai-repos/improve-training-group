@@ -68,7 +68,6 @@ export interface TabView {
   };
   readonly checklist: BriefingChecklist;
   readonly actorItemIds: readonly string[];
-  readonly mondayChallenge: boolean;
   /** Wat Monday over de acteurvraag suggereert; het scherm zet hem voor, de adviseur beslist. */
   readonly acteurVoorstel: boolean;
   /** Is de acteurvraag door een mens beantwoord, of staat de suggestie er nog? */
@@ -217,7 +216,6 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
     },
     checklist,
     actorItemIds: antwoorden.actorItemIds,
-    mondayChallenge: antwoorden.mondayChallenge,
     acteurVoorstel: voorstel,
     acteurBeantwoord: beantwoord,
     personen: personen(training, antwoorden.actorItemIds),

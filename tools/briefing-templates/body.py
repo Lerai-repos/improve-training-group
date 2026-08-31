@@ -277,9 +277,13 @@ def rewrite(root):
             '+++IF extraInfo.length+++', 'Extra informatie trainer',
             '+++FOR e IN extraInfo+++', '+++$e+++', '+++END-FOR e+++',
             '+++END-IF+++',
-            '+++IF mondayChallenge+++',
-            '!! Vergeet de Monday Challenges niet aan te bieden in je sessie !!',
-            '+++END-IF+++',
+            # GEEN Monday Challenges-regel hier.
+            #
+            # ITG's `.dotx` heeft er zelf al een, cyaan gemarkeerd, in het tekstvak met de
+            # intro en de gegevenstabel; `convert.py` tilt dat op, dus staat hij boven de
+            # tabel. Samen met de kolom `Trainingscode MC` in de tabel zelf is dat twee keer,
+            # en dat is wat ITG wil. Een derde vermelding hier maakte er drie van.
+            # Tim, 28-Aug-2026: "the cyan one and the one in the table are correct".
         ])
     for p in tail:
         parents[p].remove(p)
@@ -316,7 +320,12 @@ def rewrite(root):
             # Alleen de regel zelf is een opsommingsteken; docx-templates haalt de
             # FOR- en END-FOR-alinea's weg, dus die blijven gewoon.
             '+++FOR b IN bullets+++', bullet_para(p, '+++$b+++'), '+++END-FOR b+++',
-            '+++FOR blk IN blokken+++', '+++$blk.titel+++',
+            # Dezelfde kopstijl als de rolblokken hierboven, uit dezelfde bron: de alinea
+            # "Concept inhoud" draagt `Kop1`. Zonder dit kwamen `Vaste klant`,
+            # `Huiswerkopdracht`, `Voorbereidende opdracht` en de cyclus als gewone alinea's
+            # uit de generator, terwijl `Leadtrainer` ernaast wél een kop was — dezelfde
+            # soort titel, twee verschillende opmaken, in één document.
+            '+++FOR blk IN blokken+++', para_like(kop[0], '+++$blk.titel+++'),
             *blok_regels(p),
             # The training-cycle block carries a diagram; every other block leaves this empty.
             # IMAGE needs the call parentheses, and the function comes from additionalJsContext.
