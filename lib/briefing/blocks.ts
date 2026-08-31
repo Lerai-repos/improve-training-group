@@ -46,13 +46,25 @@ import type { Recipient } from './recipients';
 export interface BlockLine {
   readonly tekst: string;
   readonly bullet: boolean;
+  /**
+   * Het inspringniveau van de opsomming: `0` of `1`.
+   *
+   * Alleen de acteurblokken gebruiken niveau 1. Gemeten in ITG's bronbestand: de twee regels
+   * "… is verantwoordelijk voor" staan op `ilvl=0` en hun taken op `ilvl=1`, terwijl in het
+   * lead- en co-trainerblok álles op `ilvl=0` staat. Vlak weergeven maakte van de twee
+   * koppen gewone taken, en dan lees je "Ontwikkelen van inhoud" als iets van de acteur.
+   */
+  readonly niveau: 0 | 1;
 }
 
 /** Een gewone alinea. */
-const prose = (tekst: string): BlockLine => ({ tekst, bullet: false });
+const prose = (tekst: string): BlockLine => ({ tekst, bullet: false, niveau: 0 });
 /** Een opsommingsregel. */
-const bullet = (tekst: string): BlockLine => ({ tekst, bullet: true });
+const bullet = (tekst: string): BlockLine => ({ tekst, bullet: true, niveau: 0 });
 const bullets = (...regels: readonly string[]): BlockLine[] => regels.map(bullet);
+/** Een opsommingsregel één niveau dieper, onder de regel erboven. */
+const subBullet = (tekst: string): BlockLine => ({ tekst, bullet: true, niveau: 1 });
+const subBullets = (...regels: readonly string[]): BlockLine[] => regels.map(subBullet);
 
 export interface BriefingBlock {
   readonly titel: string;
@@ -161,8 +173,10 @@ const ACTOR_IMPORTANT =
   'specifiek is afgesproken. De trainer blijft eindverantwoordelijk.';
 
 /** Gedeeld door beide acteurblokken; bij ITG allemaal opsommingsregels. */
-const ACTOR_SHARED: readonly string[] = [
-  'De (lead) trainer is verantwoordelijk voor',
+/** De kop van het eerste niveau; de vier regels eronder zijn zijn taken. */
+const ACTOR_LEAD_HEADING = 'De (lead) trainer is verantwoordelijk voor';
+
+const ACTOR_LEAD_TASKS: readonly string[] = [
   CLIENT_CONTACT,
   'Ontwikkelen van inhoud van de training',
   'Afstemmen met de trainingsacteur en evt. co-trainer(s) over de definitieve opzet en ' +
@@ -212,9 +226,10 @@ function withActorBlock(acteurs: string): BriefingBlock {
     regels: [
       prose(WITH_ACTOR_INTRO.replace(ONE_NAME, acteurs)),
       prose(ACTOR_IMPORTANT),
-      ...bullets(
-        ...ACTOR_SHARED,
-        'De trainingsacteur is verantwoordelijk het',
+      bullet(ACTOR_LEAD_HEADING),
+      ...subBullets(...ACTOR_LEAD_TASKS),
+      bullet('De trainingsacteur is verantwoordelijk het'),
+      ...subBullets(
         ...ACTOR_TASKS,
         'Geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)'
       ),
@@ -229,9 +244,10 @@ function asActorBlock(trainers: string): BriefingBlock {
     regels: [
       prose(AS_ACTOR_INTRO.replace(ONE_NAME, trainers)),
       prose(ACTOR_IMPORTANT),
-      ...bullets(
-        ...ACTOR_SHARED,
-        'De trainingsacteur is verantwoordelijk voor',
+      bullet(ACTOR_LEAD_HEADING),
+      ...subBullets(...ACTOR_LEAD_TASKS),
+      bullet('De trainingsacteur is verantwoordelijk voor'),
+      ...subBullets(
         ...ACTOR_TASKS,
         'Het geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)'
       ),

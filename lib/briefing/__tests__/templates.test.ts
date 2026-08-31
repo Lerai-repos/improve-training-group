@@ -197,17 +197,30 @@ describe.each(LABELS)('sjabloon %s', (label) => {
   });
 
   /**
-   * Twee varianten van dezelfde regel, want `docx-templates` kan tekst weglaten maar geen
-   * alinea-opmaak omzetten. Precies één ervan hoort een opsommingsteken te hebben; zijn het
-   * er twee, dan wordt élke blokregel een bullet, en nul betekent geen enkele.
+   * DRIE varianten van dezelfde regel, want `docx-templates` kan tekst weglaten maar geen
+   * alinea-opmaak omzetten — en het inspringniveau zit in de opmaak.
+   *
+   * Twee ervan zijn opsommingen (niveau 0 en 1), één is een gewone alinea. Ontbreekt de
+   * diepe variant, dan komen de taken van de trainer op één lijn met hun kop te staan;
+   * zijn er drie bullets, dan wordt élke blokregel een opsomming.
    */
-  it('rendert blokregels in een opsommings- en een gewone variant', () => {
+  it('rendert blokregels in drie varianten: twee niveaus en een gewone alinea', () => {
     const xml = templateXml(label);
-    const eerste = positionOf(xml, BLOCK_LINE);
-    const tweede = xml.indexOf(BLOCK_LINE, eerste + BLOCK_LINE.length);
-    expect(tweede).toBeGreaterThan(-1);
-    const met = [eerste, tweede].filter((at) => paragraphAt(xml, at).includes('<w:numPr>'));
-    expect(met).toHaveLength(1);
+    const posities: number[] = [];
+    let at = xml.indexOf(BLOCK_LINE);
+    while (at !== -1) {
+      posities.push(at);
+      at = xml.indexOf(BLOCK_LINE, at + BLOCK_LINE.length);
+    }
+    // Zes: de drie varianten staan in beide lussen — rolblokken én de overige blokken.
+    expect(posities).toHaveLength(6);
+
+    const niveaus = posities.map((pos) => {
+      const alinea = paragraphAt(xml, pos);
+      const match = /<w:ilvl w:val="(\d)"/.exec(alinea);
+      return alinea.includes('<w:numPr>') ? (match?.[1] ?? '?') : 'geen';
+    });
+    expect(niveaus.sort()).toEqual(['0', '0', '1', '1', 'geen', 'geen']);
   });
 
   /**
@@ -308,6 +321,37 @@ function blanksBefore(xml: string, kop: string): number {
   return n;
 }
 
+/**
+ * Het document van de LEAD bij een sessie mét acteur.
+ *
+ * Dat is waar het blok `Werken met een trainingsacteur` in staat, en dus waar de twee
+ * opsommingsniveaus te zien zijn. De co-trainer uit de fixture wordt hier de acteur.
+ */
+async function renderActor(label: string): Promise<string> {
+  const training: BriefingTraining = {
+    ...TRAINING,
+    label,
+    acteuraantal: 1,
+    trainers: TRAINING.trainers.map((t) =>
+      t.isCoTrainer ? { ...t, isActeur: true, isCoTrainer: false } : t
+    ),
+  };
+  const checklist: BriefingChecklist = { ...EMPTY_CHECKLIST, trainingActor: true };
+  const rollen = resolveRecipientRoles(training, checklist);
+  if (rollen.kind !== 'resolved') {
+    throw new Error(`fixture levert geen ontvangers op: ${rollen.kind}`);
+  }
+  const lead = rollen.recipients.find((r) => r.role === 'lead');
+  if (lead === undefined) {
+    throw new Error('fixture levert geen leadtrainer op');
+  }
+  const bytes = await renderBriefing(
+    label,
+    composeBriefing(training, checklist, { historie: [], recipient: lead })
+  );
+  return zipReadText(bytes, 'word/document.xml');
+}
+
 async function renderLead(label: string): Promise<string> {
   const training = { ...TRAINING, label };
   const rollen = resolveRecipientRoles(training, EMPTY_CHECKLIST);
@@ -360,6 +404,30 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
    * `<w:br/>` hoort een broer van `<w:t>` te zijn, niet een kind. Stond het erbinnen, dan
    * werd de tekst erna een tail die uit het document verdween — zonder dat iets faalde.
    */
+  /**
+   * De acteurblokken hebben twee opsommingsniveaus, de rest niet.
+   *
+   * Het sjabloon heeft dáárvoor drie alinea-varianten in de bloklus, want `docx-templates`
+   * kan tekst weglaten maar geen opmaak omzetten — en het inspringniveau zit in de opmaak.
+   * Verdwijnt de derde variant, dan komen de taken van de trainer op één lijn met de kop
+   * "De (lead) trainer is verantwoordelijk voor" te staan, en leest een acteur ze als
+   * zijn eigen taken.
+   */
+  it('springt de taken in het acteurblok een niveau in', async () => {
+    const xml = await renderActor(label);
+    const kop = paragraphAt(xml, positionOf(xml, 'is verantwoordelijk voor'));
+    const taak = paragraphAt(xml, positionOf(xml, 'Het tot leven brengen van de praktijk'));
+
+    expect(kop).toMatch(/<w:ilvl w:val="0"/);
+    expect(taak).toMatch(/<w:ilvl w:val="1"/);
+  });
+
+  /** De concept-regels blijven vlak; nesting daar zou van ITG's bron afwijken. */
+  it('houdt de concept-regels op niveau 0', async () => {
+    const xml = await renderLead(label);
+    expect(paragraphAt(xml, positionOf(xml, 'Plenaire opening.'))).toMatch(/<w:ilvl w:val="0"/);
+  });
+
   it('zet regelafbrekingen buiten w:t', async () => {
     const xml = await renderLead(label);
     expect(xml).not.toMatch(/<w:t[^>]*>[^<]*<w:br\/>/);

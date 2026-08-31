@@ -53,8 +53,13 @@ BULLET_NUM_ID = '1'
 VOOR_NUMPR = ('pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'widowControl')
 
 
-def bullet_para(model, text):
-    """Een alinea als `para_like`, maar dan als opsommingsteken."""
+def bullet_para(model, text, ilvl='0'):
+    """Een alinea als `para_like`, maar dan als opsommingsteken.
+
+    `ilvl` is het inspringniveau. Alleen de acteurblokken gebruiken niveau 1: daar staan de
+    twee regels "… is verantwoordelijk voor" op 0 en hun taken eronder op 1, precies zoals
+    ITG's bronbestand. Vlak weergeven maakte van die twee koppen gewone taken.
+    """
     p = para_like(model, text)
     ppr = p.find(W + 'pPr')
     if ppr is None:
@@ -63,7 +68,7 @@ def bullet_para(model, text):
     for oud in ppr.findall(W + 'numPr'):
         ppr.remove(oud)
     numpr = ET.Element(W + 'numPr')
-    ET.SubElement(numpr, W + 'ilvl').set(W + 'val', '0')
+    ET.SubElement(numpr, W + 'ilvl').set(W + 'val', ilvl)
     ET.SubElement(numpr, W + 'numId').set(W + 'val', BULLET_NUM_ID)
     at = 0
     for kind in list(ppr):
@@ -241,16 +246,20 @@ def strip_lege_voor(root, parents, kop_tekst):
 
 
 def blok_regels(model):
-    """De regels van één blok: opsommingsteken of gewone alinea, per regel.
+    """De regels van één blok: opsomming (twee niveaus) of gewone alinea, per regel.
 
-    Twee alinea's met elk een `IF`, en niet één alinea die zich aanpast: `docx-templates`
-    kan tekst weglaten of invoegen, maar niet de opmaak van een alinea omzetten. Welke van
-    de twee overblijft bepaalt `$r.bullet`, en die vlag komt uit ITG's eigen brondocument.
+    Drie alinea's met elk een `IF`, en niet één alinea die zich aanpast: `docx-templates`
+    kan tekst weglaten of invoegen, maar niet de opmaak van een alinea omzetten — en het
+    inspringniveau zit in de opmaak. Welke van de drie overblijft bepalen `$r.bullet` en
+    `$r.niveau`, allebei uit ITG's eigen brondocument.
     """
     return [
         '+++FOR r IN $blk.regels+++',
-        '+++IF $r.bullet+++',
+        '+++IF $r.bullet && !$r.niveau+++',
         bullet_para(model, '+++$r.tekst+++'),
+        '+++END-IF+++',
+        '+++IF $r.bullet && $r.niveau+++',
+        bullet_para(model, '+++$r.tekst+++', ilvl='1'),
         '+++END-IF+++',
         '+++IF !$r.bullet+++',
         '+++$r.tekst+++',

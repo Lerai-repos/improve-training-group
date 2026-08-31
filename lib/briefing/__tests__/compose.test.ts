@@ -213,6 +213,68 @@ describe('composeBriefing', () => {
 /** Eén trainer, geen acteur: het geval waarin geen enkel rolblok verplicht is. */
 const SOLO: SessionFacts = { certainTrainers: 1, identifiedActors: 0, unknownRole: 0 };
 
+/**
+ * De acteurblokken hebben twee niveaus, precies zoals ITG's bronbestand.
+ *
+ * Gemeten in `ITG Briefingteksten bij bijzonderheden.docx`: de twee regels
+ * "… is verantwoordelijk voor" staan op `ilvl=0`, hun taken eronder op `ilvl=1`. De lead- en
+ * co-trainerblokken hebben géén nesting — dáár staat alles op `ilvl=0` — dus dit geldt
+ * alleen voor de acteurblokken.
+ */
+describe('nesting in de acteurblokken', () => {
+  const acteur = (role: 'lead' | 'acteur') => ({
+    recipient: {
+      trainer: { itemId: '1', naam: 'A', telefoon: '06-1', isActeur: role === 'acteur', isCoTrainer: false },
+      role,
+      otherTrainers: [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: role !== 'acteur', isCoTrainer: false }],
+      actors: role === 'lead' ? [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: true, isCoTrainer: false }] : [],
+    },
+    format: (naam: string, telefoon: string) => `${naam} (${telefoon})`,
+  });
+
+  it.each([
+    ['Werken met een trainingsacteur', 'lead' as const],
+    ['Werken als trainingsacteur', 'acteur' as const],
+  ])('zet de taken onder "%s" een niveau dieper', (titel, role) => {
+    const blok = selectBlocks({ ...EMPTY_CHECKLIST, trainingActor: true }, [], SOLO, acteur(role)).find(
+      (b) => b.titel === titel
+    );
+    if (blok === undefined) {
+      throw new Error(`blok "${titel}" ontbreekt`);
+    }
+
+    const kop = blok.regels.filter((r) => r.bullet && r.niveau === 0);
+    const taken = blok.regels.filter((r) => r.bullet && r.niveau === 1);
+
+    // Twee koppen: de trainer en de acteur.
+    expect(kop.map((r) => r.tekst)).toEqual([
+      'De (lead) trainer is verantwoordelijk voor',
+      expect.stringContaining('De trainingsacteur is verantwoordelijk'),
+    ]);
+    // En hun taken hangen eronder, niet ernaast.
+    expect(taken.length).toBeGreaterThanOrEqual(6);
+    expect(taken.map((r) => r.tekst)).toContain('Ontwikkelen van inhoud van de training');
+    expect(taken.map((r) => r.tekst)).toContain('Het tot leven brengen van de praktijk');
+  });
+
+  /** De lead- en co-blokken zijn vlak; nesting daar zou van ITG's bron afwijken. */
+  it('houdt het leadblok vlak', () => {
+    const lead = {
+      recipient: {
+        trainer: { itemId: '1', naam: 'A', telefoon: '06-1', isActeur: false, isCoTrainer: false },
+        role: 'lead' as const,
+        otherTrainers: [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: false, isCoTrainer: true }],
+        actors: [],
+      },
+      format: (naam: string, telefoon: string) => `${naam} (${telefoon})`,
+    };
+
+    const blok = selectBlocks(EMPTY_CHECKLIST, [], SOLO, lead).find((b) => b.titel === 'Leadtrainer');
+
+    expect(blok?.regels.every((r) => r.niveau === 0)).toBe(true);
+  });
+});
+
 describe('selectBlocks', () => {
   const HISTORY: HistoryRow[] = [
     {

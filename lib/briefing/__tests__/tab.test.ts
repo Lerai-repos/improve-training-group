@@ -215,6 +215,45 @@ describe('buildTabView met één trainer', () => {
     expect(uit.checklist.ownGroup).toBe(true);
   });
 
+  /**
+   * Een acteur is geen tweede trainer, dus de groepsvraag hoort ook dan te verdwijnen.
+   *
+   * "Meerdere trainers op deze sessie" gaat over het verdelen van de groep tússen trainers.
+   * Bij lead + acteur is er één trainer; de acteur krijgt geen eigen groep. Op het bord zijn
+   * 3 van de 4 trainingen die de vraag zouden krijgen precies dit geval.
+   */
+  it('verbergt de groepskeuze bij lead plus acteur', () => {
+    const metActeur: BriefingTraining = {
+      ...SOLO,
+      acteuraantal: 1,
+      trainers: [
+        { itemId: '1', naam: 'Frank Paats', telefoon: '', isActeur: false, isCoTrainer: false },
+        { itemId: '9', naam: 'Sam Speler', telefoon: '', isActeur: true, isCoTrainer: false },
+      ],
+    };
+
+    const uit = buildTabView(metActeur, {
+      checklist: { ...EMPTY_CHECKLIST, trainingActor: true, ownGroup: true },
+      actorItemIds: [],
+      actorAnswered: true,
+    });
+
+    expect(uit.groepskeuzeNvt).toBe(true);
+    expect(uit.checklist.ownGroup).toBe(false);
+  });
+
+  /** Lead + co-trainer is de enige vorm waarin de vraag écht iets betekent. */
+  it('toont de groepskeuze bij lead plus co-trainer', () => {
+    const uit = buildTabView(TRAINING, {
+      checklist: { ...EMPTY_CHECKLIST, ownGroup: true },
+      actorItemIds: [],
+      actorAnswered: true,
+    });
+
+    expect(uit.groepskeuzeNvt).toBe(false);
+    expect(uit.checklist.ownGroup).toBe(true);
+  });
+
   it('laat een acteuraantal van 0 gewoon door', () => {
     expect(buildTabView({ ...SOLO, acteuraantal: 0 }, opgeslagen()).kanGenereren).toBe(true);
   });

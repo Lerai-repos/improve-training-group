@@ -79,7 +79,7 @@ export interface TabView {
    */
   readonly soloTrainer: boolean;
   /**
-   * Er is hooguit één persoon gekoppeld, dus er valt geen groep te verdelen.
+   * Er is hooguit één TRAINER, dus er valt geen groep te verdelen.
    *
    * Apart van `soloTrainer`, want dat is een ándere vraag. Bij één persoon uit de groep
    * Acteurs moet de acteurvraag juist wél gesteld worden, terwijl "meerdere trainers op deze
@@ -172,22 +172,39 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
    * hem overslaat.
    */
   const soloTrainer = training.trainers.length === 1 && !training.trainers[0].isActeur;
-  /** Nul of één persoon: er is niets te verdelen, ongeacht of die ene een acteur is. */
-  const groepskeuzeNvt = training.trainers.length <= 1;
 
   const beantwoord = soloTrainer || antwoorden.actorAnswered;
   const gekozen: BriefingChecklist = antwoorden.actorAnswered
     ? antwoorden.checklist
     : { ...antwoorden.checklist, trainingActor: voorstel };
-  const checklist: BriefingChecklist = {
-    ...gekozen,
-    ...(soloTrainer ? { trainingActor: false } : {}),
-    ...(groepskeuzeNvt ? { ownGroup: false, sameGroup: false } : {}),
-  };
+  const metActeurkeuze: BriefingChecklist = soloTrainer
+    ? { ...gekozen, trainingActor: false }
+    : gekozen;
 
-  const rollen = resolveRecipientRoles(training, checklist, {
+  const rollen = resolveRecipientRoles(training, metActeurkeuze, {
     actorItemIds: antwoorden.actorItemIds,
   });
+
+  /**
+   * De groepsvraag telt TRAINERS, niet gekoppelde personen.
+   *
+   * "Meerdere trainers op deze sessie" gaat over het verdelen van de groep tússen trainers;
+   * een acteur krijgt geen eigen groep. Op het aantal gekoppelde personen tellen zette de
+   * vraag op lead+acteur-sessies — 3 van de 4 trainingen die hem zouden krijgen — terwijl
+   * daar één trainer staat.
+   *
+   * Ná `resolveRecipientRoles`, want pas dáár is uitgemaakt wie er als acteur telt: dat
+   * hangt af van het antwoord op de acteurvraag, niet alleen van de groep `Acteurs`.
+   */
+  const trainers =
+    rollen.kind === 'resolved'
+      ? rollen.recipients.filter((r) => r.role !== 'acteur').length
+      : training.trainers.filter((t) => !t.isActeur).length;
+  const groepskeuzeNvt = trainers <= 1;
+
+  const checklist: BriefingChecklist = groepskeuzeNvt
+    ? { ...metActeurkeuze, ownGroup: false, sameGroup: false }
+    : metActeurkeuze;
 
   const issues: TabIssue[] = [];
   /**
