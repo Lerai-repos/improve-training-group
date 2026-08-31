@@ -246,6 +246,77 @@ describe('selectBlocks', () => {
   });
 
   /**
+   * De acteur maakt de inhoud niet, dus krijgt hij die twee blokken niet.
+   *
+   * ITG's eigen brontekst zegt het op drie plekken: het acteurblok stelt dat de acteur
+   * *"geen co-trainer of inhoudsdeskundige"* is en zet **"Ontwikkelen van inhoud van de
+   * training"** bij de trainer; het huiswerkblok zegt *"Jij geeft deze vorm"*; en de
+   * voorbereidende opdracht vraagt de lezer het vragenformulier aan te passen en terug te
+   * delen. Alle drie gaan over wie de inhoud bouwt.
+   */
+  it('geeft de acteur geen huiswerk- of voorbereidingsblok', () => {
+    const acteur = {
+      recipient: {
+        trainer: {
+          itemId: '9',
+          naam: 'Sam Speler',
+          telefoon: '06-1',
+          isActeur: true,
+          isCoTrainer: false,
+        },
+        role: 'acteur' as const,
+        otherTrainers: [],
+        actors: [],
+      },
+      format: (naam: string, telefoon: string) => `${naam} (${telefoon})`,
+    };
+    const checklist = { ...EMPTY_CHECKLIST, homework: true, preparatoryAssignment: true };
+
+    const titels = selectBlocks(checklist, [], SOLO, acteur).map((b) => b.titel);
+
+    expect(titels).not.toContain('Huiswerkopdracht');
+    expect(titels).not.toContain('Voorbereidende opdracht');
+    // Zijn eigen rolblok blijft uiteraard staan.
+    expect(titels).toContain('Werken als trainingsacteur');
+  });
+
+  it('geeft de lead die blokken wél', () => {
+    const lead = {
+      recipient: {
+        trainer: {
+          itemId: '1',
+          naam: 'Ada Lead',
+          telefoon: '06-2',
+          isActeur: false,
+          isCoTrainer: false,
+        },
+        role: 'lead' as const,
+        otherTrainers: [],
+        actors: [],
+      },
+      format: (naam: string, telefoon: string) => `${naam} (${telefoon})`,
+    };
+    const checklist = { ...EMPTY_CHECKLIST, homework: true, preparatoryAssignment: true };
+
+    const titels = selectBlocks(checklist, [], SOLO, lead).map((b) => b.titel);
+
+    expect(titels).toContain('Huiswerkopdracht');
+    expect(titels).toContain('Voorbereidende opdracht');
+  });
+
+  /** Zonder ontvanger is het een voorbeeld, geen document voor iemand: alles blijft staan. */
+  it('houdt beide blokken in de voorbeeldweergave zonder ontvanger', () => {
+    const titels = selectBlocks(
+      { ...EMPTY_CHECKLIST, homework: true, preparatoryAssignment: true },
+      [],
+      SOLO
+    ).map((b) => b.titel);
+
+    expect(titels).toContain('Huiswerkopdracht');
+    expect(titels).toContain('Voorbereidende opdracht');
+  });
+
+  /**
    * Dit zijn de twee antwoorden op één vraag. Zelf kiezen zou de briefing stellig het
    * verkeerde laten beweren over hoe de groep wordt opgesplitst.
    */

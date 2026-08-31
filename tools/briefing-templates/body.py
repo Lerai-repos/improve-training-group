@@ -218,6 +218,28 @@ def strip_yellow_highlight(root):
         print(f'  gele markering van {weg} run(s) gehaald')
 
 
+def strip_lege_voor(root, parents, kop_tekst):
+    """Alle lege alinea's vlak vóór een kop weghalen.
+
+    De witruimte tussen secties wordt daarna op één plek bepaald: elke sectie brengt zijn
+    eigen witregel mee, vóór zijn titel. Anders telt de afstand op uit twee bronnen — het
+    brondocument had er drie staan vóór de rolblokken — en hangt het resultaat af van of een
+    lus toevallig iets heeft opgeleverd. Zonder rolblokken stonden er zo drie witregels vóór
+    `Concept inhoud`, met rolblokken één.
+    """
+    kop = [p for p in root.iter(W + 'p') if txt(p).strip() == kop_tekst]
+    if len(kop) != 1:
+        raise SystemExit(f'verwachtte 1 kop "{kop_tekst}", vond {len(kop)}')
+    parent = parents[kop[0]]
+    kids = list(parent)
+    at = kids.index(kop[0])
+    weg = 0
+    while at - 1 - weg >= 0 and txt(kids[at - 1 - weg]).strip() == '':
+        parent.remove(kids[at - 1 - weg])
+        weg += 1
+    return weg
+
+
 def blok_regels(model):
     """De regels van één blok: opsommingsteken of gewone alinea, per regel.
 
@@ -298,14 +320,22 @@ def rewrite(root):
     if len(kop) != 1:
         raise SystemExit(f'verwachtte 1 kop "Concept inhoud", vond {len(kop)}')
     model = intro[0]
+    # Het brondocument zet er drie neer; de witruimte komt hieronder uit één regel.
+    strip_lege_voor(root, parents, 'Concept inhoud')
     voor = [
         '+++FOR blk IN rolblokken+++',
+        # De witregel hoort VÓÓR de titel, niet erna.
+        #
+        # Erna telt hij op bij de witregels die al vóór de volgende kop staan, en dan hangt
+        # de afstand af van hoeveel blokken de lus opleverde: geen rolblokken gaf drie
+        # witregels vóór "Concept inhoud", één rolblok gaf er één. Ervóór brengt elke sectie
+        # precies zijn eigen witregel mee, en is de afstand overal gelijk.
+        '',
         para_like(kop[0], '+++$blk.titel+++'),
         *blok_regels(model),
-        # Witregel na élk blok, dus ook tussen twee rolblokken en vóór "Concept inhoud".
-        # Zonder deze plakken de secties aan elkaar.
-        '',
         '+++END-FOR blk+++',
+        # De vaste witregel vóór "Concept inhoud", ook als er geen enkel rolblok is.
+        '',
     ]
     parent = parents[kop[0]]
     at = list(parent).index(kop[0])
@@ -325,16 +355,23 @@ def rewrite(root):
             # `Huiswerkopdracht`, `Voorbereidende opdracht` en de cyclus als gewone alinea's
             # uit de generator, terwijl `Leadtrainer` ernaast wél een kop was — dezelfde
             # soort titel, twee verschillende opmaken, in één document.
-            '+++FOR blk IN blokken+++', para_like(kop[0], '+++$blk.titel+++'),
+            # Zelfde regel als bij de rolblokken: de witregel gaat vóór de titel.
+            '+++FOR blk IN blokken+++', '', para_like(kop[0], '+++$blk.titel+++'),
             *blok_regels(p),
             # The training-cycle block carries a diagram; every other block leaves this empty.
             # IMAGE needs the call parentheses, and the function comes from additionalJsContext.
             '+++IF $blk.afbeelding+++', '+++IMAGE blockImage($blk)+++', '+++END-IF+++',
             # Vaste klant brings the historie table; every other block leaves it empty.
             '+++IF $blk.historie+++', historie_tabel(p), '+++END-IF+++',
-            '',
             '+++END-FOR blk+++',
         ])
+
+    # Vóór "Inventarisatie klant" hetzelfde: alles weg, dan precies één terug. Het laatste
+    # blok laat er nu geen meer achter, dus zonder dit plakt de kop tegen de historie-tabel.
+    strip_lege_voor(root, parents, 'Inventarisatie klant')
+    inv_kop = [p for p in root.iter(W + 'p') if txt(p).strip() == 'Inventarisatie klant'][0]
+    inv_parent = parents[inv_kop]
+    inv_parent.insert(list(inv_parent).index(inv_kop), para_like(intro[0], ''))
 
     # Inventarisatie: question and answer, or one replacement line when it is empty.
     for p in inv:

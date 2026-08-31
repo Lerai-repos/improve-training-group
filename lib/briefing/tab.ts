@@ -50,6 +50,7 @@ export interface TabIssue {
     | 'geen_lead'
     | 'acteur_onbekend'
     | 'acteur_onbeantwoord'
+    | 'acteur_niet_gekoppeld'
     | 'interne_trainer'
     | 'veld_leeg';
   readonly tekst: string;
@@ -68,6 +69,25 @@ export interface TabView {
   };
   readonly checklist: BriefingChecklist;
   readonly actorItemIds: readonly string[];
+  /**
+   * Precies één gekoppeld persoon, dus twee vragen zijn niet te beantwoorden.
+   *
+   * `Meerdere trainers op deze sessie` verdeelt groepen tussen trainers, en de acteurvraag
+   * kan met één persoon niet op "ja" uitkomen: `classify` houdt dan een onverklaarde acteur
+   * over, of maakt van de enige persoon de acteur en dan is er geen lead. Beide blokkeren.
+   * Het scherm laat ze daarom weg; hier staat waarom dat mag.
+   */
+  readonly soloTrainer: boolean;
+  /**
+   * Er is hooguit één persoon gekoppeld, dus er valt geen groep te verdelen.
+   *
+   * Apart van `soloTrainer`, want dat is een ándere vraag. Bij één persoon uit de groep
+   * Acteurs moet de acteurvraag juist wél gesteld worden, terwijl "meerdere trainers op deze
+   * sessie" ook dan nergens over gaat. Aan één vlag opgehangen bleef de groepskeuze in dat
+   * geval zichtbaar én ongemoeid, en kon "Ieder een eigen groep" in de briefing van een
+   * eenpitter belanden.
+   */
+  readonly groepskeuzeNvt: boolean;
   /** Wat Monday over de acteurvraag suggereert; het scherm zet hem voor, de adviseur beslist. */
   readonly acteurVoorstel: boolean;
   /** Is de acteurvraag door een mens beantwoord, of staat de suggestie er nog? */
@@ -137,10 +157,33 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
    * voorstel al als gekozen radioknop op het scherm stond en bevestigen dus geen wijziging
    * opleverde.
    */
-  const beantwoord = antwoorden.actorAnswered;
-  const checklist: BriefingChecklist = beantwoord
+  /**
+   * Eén gekoppeld persoon: de twee vragen die daar niet over kunnen gaan, staan vast op nee.
+   *
+   * Ook als er iets anders is opgeslagen. Dat is geen theoretisch geval — een training kan
+   * ooit twee trainers hebben gehad — en een blok over "ieder een eigen groep" in het
+   * document van de enige trainer is erger dan een vraag te weinig.
+   *
+   * **En die ene persoon mag geen acteur zijn.** `training.trainers` bevat trainers én
+   * acteurs. Zonder die voorwaarde gaat `trainingActor` op nee, telt de acteur als gewone
+   * trainer, en promoveert `classify` hem tot lead — waarna er een leadbriefing naar een
+   * acteur gaat, mét klantcontact en inhoudelijke verantwoordelijkheid. Zo'n training hoort
+   * te blijven blokkeren op "geen leadtrainer", en dat doet ze zodra deze sluiproute
+   * hem overslaat.
+   */
+  const soloTrainer = training.trainers.length === 1 && !training.trainers[0].isActeur;
+  /** Nul of één persoon: er is niets te verdelen, ongeacht of die ene een acteur is. */
+  const groepskeuzeNvt = training.trainers.length <= 1;
+
+  const beantwoord = soloTrainer || antwoorden.actorAnswered;
+  const gekozen: BriefingChecklist = antwoorden.actorAnswered
     ? antwoorden.checklist
     : { ...antwoorden.checklist, trainingActor: voorstel };
+  const checklist: BriefingChecklist = {
+    ...gekozen,
+    ...(soloTrainer ? { trainingActor: false } : {}),
+    ...(groepskeuzeNvt ? { ownGroup: false, sameGroup: false } : {}),
+  };
 
   const rollen = resolveRecipientRoles(training, checklist, {
     actorItemIds: antwoorden.actorItemIds,
@@ -181,6 +224,22 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
       blokkeert: true,
     });
   }
+  /**
+   * Eén persoon, maar Monday belooft een acteur. Gemeten: 4 van de 265 komende trainingen.
+   *
+   * Dit is de enige reden dat de acteurvraag niet zomaar op nee mag: er staat "1 acteur" en
+   * er is niemand gekoppeld, dus de acteur bestaat waarschijnlijk wel en is alleen niet
+   * ingevuld. Stilzwijgend doorgaan levert een briefing zonder acteurblok. Blokkeren dus —
+   * net als vandaag, alleen met een zin die zegt wat eraan te doen is in plaats van een
+   * vraag die met één gekoppeld persoon geen goed antwoord heeft.
+   */
+  if (soloTrainer && (training.acteuraantal ?? 0) >= 1) {
+    issues.push({
+      kind: 'acteur_niet_gekoppeld',
+      tekst: `Acteuraantal belooft ${training.acteuraantal} acteur(s), maar er is maar één persoon gekoppeld. Koppel de acteur aan de training.`,
+      blokkeert: true,
+    });
+  }
   if (!beantwoord) {
     issues.push({
       kind: 'acteur_onbeantwoord',
@@ -215,6 +274,8 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
       brie: training.brie,
     },
     checklist,
+    soloTrainer,
+    groepskeuzeNvt,
     actorItemIds: antwoorden.actorItemIds,
     acteurVoorstel: voorstel,
     acteurBeantwoord: beantwoord,

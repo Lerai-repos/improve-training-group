@@ -758,10 +758,24 @@ export function selectBlocks(
   if (checklist.trainingCycle) {
     blocks.push(trainingCycleBlock(checklist));
   }
-  if (checklist.homework) {
+  /**
+   * Huiswerk en de voorbereidende opdracht gaan over het MAKEN van de inhoud, dus niet naar
+   * de acteur.
+   *
+   * ITG's brontekst zegt dat op drie plekken. Het acteurblok: de trainingsacteur is *"geen
+   * co-trainer of inhoudsdeskundige"*, en **"Ontwikkelen van inhoud van de training"** staat
+   * onder de verantwoordelijkheden van de trainer. Het huiswerkblok: *"Jij geeft deze vorm,
+   * afgestemd op de opdracht en groep"*. De voorbereidende opdracht: *"Zou je deze willen
+   * aanpassen zodat deze aansluit op jouw sessie en vervolgens met mij delen?"*
+   *
+   * Zonder ontvanger blijven ze staan: dat is de voorbeeldweergave, geen document voor een
+   * bepaald persoon, en daar hoort te zien te zijn wat de checklist aanzet.
+   */
+  const naarMaker = recipient === undefined || recipient.recipient.role !== 'acteur';
+  if (checklist.homework && naarMaker) {
     blocks.push(HOMEWORK);
   }
-  if (checklist.preparatoryAssignment) {
+  if (checklist.preparatoryAssignment && naarMaker) {
     blocks.push(PREPARATORY_ASSIGNMENT);
   }
   return blocks;

@@ -9,6 +9,7 @@ import { resolveRecipientRoles } from '../recipients';
 import { renderBriefing, TEMPLATES_DIR } from '../render';
 import { zipReadText } from './zip-reader';
 
+import type { BriefingChecklist, HistoryRow } from '../blocks';
 import type { BriefingTraining } from '../types';
 
 /**
@@ -279,6 +280,34 @@ const TRAINING: BriefingTraining = {
   missing: [],
 };
 
+/**
+ * Hoeveel lege alinea's er direct vóór een kop staan.
+ *
+ * Dit is de enige bewaking op de witruimte tussen secties. Die kwam uit twee bronnen — de
+ * vaste alinea's van het brondocument én een witregel per blok uit de lus — en telde dus op:
+ * zonder rolblokken stonden er drie witregels vóór `Concept inhoud`, met rolblokken één, en
+ * vóór `Inventarisatie klant` drie. Elke sectie brengt nu zijn eigen witregel mee, vóór zijn
+ * titel. Een sjabloon dat opnieuw gegenereerd wordt met een oudere `body.py` opent prima en
+ * leest hetzelfde; alleen de afstand klopt niet meer.
+ */
+function blanksBefore(xml: string, kop: string): number {
+  const paragraphs = xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
+  const tekst = (p: string): string =>
+    (p.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) ?? [])
+      .map((t) => t.replace(/<[^>]+>/g, ''))
+      .join('')
+      .trim();
+  const at = paragraphs.findIndex((p) => tekst(p) === kop);
+  if (at === -1) {
+    throw new Error(`kop "${kop}" niet gevonden in het gerenderde document`);
+  }
+  let n = 0;
+  while (at - 1 - n >= 0 && tekst(paragraphs[at - 1 - n]) === '') {
+    n += 1;
+  }
+  return n;
+}
+
 async function renderLead(label: string): Promise<string> {
   const training = { ...TRAINING, label };
   const rollen = resolveRecipientRoles(training, EMPTY_CHECKLIST);
@@ -334,5 +363,101 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
   it('zet regelafbrekingen buiten w:t', async () => {
     const xml = await renderLead(label);
     expect(xml).not.toMatch(/<w:t[^>]*>[^<]*<w:br\/>/);
+  });
+});
+
+/** Rendert het leaddocument met een eigen checklist en historie, voor de witruimtetest. */
+async function renderMet(
+  label: string,
+  checklist: BriefingChecklist,
+  historie: HistoryRow[],
+  /**
+   * Standaard de fixture mét co-trainer, want die levert een rolblok op.
+   *
+   * `alleenLead` schakelt naar één gekoppelde trainer, en dat is een ándere tak:
+   * `recipientBlocks` voegt het lead-blok alleen toe als er ándere trainers zijn, dus dan
+   * levert de rolblokkenlus **niets** op. Precies daar liet de oude opzet drie witregels
+   * achter vóór `Concept inhoud` — en het is meteen het gewone geval: 221 van de 265
+   * komende trainingen hebben één gekoppeld persoon.
+   */
+  alleenLead = false
+): Promise<string> {
+  const basis = { ...TRAINING, label };
+  const training = alleenLead
+    ? { ...basis, trainers: basis.trainers.filter((t) => !t.isCoTrainer) }
+    : basis;
+  const rollen = resolveRecipientRoles(training, checklist);
+  if (rollen.kind !== 'resolved') {
+    throw new Error(`fixture levert geen ontvangers op: ${rollen.kind}`);
+  }
+  const lead = rollen.recipients.find((r) => r.role === 'lead');
+  if (lead === undefined) {
+    throw new Error('fixture levert geen leadtrainer op');
+  }
+  const bytes = await renderBriefing(
+    label,
+    composeBriefing(training, checklist, { historie, recipient: lead })
+  );
+  return zipReadText(bytes, 'word/document.xml');
+}
+
+const HISTORIE_RIJ: HistoryRow = {
+  datum: '12-01-2026',
+  tijd: '09:30 - 12:30',
+  klanttitel: 'Speeddaten',
+  trainer: 'Tessa de Haas (06-24118840)',
+  contactpersoon: 'Paula Hollander',
+};
+
+describe.each(LABELS)('witruimte tussen de secties, sjabloon %s', (label) => {
+  /** Geen enkel inhoudelijk blok: alleen de vaste witregels blijven over. */
+  it('houdt één witregel als er geen blokken zijn', async () => {
+    const xml = await renderMet(label, EMPTY_CHECKLIST, []);
+
+    expect(blanksBefore(xml, 'Concept inhoud')).toBe(1);
+    expect(blanksBefore(xml, 'Inventarisatie klant')).toBe(1);
+  });
+
+  /**
+   * Eén trainer, dus ook geen ROLBLOK — de tak waar het mis ging.
+   *
+   * Met een co-trainer levert de rolblokkenlus altijd een lead-blok op, en dan viel de fout
+   * niet op: de witregel van dat blok verving toevallig de vaste witregels. Zonder rolblok
+   * bleven ze alle drie staan.
+   */
+  it('houdt één witregel zonder enig rolblok', async () => {
+    const xml = await renderMet(label, EMPTY_CHECKLIST, [], true);
+
+    expect(xml).not.toContain('Leadtrainer');
+    expect(blanksBefore(xml, 'Concept inhoud')).toBe(1);
+    expect(blanksBefore(xml, 'Inventarisatie klant')).toBe(1);
+  });
+
+  /** Eén blok: de lus levert nu ook een witregel, en die mag niet optellen. */
+  it('houdt één witregel met één blok', async () => {
+    const xml = await renderMet(label, { ...EMPTY_CHECKLIST, homework: true }, []);
+
+    expect(blanksBefore(xml, 'Concept inhoud')).toBe(1);
+    expect(blanksBefore(xml, 'Huiswerkopdracht')).toBe(1);
+    expect(blanksBefore(xml, 'Inventarisatie klant')).toBe(1);
+  });
+
+  /** Meerdere blokken, waaronder er een met een tabel eronder. */
+  it('houdt één witregel tussen elk van meerdere blokken', async () => {
+    const xml = await renderMet(
+      label,
+      { ...EMPTY_CHECKLIST, homework: true, preparatoryAssignment: true },
+      [HISTORIE_RIJ]
+    );
+
+    for (const kop of [
+      'Concept inhoud',
+      'Vaste klant',
+      'Huiswerkopdracht',
+      'Voorbereidende opdracht',
+      'Inventarisatie klant',
+    ]) {
+      expect({ kop, wit: blanksBefore(xml, kop) }).toEqual({ kop, wit: 1 });
+    }
   });
 });

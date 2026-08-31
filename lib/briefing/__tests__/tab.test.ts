@@ -53,6 +53,173 @@ const opgeslagen = (over: Partial<SavedChecklist> = {}): SavedChecklist => ({
   ...over,
 });
 
+/** Dezelfde training, maar met precies één gekoppeld persoon: 221 van de 265 op het bord. */
+const SOLO: BriefingTraining = {
+  ...TRAINING,
+  trainers: [
+    { itemId: '1', naam: 'Frank Paats', telefoon: '', isActeur: false, isCoTrainer: false },
+  ],
+};
+
+/**
+ * Eén trainer: twee vragen die niet te beantwoorden zijn.
+ *
+ * `Meerdere trainers op deze sessie` gaat over het verdelen van groepen tussen trainers, en
+ * de acteurvraag kán met één gekoppeld persoon niet op "ja" uitkomen — `classify` houdt dan
+ * óf een onverklaarde acteur over, óf maakt van de enige persoon de acteur en dan is er geen
+ * lead. Beide blokkeren. Ze wegnemen scheelt twee vragen op 83% van het bord.
+ */
+describe('buildTabView met één trainer', () => {
+  it('meldt dat de twee vragen niet van toepassing zijn', () => {
+    expect(buildTabView(SOLO, opgeslagen()).soloTrainer).toBe(true);
+    expect(buildTabView(TRAINING, opgeslagen()).soloTrainer).toBe(false);
+  });
+
+  it('zet de acteurvraag en de groepskeuze op nee, wat er ook opgeslagen staat', () => {
+    const uit = buildTabView(SOLO, {
+      checklist: { ...EMPTY_CHECKLIST, trainingActor: true, ownGroup: true },
+      actorItemIds: ['1'],
+      actorAnswered: true,
+    });
+
+    expect(uit.checklist.trainingActor).toBe(false);
+    expect(uit.checklist.ownGroup).toBe(false);
+    expect(uit.checklist.sameGroup).toBe(false);
+  });
+
+  /** Anders blijft de knop uit op een vraag die het scherm niet meer stelt. */
+  it('blokkeert niet op een onbeantwoorde acteurvraag', () => {
+    const uit = buildTabView(SOLO, {
+      checklist: EMPTY_CHECKLIST,
+      actorItemIds: [],
+      actorAnswered: false,
+    });
+
+    expect(uit.issues.filter((i) => i.blokkeert).map((i) => i.kind)).not.toContain(
+      'acteur_onbeantwoord'
+    );
+    expect(uit.kanGenereren).toBe(true);
+  });
+
+  /**
+   * Behalve wanneer Monday wél een acteur belooft. Gemeten: 4 van de 265.
+   *
+   * Die zijn vandaag geblokkeerd, en dat hoort zo te blijven — stilzwijgend "nee" aannemen
+   * levert een briefing op zonder acteurblok voor een sessie die er waarschijnlijk wel een
+   * heeft. Het verschil is dat er nu staat wát eraan te doen is, in plaats van een vraag die
+   * met één gekoppeld persoon geen goed antwoord heeft.
+   */
+  it('blokkeert wél als Acteuraantal een acteur belooft die niemand is', () => {
+    const uit = buildTabView({ ...SOLO, acteuraantal: 1 }, opgeslagen());
+
+    const blokkerend = uit.issues.filter((i) => i.blokkeert);
+    expect(blokkerend.map((i) => i.kind)).toContain('acteur_niet_gekoppeld');
+    expect(uit.kanGenereren).toBe(false);
+    expect(blokkerend[0].tekst).toContain('Acteuraantal');
+  });
+
+  /**
+   * Eén gekoppeld persoon die in de groep Acteurs staat is GEEN solo-trainer.
+   *
+   * `training.trainers` bevat trainers én acteurs. Zou de sluiproute ook hier gelden, dan
+   * gaat `trainingActor` op nee, telt de acteur als gewone trainer en promoveert
+   * `classify` hem tot leadtrainer — waarna er een leadbriefing naar een acteur gaat, met
+   * het klantcontact en de inhoudelijke verantwoordelijkheid erin. Op dit bord komt het
+   * (nog) niet voor; gemeten 0 van 265. Dat is geen reden om het te laten kunnen.
+   */
+  it('ziet één acteur niet aan voor een solo-trainer', () => {
+    const alleenActeur: BriefingTraining = {
+      ...SOLO,
+      trainers: [
+        { itemId: '9', naam: 'Sam Speler', telefoon: '', isActeur: true, isCoTrainer: false },
+      ],
+    };
+
+    const onaangeraakt = buildTabView(alleenActeur, {
+      checklist: EMPTY_CHECKLIST,
+      actorItemIds: [],
+      actorAnswered: false,
+    });
+
+    expect(onaangeraakt.soloTrainer).toBe(false);
+    // De vraag wordt gestéld in plaats van aangenomen, en Monday stelt "ja" voor.
+    expect(onaangeraakt.acteurVoorstel).toBe(true);
+    expect(onaangeraakt.kanGenereren).toBe(false);
+    expect(onaangeraakt.issues.filter((i) => i.blokkeert).map((i) => i.kind)).toContain(
+      'acteur_onbeantwoord'
+    );
+  });
+
+  /**
+   * Zegt de adviseur daarna toch "ja", dan is er niemand over om lead te zijn.
+   *
+   * Dat is de uitkomst die de sluiproute onbereikbaar maakte: met `trainingActor` vast op
+   * nee telde de acteur als gewone trainer en werd hij lead.
+   */
+  it('blokkeert op "geen lead" zodra de acteur als acteur is bevestigd', () => {
+    const alleenActeur: BriefingTraining = {
+      ...SOLO,
+      trainers: [
+        { itemId: '9', naam: 'Sam Speler', telefoon: '', isActeur: true, isCoTrainer: false },
+      ],
+    };
+
+    const uit = buildTabView(alleenActeur, {
+      checklist: { ...EMPTY_CHECKLIST, trainingActor: true },
+      actorItemIds: [],
+      actorAnswered: true,
+    });
+
+    expect(uit.kanGenereren).toBe(false);
+    expect(uit.issues.filter((i) => i.blokkeert).map((i) => i.kind)).toContain('geen_lead');
+  });
+
+  /**
+   * De twee beslissingen zijn niet dezelfde beslissing.
+   *
+   * Bij één gekoppeld persoon uit de groep Acteurs blijft de acteurvraag staan — die moet
+   * beantwoord worden. Maar "meerdere trainers op deze sessie" gaat óók dan nergens over:
+   * er is één persoon. Hingen ze aan één vlag, dan bleef de groepskeuze zichtbaar én
+   * ongemoeid, en kon een oude of nieuw aangevinkte waarde "Ieder een eigen groep" in de
+   * briefing van een eenpitter zetten.
+   */
+  it('wist de groepskeuze ook wanneer die ene persoon een acteur is', () => {
+    const alleenActeur: BriefingTraining = {
+      ...SOLO,
+      trainers: [
+        { itemId: '9', naam: 'Sam Speler', telefoon: '', isActeur: true, isCoTrainer: false },
+      ],
+    };
+
+    const uit = buildTabView(alleenActeur, {
+      checklist: { ...EMPTY_CHECKLIST, ownGroup: true },
+      actorItemIds: [],
+      actorAnswered: true,
+    });
+
+    // De acteurvraag blijft, de groepskeuze niet.
+    expect(uit.soloTrainer).toBe(false);
+    expect(uit.groepskeuzeNvt).toBe(true);
+    expect(uit.checklist.ownGroup).toBe(false);
+    expect(uit.checklist.sameGroup).toBe(false);
+  });
+
+  it('laat de groepskeuze staan zodra er twee mensen gekoppeld zijn', () => {
+    const uit = buildTabView(TRAINING, {
+      checklist: { ...EMPTY_CHECKLIST, ownGroup: true },
+      actorItemIds: [],
+      actorAnswered: true,
+    });
+
+    expect(uit.groepskeuzeNvt).toBe(false);
+    expect(uit.checklist.ownGroup).toBe(true);
+  });
+
+  it('laat een acteuraantal van 0 gewoon door', () => {
+    expect(buildTabView({ ...SOLO, acteuraantal: 0 }, opgeslagen()).kanGenereren).toBe(true);
+  });
+});
+
 describe('buildTabView', () => {
   it('toont welke documenten er zouden komen, met rol', () => {
     const uit = buildTabView(TRAINING, opgeslagen());

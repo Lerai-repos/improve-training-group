@@ -217,6 +217,15 @@ export interface ChecklistPanelProps {
   readonly acteurVoorstel: boolean;
   readonly personen: readonly TabPerson[];
   readonly actorItemIds: readonly string[];
+  /**
+   * Eén gekoppeld persoon: de acteurvraag en de groepskeuze gaan nergens over.
+   *
+   * `buildTabView` zet ze dan zelf op nee, dus het scherm laat ze weg in plaats van twee
+   * vragen te tonen waarvan er maar één antwoord werkt.
+   */
+  readonly soloTrainer: boolean;
+  /** Hooguit één gekoppeld persoon: er valt geen groep te verdelen. */
+  readonly groepskeuzeNvt: boolean;
   onChecklist(next: Partial<BriefingChecklist>): void;
   onActors(next: readonly string[]): void;
   onAnswerActor(werktMee: boolean): void;
@@ -228,6 +237,8 @@ export const ChecklistPanel = ({
   acteurVoorstel,
   personen,
   actorItemIds,
+  soloTrainer,
+  groepskeuzeNvt,
   onChecklist,
   onActors,
   onAnswerActor,
@@ -246,17 +257,24 @@ export const ChecklistPanel = ({
     <section className="grid gap-5 rounded-md border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">Checklist</h2>
 
-      <ActeurVraag
-        checklist={checklist}
-        beantwoord={acteurBeantwoord}
-        voorstel={acteurVoorstel}
-        personen={personen}
-        actorItemIds={actorItemIds}
-        onActors={onActors}
-        onAnswerActor={onAnswerActor}
-      />
+      {/*
+        Met één gekoppeld persoon kan deze vraag niet op "ja" uitkomen — dan is er óf een
+        onverklaarde acteur, óf geen leadtrainer. Belooft `Acteuraantal` tóch een acteur, dan
+        staat dat als blokkerende melding bovenaan, met wat eraan te doen is.
+      */}
+      {!soloTrainer && (
+        <ActeurVraag
+          checklist={checklist}
+          beantwoord={acteurBeantwoord}
+          voorstel={acteurVoorstel}
+          personen={personen}
+          actorItemIds={actorItemIds}
+          onActors={onActors}
+          onAnswerActor={onAnswerActor}
+        />
+      )}
 
-      <GroepKeuze checklist={checklist} onChange={onChecklist} />
+      {!groepskeuzeNvt && <GroepKeuze checklist={checklist} onChange={onChecklist} />}
 
       <div className="grid gap-3">
         <Vraag
