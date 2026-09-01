@@ -73,6 +73,7 @@ briefing-demo/
 __pycache__/
 *.py[cod]
 .briefings-create.json
+.labels-create.json
 
 # Chromium-binaries, neergezet door scripts/copy-chromium.mjs vóór elke build
 .chromium-bin/
