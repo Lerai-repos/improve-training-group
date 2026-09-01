@@ -7,6 +7,7 @@
     "prepare": "husky",
     "dev": "doppler run -- next dev --turbo",
     "dev:local": "next dev --turbo",
+    "prebuild": "node scripts/copy-chromium.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -128,7 +129,7 @@
     "vitest": "^4.1.10"
   },
   "engines": {
-    "node": "^22.17.0"
+    "node": ">=24"
   },
   "packageManager": "pnpm@9.12.3"
 }

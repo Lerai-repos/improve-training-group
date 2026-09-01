@@ -12,6 +12,8 @@
  * anything about production.
  */
 
+import { join } from 'node:path';
+
 import chromium from '@sparticuz/chromium';
 import { launch } from 'puppeteer-core';
 
@@ -23,6 +25,20 @@ import { launch } from 'puppeteer-core';
  * figure; changing it brings the hairlines back.
  */
 export const PAPER = { width: '209.5mm', height: '296mm' } as const;
+
+/**
+ * Waar de brotli-pakketjes van Chromium staan.
+ *
+ * NIET in `node_modules`. pnpm zet `@sparticuz/chromium` daar neer als symlink naar de
+ * store, en Next's tracing daardoorheen levert een bundel op die wél bouwt maar die
+ * Vercel weigert uit te rollen: *"files in symlinked directories"*. `scripts/copy-chromium.mjs`
+ * zet er vóór elke build echte kopieën neer op dit pad.
+ *
+ * `process.cwd()` en niet `__dirname`, om dezelfde reden als bij de briefingsjablonen:
+ * in de serverless-bundel wijst `__dirname` naar de gebundelde module, niet naar de
+ * wortel van de functie.
+ */
+const CHROMIUM_BIN = join(process.cwd(), '.chromium-bin');
 
 /** No margins: the template owns its own padding, and the covers must reach the edge. */
 export const NO_MARGIN = { top: '0', right: '0', bottom: '0', left: '0' } as const;
@@ -53,7 +69,7 @@ export function createPdfRenderer(): PdfRenderer {
 
       const browser = await launch({
         args: chromium.args,
-        executablePath: await chromium.executablePath(),
+        executablePath: await chromium.executablePath(CHROMIUM_BIN),
         headless: true,
       });
       try {
