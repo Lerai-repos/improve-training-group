@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { TrainerOverview } from '../trainer-overview';
@@ -69,13 +69,31 @@ describe('TrainerOverview', () => {
     expect(screen.getByText('Timemanagement')).toBeDefined();
   });
 
-  it('folds it away again on a second click', () => {
+  /**
+   * The rows outlive the click by one animation — they have to stay mounted for the
+   * fold-away to be visible at all — so this waits rather than asserting instantly.
+   */
+  it('folds it away again on a second click', async () => {
     render(<TrainerOverview state={state()} />);
 
     fireEvent.click(screen.getByText('Anna Bakker'));
     fireEvent.click(screen.getByText('Anna Bakker'));
 
-    expect(screen.queryByText('Feedback geven')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByText('Feedback geven')).toBeNull();
+    });
+  });
+
+  it('keeps the rows on screen while they fold away, so the exit is visible', () => {
+    render(<TrainerOverview state={state()} />);
+
+    fireEvent.click(screen.getByText('Anna Bakker'));
+    fireEvent.click(screen.getByText('Anna Bakker'));
+
+    // Still there, and now running the exit rather than the entrance.
+    const row = screen.getAllByTestId('theme-row')[0];
+    expect(row?.className).toContain('animate-out');
+    expect(row?.className).not.toContain('animate-in');
   });
 
   /**
@@ -351,13 +369,15 @@ describe('clicking the row', () => {
     expect(screen.getByText('Feedback geven')).toBeDefined();
   });
 
-  it('folds it away again on a second row click', () => {
+  it('folds it away again on a second row click', async () => {
     render(<TrainerOverview state={state()} />);
 
     fireEvent.click(screen.getByTestId('trainer-row'));
     fireEvent.click(screen.getByTestId('trainer-row'));
 
-    expect(screen.queryByText('Feedback geven')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByText('Feedback geven')).toBeNull();
+    });
   });
 
   /**

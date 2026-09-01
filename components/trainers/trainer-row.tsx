@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import { ChevronRight } from 'lucide-react';
 
 import { grade } from '@components/recommendations/format';
@@ -41,7 +43,58 @@ const STAGGER_MS = 20;
  */
 const MAX_STAGGERED_ROWS = 8;
 
+/**
+ * How long the fold-away runs before the rows are actually removed.
+ *
+ * The rows have to STAY MOUNTED for the length of their exit animation — React would
+ * otherwise unmount them the instant `expanded` flips, which is why collapsing was
+ * abrupt while opening was not. Matches the CSS duration below; a mismatch either clips
+ * the animation or leaves an invisible block holding the table's height.
+ */
+const EXIT_MS = 150;
+
+/**
+ * No animation, no waiting for one.
+ *
+ * `matchMedia` is guarded rather than assumed: jsdom does not implement it, and a
+ * throw here would take the whole row down over a preference check.
+ */
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export const TrainerRow = ({ row, expanded, onToggle, themeNames }: TrainerRowProps) => {
+  /**
+   * Whether the theme rows are in the DOM, which outlives `expanded` by one animation.
+   */
+  const [mounted, setMounted] = useState(expanded);
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (expanded) {
+      setMounted(true);
+      setLeaving(false);
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setLeaving(true);
+    const timer = setTimeout(
+      () => {
+        setMounted(false);
+        setLeaving(false);
+      },
+      prefersReducedMotion() ? 0 : EXIT_MS
+    );
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [expanded, mounted]);
+
   const handleToggle = () => {
     onToggle(row.trainerExternalId);
   };
@@ -106,7 +159,7 @@ export const TrainerRow = ({ row, expanded, onToggle, themeNames }: TrainerRowPr
         <TableCell className="text-right tabular-nums">{row.themeCount}</TableCell>
       </TableRow>
 
-      {expanded && row.themes.length === 0 && (
+      {mounted && row.themes.length === 0 && (
         <TableRow>
           <TableCell colSpan={COLUMN_COUNT} className="pl-10 text-sm text-muted-foreground">
             Geen thema’s op deze trainer.
@@ -114,7 +167,7 @@ export const TrainerRow = ({ row, expanded, onToggle, themeNames }: TrainerRowPr
         </TableRow>
       )}
 
-      {expanded &&
+      {mounted &&
         row.themes.map((theme, index) => (
           <TableRow
             key={theme.themaExternalId}
@@ -125,8 +178,19 @@ export const TrainerRow = ({ row, expanded, onToggle, themeNames }: TrainerRowPr
              * the movement lives in opacity and a one-step slide, which needs no knowledge
              * of how tall the block will be. `motion-reduce` switches it off entirely.
              */
-            className="animate-in fade-in-0 slide-in-from-top-1 bg-muted/40 duration-200 fill-mode-backwards motion-reduce:animate-none"
-            style={{ animationDelay: `${Math.min(index, MAX_STAGGERED_ROWS) * STAGGER_MS}ms` }}
+            className={cn(
+              'bg-muted/40 motion-reduce:animate-none',
+              leaving
+                ? 'animate-out fade-out-0 slide-out-to-top-1 fill-mode-forwards duration-150'
+                : 'animate-in fade-in-0 slide-in-from-top-1 fill-mode-backwards duration-200'
+            )}
+            /* No stagger on the way out: folding should feel like one movement, and a
+               staggered exit on 95 themes would be a queue rather than a gesture. */
+            style={
+              leaving
+                ? undefined
+                : { animationDelay: `${Math.min(index, MAX_STAGGERED_ROWS) * STAGGER_MS}ms` }
+            }
             data-testid="theme-row"
           >
             <TableCell className="pl-10 text-sm">
