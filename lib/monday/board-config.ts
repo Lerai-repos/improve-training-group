@@ -322,6 +322,35 @@ export const GROUP_POLICY: Record<string, GroupPolicy> = {
   nieuwe_groep__1: { rateKey: '2024-heden', recommendable: true },
 };
 
+/**
+ * Which trainer groups the evaluation OVERVIEW tab shows by default.
+ *
+ * Deliberately its own constant rather than a reuse of `RECOMMENDABLE_TRAINER_GROUPS`.
+ * That setting answers "who may be recommended", which is an eligibility question ITG
+ * configures on the Instellingen board; this answers "who is worth listing on an
+ * evaluation screen", which also includes the actors — they carry real evaluations
+ * (5 of the 15 do) and Airtable scored them exactly the same way.
+ *
+ * It is a DEFAULT, not a cutoff. Measured 1-Sep-2026: 75 trainers have evaluations and
+ * 33 of them sit outside these three groups, including the single largest contributor
+ * on the board (376 evaluations, in Inactief/uit dienst). Hiding those permanently would
+ * quietly delete the history an evaluation review exists to look at, so the tab offers a
+ * control to widen the scope instead.
+ */
+/**
+ * De groep `Acteurs` op het trainersbord.
+ *
+ * Woont hier omdat dit bordconfiguratie is; `lib/briefing/columns.ts` herexporteert hem,
+ * mét de kanttekening over hoe betrouwbaar de groep is als acteursignaal.
+ */
+export const TRAINER_ACTEURS_GROUP = 'nieuwe_groep22164__1';
+
+export const TRAINER_OVERVIEW_GROUPS: readonly string[] = [
+  'topics',
+  'nieuwe_groep__1',
+  TRAINER_ACTEURS_GROUP,
+];
+
 export function resolveGroupPolicy(groupId: string | null): GroupPolicy | null {
   if (!groupId) {
     return null;

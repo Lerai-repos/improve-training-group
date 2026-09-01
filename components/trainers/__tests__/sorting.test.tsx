@@ -30,6 +30,7 @@ const names = new Map([
 const filters = (over: Partial<OverviewFilters> = {}): OverviewFilters => ({
   onlyEvaluated: false,
   search: '',
+  allowedTrainerIds: null,
   ...over,
 });
 

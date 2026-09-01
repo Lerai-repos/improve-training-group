@@ -31,6 +31,16 @@ import type { TrainerOverviewApi } from './api';
 
 export type OverviewStatus = 'loading' | 'ready' | 'error';
 
+/**
+ * How far the board read has got.
+ *
+ * Three states rather than a boolean, because "no roster yet" and "no roster ever" call
+ * for opposite behaviour in the table: while it is on its way the group scope is unknown
+ * and rows must wait; once it has failed the scope will never be known and the table has
+ * to show everything rather than nothing.
+ */
+export type RosterStatus = 'loading' | 'ready' | 'unavailable';
+
 export interface TrainerOverviewState {
   readonly status: OverviewStatus;
   readonly payload: TrainerOverviewPayload | null;
@@ -39,6 +49,9 @@ export interface TrainerOverviewState {
   readonly themeNames: ReadonlyMap<string, string>;
   /** Every trainer on the board; empty when the roster could not be read. */
   readonly rosterIds: readonly string[];
+  /** Trainer id → board group id, for scoping the table to the groups worth listing. */
+  readonly groupById: ReadonlyMap<string, string>;
+  readonly rosterStatus: RosterStatus;
   /**
    * Monday's own light/dark setting, or null until it has told us.
    *
@@ -96,8 +109,14 @@ export function useTrainerOverview(
          * fewer trainers and every number correct. It IS fatal for the theme, and that
          * has to be said out loud rather than left as "still loading": the view would
          * otherwise wait forever for a colour scheme that is never coming.
+         *
+         * `sawChange` guards this exactly as it guards the success path. A context change
+         * can deliver a perfectly good board while the initial read is still in flight;
+         * if that superseded read then rejects, recording it would declare a context we
+         * already have to be unavailable — which switches the group scope off for good
+         * and quietly shows every group.
          */
-        if (!cancelled) {
+        if (!cancelled && !sawChange) {
           setThemeUnavailable(true);
         }
       });
@@ -154,6 +173,24 @@ export function useTrainerOverview(
   const roster = useRoster(monday, boardId);
   const themeNames = useTrainerNames(monday, themeIds);
 
+  /**
+   * Ready means "settled FOR THE BOARD WE ARE ASKING ABOUT", which is why this compares
+   * `loadedFor` rather than trusting a flag.
+   *
+   * Two states have to be kept apart from failure. `boardId === null` is the context read
+   * still in flight — the board is coming. `loadedFor !== boardId` is the moment after
+   * Monday moved the view, when the hook still holds the previous board's roster and its
+   * effect has not run yet. Calling either of those `ready` shows the wrong groups for a
+   * render. It is only unavailable once a read has actually failed, or once the context
+   * read has failed and no board will ever arrive.
+   */
+  const rosterStatus: RosterStatus =
+    themeUnavailable || (roster.loadedFor === boardId && roster.error !== null)
+      ? 'unavailable'
+      : boardId === null || roster.loadedFor !== boardId
+        ? 'loading'
+        : 'ready';
+
   const reload = useCallback(() => {
     setReloadToken((token) => token + 1);
   }, []);
@@ -165,6 +202,8 @@ export function useTrainerOverview(
     names: roster.names,
     themeNames: themeNames.byId,
     rosterIds: roster.ids,
+    groupById: roster.groupById,
+    rosterStatus,
     theme,
     themeUnavailable,
     nameWarning: roster.error ?? themeNames.error,

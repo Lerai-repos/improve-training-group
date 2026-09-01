@@ -32,7 +32,7 @@ query ($boardId: [ID!], $cursor: String) {
   boards(ids: $boardId) {
     items_page(limit: 500, cursor: $cursor) {
       cursor
-      items { id name }
+      items { id name group { id } }
     }
   }
 }`;
@@ -46,9 +46,16 @@ query ($boardId: [ID!], $cursor: String) {
  */
 const MAX_PAGES = 20;
 
+interface RosterItem {
+  readonly id: string;
+  readonly name: string;
+  /** Which board group the trainer sits in; '' when Monday did not say. */
+  readonly groupId: string;
+}
+
 interface Page {
   readonly cursor: string | null;
-  readonly items: readonly { id: string; name: string }[];
+  readonly items: readonly RosterItem[];
 }
 
 /**
@@ -78,7 +85,7 @@ function readPage(data: unknown): Page {
     return { cursor, items: [] };
   }
 
-  const items: { id: string; name: string }[] = [];
+  const items: RosterItem[] = [];
   for (const item of page.items) {
     if (typeof item !== 'object' || item === null || !('id' in item) || !('name' in item)) {
       continue;
@@ -87,7 +94,15 @@ function readPage(data: unknown): Page {
     if (!(typeof id === 'string' || typeof id === 'number') || typeof name !== 'string') {
       continue;
     }
-    items.push({ id: String(id), name });
+    const group =
+      'group' in item && typeof item.group === 'object' && item.group !== null && 'id' in item.group
+        ? item.group.id
+        : null;
+    items.push({
+      id: String(id),
+      name,
+      groupId: typeof group === 'string' || typeof group === 'number' ? String(group) : '',
+    });
   }
   return { cursor, items };
 }
@@ -96,6 +111,17 @@ export interface Roster {
   /** Every trainer item on the board, in board order. */
   readonly ids: readonly string[];
   readonly names: ReadonlyMap<string, string>;
+  /** Trainer id → board group id, so the view can scope which groups it lists. */
+  readonly groupById: ReadonlyMap<string, string>;
+  /**
+   * WHICH board the state above describes, or null before anything has settled.
+   *
+   * Exposed rather than a bare `loading` flag because effects run AFTER the render that
+   * changed `boardId`: for that one committed render a boolean still reads false while
+   * the data belongs to the previous board. Callers compare this against the board they
+   * asked for, which is a question that can be answered synchronously.
+   */
+  readonly loadedFor: string | null;
   readonly loading: boolean;
   /**
    * Set when the roster could not be read.
@@ -109,7 +135,8 @@ export interface Roster {
 export function useRoster(monday: Pick<MondayBoardBridge, 'api'>, boardId: string | null): Roster {
   const [ids, setIds] = useState<readonly string[]>([]);
   const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map());
-  const [loading, setLoading] = useState(false);
+  const [groupById, setGroupById] = useState<ReadonlyMap<string, string>>(new Map());
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,7 +145,6 @@ export function useRoster(monday: Pick<MondayBoardBridge, 'api'>, boardId: strin
     }
 
     let cancelled = false;
-    setLoading(true);
     /**
      * Clear before fetching, not after.
      *
@@ -129,10 +155,20 @@ export function useRoster(monday: Pick<MondayBoardBridge, 'api'>, boardId: strin
      */
     setIds([]);
     setNames(new Map());
+    setGroupById(new Map());
     setError(null);
+    /**
+     * And the state no longer describes ANY board.
+     *
+     * Clearing the maps without clearing this leaves a lie behind on an A → B → A trip:
+     * B's effect erases A's roster while `loadedFor` still says A, so coming back to A
+     * before B has settled reads as "already loaded" over empty maps — and the table
+     * renders unscoped until the new request lands.
+     */
+    setLoadedFor(null);
 
     const collect = async (): Promise<Page['items']> => {
-      const all: { id: string; name: string }[] = [];
+      const all: RosterItem[] = [];
       let cursor: string | null = null;
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const data: unknown = await monday.api(ROSTER_QUERY, { boardId: [boardId], cursor });
@@ -153,7 +189,9 @@ export function useRoster(monday: Pick<MondayBoardBridge, 'api'>, boardId: strin
         }
         setIds(items.map((item) => item.id));
         setNames(new Map(items.map((item) => [item.id, item.name])));
+        setGroupById(new Map(items.map((item) => [item.id, item.groupId])));
         setError(null);
+        setLoadedFor(boardId);
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
@@ -161,12 +199,11 @@ export function useRoster(monday: Pick<MondayBoardBridge, 'api'>, boardId: strin
           // were whole is the same wrong answer, just harder to notice.
           setIds([]);
           setNames(new Map());
+          setGroupById(new Map());
           setError(cause instanceof Error ? cause.message : String(cause));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
+          // Settled, badly, but settled FOR THIS BOARD — otherwise a failure reads as
+          // "still loading" and the table waits on a request that will never arrive.
+          setLoadedFor(boardId);
         }
       });
 
@@ -175,5 +212,9 @@ export function useRoster(monday: Pick<MondayBoardBridge, 'api'>, boardId: strin
     };
   }, [boardId, monday]);
 
-  return { ids, names, loading, error };
+  // Derived, not stored: a boolean set inside the effect is one render late, which is
+  // exactly the window in which the previous board's roster is still on screen.
+  const loading = boardId !== null && loadedFor !== boardId;
+
+  return { ids, names, groupById, loadedFor, loading, error };
 }

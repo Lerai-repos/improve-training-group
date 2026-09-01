@@ -213,7 +213,7 @@ export const BRIEFINGS_COLUMNS = {
  * alleen goed genoeg om iemand als acteur te herkennen, en nooit om te concluderen dat er
  * géén acteur is. Dat laatste beantwoordt de adviseur in de checklist.
  */
-export const TRAINER_ACTEURS_GROUP = 'nieuwe_groep22164__1';
+export { TRAINER_ACTEURS_GROUP } from '@lib/monday/board-config';
 
 /**
  * Het contactenbord. Het telefoonnummer staat hier en nergens anders.

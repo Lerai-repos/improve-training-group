@@ -169,3 +169,55 @@ describe('when the board changes', () => {
     expect(result.current.names.size).toBe(0);
   });
 });
+
+/**
+ * The round trip. Going A → B → A before B settles used to read as "already loaded",
+ * because `loadedFor` still said A while B's effect had already erased A's roster — so
+ * the table rendered against empty maps and lost its group scope.
+ */
+describe('returning to a board whose request never finished', () => {
+  it('is loading again, not falsely ready on the cleared maps', async () => {
+    let releaseB: (() => void) | null = null;
+    const page = (id: string) => ({
+      boards: [{ items_page: { cursor: null, items: [{ id, name: `Op ${id}` }] } }],
+    });
+    const monday = {
+      api: (_document: string, variables?: Record<string, unknown>): Promise<unknown> => {
+        const board = Array.isArray(variables?.boardId) ? String(variables.boardId[0]) : '';
+        if (board === 'board-B') {
+          return new Promise((resolve) => {
+            releaseB = () => {
+              resolve(page(board));
+            };
+          });
+        }
+        return Promise.resolve(page(board));
+      },
+    };
+
+    const { result, rerender } = renderHook(({ board }) => useRoster(monday, board), {
+      initialProps: { board: 'board-A' },
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadedFor).toBe('board-A');
+    });
+
+    rerender({ board: 'board-B' });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(true);
+    });
+
+    // Back to A while B is still hanging.
+    rerender({ board: 'board-A' });
+
+    expect(result.current.loadedFor).toBeNull();
+    expect(result.current.loading).toBe(true);
+
+    await waitFor(() => {
+      expect(result.current.loadedFor).toBe('board-A');
+    });
+    expect(result.current.ids).toEqual(['board-A']);
+    expect(releaseB).not.toBeNull();
+  });
+});

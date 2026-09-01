@@ -24,6 +24,15 @@ export interface OverviewFilters {
    */
   readonly onlyEvaluated: boolean;
   readonly search: string;
+  /**
+   * Trainers allowed by the group scope, or null for "no group restriction".
+   *
+   * A set of ids rather than group ids, because the board is the only thing that knows
+   * who is in which group and it is read client-side. A trainer NOT in the set is
+   * hidden — including one who has left the board entirely, which is the honest
+   * reading of "show me these groups".
+   */
+  readonly allowedTrainerIds: ReadonlySet<string> | null;
 }
 
 export interface DisplayRow extends OverviewTrainerRow {
@@ -132,6 +141,11 @@ export function prepareRows(
   const needle = filters.search.trim().toLowerCase();
 
   return toDisplayRows(rows, names, rosterIds)
+    .filter((row) =>
+      filters.allowedTrainerIds === null
+        ? true
+        : filters.allowedTrainerIds.has(row.trainerExternalId)
+    )
     .filter((row) => (filters.onlyEvaluated ? row.evaluationCount > 0 : true))
     .filter((row) => (needle === '' ? true : row.label.toLowerCase().includes(needle)))
     .sort((a, b) => compare(a, b, sort));

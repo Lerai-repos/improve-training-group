@@ -16,6 +16,8 @@ import {
   TableRow,
 } from '@components/ui/table';
 
+import { TRAINER_OVERVIEW_GROUPS } from '@lib/monday/board-config';
+
 import { prepareRows, type OverviewSort, type SortKey } from './sorting';
 import { SortableHeader } from './sortable-header';
 import { TrainerRow } from './trainer-row';
@@ -49,17 +51,41 @@ export const TrainerOverview = ({ state }: TrainerOverviewProps) => {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<OverviewSort>(INITIAL_SORT);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [allGroups, setAllGroups] = useState(false);
+
+  /**
+   * Which trainers the group scope allows, or null when there is no scope to apply.
+   *
+   * Null when the reader asked for every group; null once the board read has FAILED, since
+   * a failed read must not empty the table; and null when the board came back with nothing,
+   * because a scope built from an empty roster can only ever hide everything.
+   *
+   * Deliberately NOT null merely because the roster has not arrived yet — that case used to
+   * be indistinguishable from the two above, which meant every group flashed on screen for
+   * the moment before the board answered. It is handled by holding the table back instead.
+   */
+  const allowedTrainerIds = useMemo(() => {
+    if (allGroups || state.rosterStatus === 'unavailable' || state.groupById.size === 0) {
+      return null;
+    }
+    const wanted = new Set(TRAINER_OVERVIEW_GROUPS);
+    return new Set(
+      [...state.groupById.entries()]
+        .filter(([, groupId]) => wanted.has(groupId))
+        .map(([trainerId]) => trainerId)
+    );
+  }, [allGroups, state.groupById, state.rosterStatus]);
 
   const rows = useMemo(
     () =>
       prepareRows(
         state.payload?.trainers ?? [],
         state.names,
-        { onlyEvaluated, search },
+        { onlyEvaluated, search, allowedTrainerIds },
         sort,
         state.rosterIds
       ),
-    [onlyEvaluated, search, sort, state.names, state.payload, state.rosterIds]
+    [allowedTrainerIds, onlyEvaluated, search, sort, state.names, state.payload, state.rosterIds]
   );
 
   const handleToggleRow = (trainerExternalId: string) => {
@@ -78,6 +104,10 @@ export const TrainerOverview = ({ state }: TrainerOverviewProps) => {
 
   const handleOnlyEvaluated = (checked: boolean | 'indeterminate') => {
     setOnlyEvaluated(checked === true);
+  };
+
+  const handleAllGroups = (checked: boolean | 'indeterminate') => {
+    setAllGroups(checked === true);
   };
 
   /**
@@ -112,18 +142,33 @@ export const TrainerOverview = ({ state }: TrainerOverviewProps) => {
     return <div className={surface} data-testid="theme-pending" />;
   }
 
-  if (state.status === 'loading') {
-    return (
-      <div className={surface}>
-        <p className="text-sm text-muted-foreground">Bezig met laden…</p>
-      </div>
-    );
-  }
-
+  /**
+   * The failure is reported FIRST, before any waiting.
+   *
+   * The roster comes from Monday and the payload from Redis, and neither waits for the
+   * other. Checking the wait first meant a dead endpoint hid behind "Bezig met laden…"
+   * for as long as the Monday request took — and forever if it hung.
+   */
   if (state.status === 'error') {
     return (
       <div className={surface}>
         <p className="text-sm text-destructive">{state.error}</p>
+      </div>
+    );
+  }
+
+  /**
+   * The roster counts as loading too.
+   *
+   * The overview payload is one Redis read; the roster needs the Monday context and then
+   * a board query, so the payload effectively always wins. Rendering on it alone would
+   * show every group — Inactief, Schaduwpool, the lot — for the moment before the board
+   * answers and the table visibly shrinks under the reader.
+   */
+  if (state.status === 'loading' || state.rosterStatus === 'loading') {
+    return (
+      <div className={surface}>
+        <p className="text-sm text-muted-foreground">Bezig met laden…</p>
       </div>
     );
   }
@@ -148,6 +193,12 @@ export const TrainerOverview = ({ state }: TrainerOverviewProps) => {
             Alleen trainers met evaluaties
           </Label>
         </div>
+        <div className="flex items-center gap-2">
+          <Checkbox id="alle-groepen" checked={allGroups} onCheckedChange={handleAllGroups} />
+          <Label htmlFor="alle-groepen" className="text-sm font-normal">
+            Ook oud-trainers en overige groepen
+          </Label>
+        </div>
         <span className="text-sm text-muted-foreground">{rows.length} trainers</span>
       </div>
 
@@ -164,7 +215,21 @@ export const TrainerOverview = ({ state }: TrainerOverviewProps) => {
         </p>
       )}
 
-      <Table>
+      {/*
+        A FIXED layout, and that is the point rather than a detail.
+        With the default `auto`, unfolding a trainer widens the first column — theme names
+        are longer than trainer names and carry a qualification label — and every numeric
+        column jumps sideways at the moment the reader is looking at them. Fixed widths
+        mean opening a row cannot move anything that was already on screen.
+      */}
+      <Table className="table-fixed">
+        <colgroup>
+          <col />
+          <col className="w-32" />
+          <col className="w-32" />
+          <col className="w-32" />
+          <col className="w-28" />
+        </colgroup>
         <TableHeader>
           <TableRow>
             {COLUMNS.map((column) => (

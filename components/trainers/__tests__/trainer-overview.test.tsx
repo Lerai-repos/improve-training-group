@@ -43,6 +43,8 @@ const state = (over: Partial<TrainerOverviewState> = {}): TrainerOverviewState =
     ['th2', 'Timemanagement'],
   ]),
   rosterIds: [],
+  groupById: new Map(),
+  rosterStatus: 'ready',
   theme: 'light',
   themeUnavailable: false,
   nameWarning: null,
@@ -317,5 +319,247 @@ describe("Monday's theme", () => {
       <TrainerOverview state={state({ status: 'error', error: 'kapot', theme: 'dark' })} />
     );
     expect(surface(failed.container)?.className).toContain('dark');
+  });
+});
+
+/**
+ * jsdom has no layout engine, so this is a class assertion rather than a measurement —
+ * but the class IS the fix. With the default `auto` layout, unfolding a trainer widens
+ * the first column (theme names are longer and carry a qualification label) and every
+ * numeric column jumps sideways at the moment someone is reading it.
+ */
+describe('the table does not reflow when a row opens', () => {
+  it('uses a fixed layout with pinned column widths', () => {
+    const { container } = render(<TrainerOverview state={state()} />);
+    const table = container.querySelector('table');
+
+    expect(table?.className).toContain('table-fixed');
+    expect(container.querySelectorAll('colgroup > col')).toHaveLength(5);
+  });
+});
+
+/**
+ * The row is clickable as a convenience on top of the button, not instead of it — so both
+ * have to work, and neither may fire twice.
+ */
+describe('clicking the row', () => {
+  it('unfolds from anywhere in the row, not just the name', () => {
+    render(<TrainerOverview state={state()} />);
+
+    fireEvent.click(screen.getByTestId('trainer-row'));
+
+    expect(screen.getByText('Feedback geven')).toBeDefined();
+  });
+
+  it('folds it away again on a second row click', () => {
+    render(<TrainerOverview state={state()} />);
+
+    fireEvent.click(screen.getByTestId('trainer-row'));
+    fireEvent.click(screen.getByTestId('trainer-row'));
+
+    expect(screen.queryByText('Feedback geven')).toBeNull();
+  });
+
+  /**
+   * The nested-control bug: the button's click bubbling to the row toggles twice, which
+   * unfolds and instantly folds again. A green "it opened" test that clicks the ROW would
+   * not catch it — this one has to click the button.
+   */
+  it('does not toggle twice when the button itself is clicked', () => {
+    render(<TrainerOverview state={state()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Anna Bakker/ }));
+
+    expect(screen.getByText('Feedback geven')).toBeDefined();
+  });
+});
+
+/**
+ * `fill-mode-backwards` keeps a row invisible until its own delay expires, so an uncapped
+ * stagger is a blank row for exactly that long. Real trainers carry ~95 themes
+ * (`docs/m2b/README.md`), which uncapped would leave the last one hidden for nearly two
+ * seconds — an effect that has turned into a wait.
+ */
+describe('the unfold stagger', () => {
+  const manyThemes = Array.from({ length: 95 }, (_, i) => ({
+    themaExternalId: `th${i}`,
+    weightedAvg: 8,
+    evaluationCount: 1,
+    timesTaught: 1,
+    qualification: 'Groen' as const,
+  }));
+
+  it('stops growing after the first few rows', () => {
+    render(
+      <TrainerOverview
+        state={state({
+          payload: {
+            writtenAt: '2026-08-31T02:45:00.000Z',
+            stale: false,
+            trainers: [trainer({ themes: manyThemes })],
+          },
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('trainer-row'));
+
+    const delays = screen
+      .getAllByTestId('theme-row')
+      .map((node) => Number.parseInt(node.style.animationDelay, 10));
+
+    expect(delays[0]).toBe(0);
+    expect(Math.max(...delays)).toBeLessThanOrEqual(200);
+    // Still a stagger, not a flat zero — the first rows must still arrive in sequence.
+    expect(delays[3]).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The group scope. Only 56 of the board's 192 items are in the two trainer cohorts, and
+ * the rest are Eenmalige samenwerkingen, Schaduwpool, Inactief and so on — but 33 people
+ * in those groups DO have evaluations, including the single largest contributor
+ * (376 of them). So this is a default view, never a cutoff.
+ */
+describe('the group scope', () => {
+  const scoped = (over = {}) =>
+    state({
+      payload: {
+        writtenAt: '2026-08-31T02:45:00.000Z',
+        stale: false,
+        trainers: [trainer(), trainer({ trainerExternalId: 't2' })],
+      },
+      names: new Map([
+        ['t1', 'Anna Bakker'],
+        ['t2', 'Bert de Vries'],
+      ]),
+      rosterIds: ['t1', 't2'],
+      groupById: new Map([
+        ['t1', 'topics'],
+        ['t2', 'group_mm0d6p4r'],
+      ]),
+      ...over,
+    });
+
+  it('shows only the trainer cohorts and the actors by default', () => {
+    render(<TrainerOverview state={scoped()} />);
+
+    expect(screen.getByText('Anna Bakker')).toBeDefined();
+    expect(screen.queryByText('Bert de Vries')).toBeNull();
+  });
+
+  it('includes the actors', () => {
+    render(
+      <TrainerOverview
+        state={scoped({ groupById: new Map([['t1', 'nieuwe_groep22164__1'], ['t2', 'x']]) })}
+      />
+    );
+
+    expect(screen.getByText('Anna Bakker')).toBeDefined();
+  });
+
+  it('reveals the other groups when asked', () => {
+    render(<TrainerOverview state={scoped()} />);
+
+    fireEvent.click(screen.getByLabelText('Ook oud-trainers en overige groepen'));
+
+    expect(screen.getByText('Bert de Vries')).toBeDefined();
+  });
+
+  /**
+   * A failed board read must not empty the table. An unknown scope means no scope, not
+   * "nobody allowed" — otherwise a Monday hiccup silently shows zero trainers.
+   */
+  it('applies no scope at all when the roster could not be read', () => {
+    render(
+      <TrainerOverview
+        state={scoped({ groupById: new Map(), rosterIds: [], rosterStatus: 'unavailable' })}
+      />
+    );
+
+    expect(screen.getByText('Anna Bakker')).toBeDefined();
+    expect(screen.getByText('Bert de Vries')).toBeDefined();
+  });
+});
+
+/**
+ * The roster arrives later than the statistics — one Redis read versus a Monday context
+ * plus a board query — so rendering on the payload alone showed every group, Inactief and
+ * Schaduwpool included, for the moment before the board answered and the table shrank
+ * under the reader.
+ */
+describe('while the roster is still loading', () => {
+  const pending = () =>
+    state({
+      payload: {
+        writtenAt: '2026-08-31T02:45:00.000Z',
+        stale: false,
+        trainers: [trainer(), trainer({ trainerExternalId: 't2' })],
+      },
+      names: new Map([
+        ['t1', 'Anna Bakker'],
+        ['t2', 'Bert de Vries'],
+      ]),
+      rosterStatus: 'loading',
+      groupById: new Map(),
+      rosterIds: [],
+    });
+
+  it('shows nobody rather than everybody', () => {
+    render(<TrainerOverview state={pending()} />);
+
+    expect(screen.queryByText('Anna Bakker')).toBeNull();
+    expect(screen.queryByText('Bert de Vries')).toBeNull();
+    expect(screen.getByText('Bezig met laden…')).toBeDefined();
+  });
+
+  /** And it lets go the moment the board answers, rather than waiting on anything else. */
+  it('renders the scoped table once the roster is ready', () => {
+    render(
+      <TrainerOverview
+        state={state({
+          payload: {
+            writtenAt: '2026-08-31T02:45:00.000Z',
+            stale: false,
+            trainers: [trainer(), trainer({ trainerExternalId: 't2' })],
+          },
+          names: new Map([
+            ['t1', 'Anna Bakker'],
+            ['t2', 'Bert de Vries'],
+          ]),
+          rosterStatus: 'ready',
+          rosterIds: ['t1', 't2'],
+          groupById: new Map([
+            ['t1', 'topics'],
+            ['t2', 'group_mm0d6p4r'],
+          ]),
+        })}
+      />
+    );
+
+    expect(screen.getByText('Anna Bakker')).toBeDefined();
+    expect(screen.queryByText('Bert de Vries')).toBeNull();
+  });
+})
+
+/**
+ * The two requests are independent — the payload from Redis, the roster from Monday —
+ * so a dead endpoint must not be able to hide behind a slow board read.
+ */
+describe('when the overview itself fails', () => {
+  it('reports the error even while the roster is still loading', () => {
+    render(
+      <TrainerOverview
+        state={state({
+          status: 'error',
+          error: 'internal error',
+          payload: null,
+          rosterStatus: 'loading',
+        })}
+      />
+    );
+
+    expect(screen.getByText('internal error')).toBeDefined();
+    expect(screen.queryByText('Bezig met laden…')).toBeNull();
   });
 });
