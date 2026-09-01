@@ -223,3 +223,107 @@ describe('csvEvaluationSource', () => {
     await expect(source.readResponses()).rejects.toThrow();
   });
 });
+
+/**
+ * The eight report-only answers.
+ *
+ * Everything above this point is the recommendation path, which reads a code and a
+ * grade. The evaluation report needs the other five scored questions and the three
+ * free-text ones, and it recomputes its distributions from these raw rows rather than
+ * from any stored average — so they have to survive the decode untouched.
+ */
+describe('the report answers', () => {
+  const FULL_HEADER = [
+    'Tijdstempel',
+    'Code',
+    'Hoe heb je het programma inhoudelijk (bijv. structuur, werkvormen, genoeg uitdaging) ervaren?',
+    'Vind je dat er in voldoende mate praktijkgericht en actief gewerkt is?',
+    'Heeft de sessie concrete handvatten geboden om zelf mee aan de slag te kunnen?',
+    'Vond je de trainer vakkundig, bekwaam en in staat om het onderwerp te behandelen?',
+    'Hoe heb je de communicatie en omgang van de trainer ervaren?',
+    'Welk eindcijfer zou je de sessie geven?',
+    'Lijkt het je waardevol om in een opvolgsessie verder te verdiepen?',
+    'Op welk(e) aspect(en) van de sessie kijk je positief terug en waarom?',
+    'Waar zie jij nog ruimte voor verbetering of aanpassing van deze training?',
+  ];
+
+  const fullGrid = (...rows: string[][]): string[][] => [FULL_HEADER, ...rows];
+
+  const ROW = ['t', 'A1', '5', '4', '5', '5', '4', '9', 'Ja', 'De werkvormen', 'Meer tijd'];
+
+  it('carries every answer through the decode', () => {
+    const [response] = decodeGrid(fullGrid(ROW), SOURCE).responses;
+
+    expect(response?.answers).toEqual({
+      program: 5,
+      practical: 4,
+      tools: 5,
+      trainerExpertise: 5,
+      trainerCommunication: 4,
+      followUp: 'Ja',
+      positive: 'De werkvormen',
+      improvement: 'Meer tijd',
+    });
+  });
+
+  /**
+   * The live sheet and the 2024/2025 archives have a bare `Code` column and no question
+   * text. Those still read — they just contribute nothing to a report.
+   */
+  it('leaves every answer null when the sheet has none of those columns', () => {
+    const [response] = decodeGrid(grid(['t', 'A1', '8']), SOURCE).responses;
+
+    expect(response?.answers).toEqual({
+      program: null,
+      practical: null,
+      tools: null,
+      trainerExpertise: null,
+      trainerCommunication: null,
+      followUp: null,
+      positive: null,
+      improvement: null,
+    });
+  });
+
+  it('keeps free text verbatim, newlines and punctuation included', () => {
+    const row = [...ROW];
+    row[9] = 'Goed tempo, "echt" praktisch.\nEn de sfeer.';
+
+    const [response] = decodeGrid(fullGrid(row), SOURCE).responses;
+
+    expect(response?.answers.positive).toBe('Goed tempo, "echt" praktisch.\nEn de sfeer.');
+  });
+
+  it('reads a blank free-text cell as null rather than an empty quote', () => {
+    const row = [...ROW];
+    row[9] = '   ';
+
+    const [response] = decodeGrid(fullGrid(row), SOURCE).responses;
+
+    expect(response?.answers.positive).toBeNull();
+  });
+
+  /**
+   * A scored answer that will not parse becomes null and is COUNTED. Silence here would
+   * quietly shrink a distribution rather than a section, which is much harder to spot
+   * than a missing one.
+   */
+  it('nulls an unparseable score and counts it in the summary', () => {
+    const row = [...ROW];
+    row[2] = 'n.v.t.';
+
+    const decoded = decodeGrid(fullGrid(row), SOURCE);
+
+    expect(decoded.responses[0]?.answers.program).toBeNull();
+    expect(decoded.summary.unparseableAnswers).toBe(1);
+  });
+
+  it('accepts a decimal comma in a score, as the grade already does', () => {
+    const row = [...ROW];
+    row[3] = '4,5';
+
+    const [response] = decodeGrid(fullGrid(row), SOURCE).responses;
+
+    expect(response?.answers.practical).toBe(4.5);
+  });
+});

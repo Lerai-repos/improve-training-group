@@ -166,3 +166,41 @@ describe('authorizeToken', () => {
     expect(JSON.stringify(result)).not.toMatch(/expired|account|signature/i);
   });
 });
+
+/**
+ * `full` as a required capability, added for the trainer overview.
+ *
+ * That endpoint returns evaluation scores for the whole roster, and `capabilities.ts`
+ * reserves scores for `full` — the recommendations list already drops them from the
+ * restricted row shape. A table of trainers with the scores taken out is not a smaller
+ * answer, it is no answer, so the route asks for the right that matches the data rather
+ * than the lowest right that opens the door.
+ */
+describe('the full capability', () => {
+  it('lets a view+full caller through', async () => {
+    const outcome = await authorizeToken(await tokenFor(FINANCE), deps(CAPS), 'full');
+
+    expect(outcome.ok).toBe(true);
+  });
+
+  it('refuses a view-only caller', async () => {
+    const outcome = await authorizeToken(await tokenFor(VIEWER), deps(CAPS), 'full');
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok ? 0 : outcome.status).toBe(403);
+  });
+
+  /** Not a ladder: `plan` says nothing about whether you may see the numbers. */
+  it('refuses a view+plan caller who lacks full', async () => {
+    const outcome = await authorizeToken(await tokenFor(PLANNER), deps(CAPS), 'full');
+
+    expect(outcome.ok).toBe(false);
+  });
+
+  /** And the converse, so the peer relationship is pinned from both sides. */
+  it('refuses a view+full caller asking for plan', async () => {
+    const outcome = await authorizeToken(await tokenFor(FINANCE), deps(CAPS), 'plan');
+
+    expect(outcome.ok).toBe(false);
+  });
+});

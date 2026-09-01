@@ -117,7 +117,12 @@ export interface TrainerNames {
 }
 
 export function useTrainerNames(
-  monday: MondayBridge,
+  /**
+   * Only the `api` half. Narrowed from the full bridge so the BOARD view — which has no
+   * item and therefore a different context type — can reuse this hook rather than own a
+   * second copy of the `items(ids:)` query and its `limit` trap.
+   */
+  monday: Pick<MondayBridge, 'api'>,
   trainerItemIds: string[],
   /** Pass `canPlan`. Phone numbers are fetched only for callers who can message. */
   options: { includePhones?: boolean } = {}

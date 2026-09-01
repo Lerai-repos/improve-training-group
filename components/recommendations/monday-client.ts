@@ -89,43 +89,58 @@ function toContext(raw: unknown): MondayContext | null {
   };
 }
 
-export function createMondayBridge(): MondayBridge {
-  // Lazy: see (1) above.
-  //
+/**
+ * A BOARD view's context: no item, because there isn't one.
+ *
+ * The trainer overview is a tab on the trainers board covering the whole roster, so
+ * `toContext` above — which refuses a context without an item id, correctly, since every
+ * item view depends on one — cannot serve it.
+ */
+export interface MondayBoardContext {
+  boardId: string;
+  theme: Appearance;
+}
+
+export interface MondayBoardBridge {
+  context(): Promise<MondayBoardContext>;
+  onContextChange(listener: (context: MondayBoardContext) => void): () => void;
+  sessionToken(): Promise<string>;
+  api(query: string, variables?: Record<string, unknown>): Promise<unknown>;
+}
+
+function toBoardContext(raw: unknown): MondayBoardContext | null {
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const { boardId, theme }: RawContext = raw;
+  if (typeof boardId !== 'number' && typeof boardId !== 'string') {
+    return null;
+  }
+  return { boardId: String(boardId), theme: toAppearance(theme) };
+}
+
+/**
+ * The lazy SDK handle both bridges share.
+ *
+ * Shared rather than copied because the reason it is lazy — Next prerenders these pages
+ * at build time, where `mondaySdk()` would run without a `window` — applies identically
+ * to both, and a second copy is a second chance to get that wrong. Each bridge still
+ * gets its OWN handle: one view never borrows another's SDK instance.
+ */
+function lazySdk(): () => MondayClientSdk {
   // Annotated `MondayClientSdk` because `mondaySdk()` has two overloads — a browser one
   // and a server one — and with no argument TypeScript picks the SERVER shape, which has
   // no `get` or `listen` at all. The annotation selects the overload we actually mean.
   let sdk: MondayClientSdk | null = null;
-  const client = (): MondayClientSdk => {
+  return (): MondayClientSdk => {
     sdk ??= mondaySdk();
     return sdk;
   };
+}
 
+/** The session-token and API half, identical for an item view and a board view. */
+function sharedCalls(client: () => MondayClientSdk): Pick<MondayBridge, 'sessionToken' | 'api'> {
   return {
-    async context() {
-      const res = await client().get('context');
-      const context = toContext(res.data);
-      if (context === null) {
-        throw new Error('Monday context did not include an item id');
-      }
-      return context;
-    },
-
-    onContextChange(listener) {
-      const unsubscribe = client().listen('context', (res: { data?: unknown }) => {
-        const context = toContext(res.data);
-        if (context !== null) {
-          listener(context);
-        }
-      });
-      // The SDK's unsubscribe is typed loosely; guard rather than assume.
-      return () => {
-        if (typeof unsubscribe === 'function') {
-          unsubscribe();
-        }
-      };
-    },
-
     async sessionToken() {
       const res = await client().get('sessionToken');
       if (typeof res.data !== 'string' || res.data === '') {
@@ -152,5 +167,69 @@ export function createMondayBridge(): MondayBridge {
       }
       return res.data;
     },
+  };
+}
+
+export function createMondayBoardBridge(): MondayBoardBridge {
+  const client = lazySdk();
+
+  return {
+    async context() {
+      const res = await client().get('context');
+      const context = toBoardContext(res.data);
+      if (context === null) {
+        throw new Error('Monday context did not include a board id');
+      }
+      return context;
+    },
+
+    onContextChange(listener) {
+      const unsubscribe = client().listen('context', (res: { data?: unknown }) => {
+        const context = toBoardContext(res.data);
+        if (context !== null) {
+          listener(context);
+        }
+      });
+      return () => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    },
+
+    ...sharedCalls(client),
+  };
+}
+
+export function createMondayBridge(): MondayBridge {
+  // Lazy: see (1) above.
+  const client = lazySdk();
+
+  return {
+    async context() {
+      const res = await client().get('context');
+      const context = toContext(res.data);
+      if (context === null) {
+        throw new Error('Monday context did not include an item id');
+      }
+      return context;
+    },
+
+    onContextChange(listener) {
+      const unsubscribe = client().listen('context', (res: { data?: unknown }) => {
+        const context = toContext(res.data);
+        if (context !== null) {
+          listener(context);
+        }
+      });
+      // The SDK's unsubscribe is typed loosely; guard rather than assume.
+      return () => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    },
+
+    ...sharedCalls(client),
   };
 }

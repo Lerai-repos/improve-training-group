@@ -175,3 +175,132 @@ describe('resolveColumns', () => {
     expect(columns.code).toBe(1);
   });
 });
+
+/**
+ * The eight report-only columns.
+ *
+ * These exist for the evaluation REPORT (`docs/build/04-evaluatierapportage.md`): five
+ * more 1-5 questions, the follow-up question, and the two free-text fields the quote
+ * lists are built from. The recommendation statistics never read them.
+ *
+ * That asymmetry is the reason they are all OPTIONAL. `resolveColumns` is shared with
+ * the nightly job, which needs only the code and the grade. Making a question column
+ * required would mean that ITG renaming a question — something that has already
+ * happened once — takes down the trainer statistics for a column that job never opens.
+ */
+describe('the report columns', () => {
+  const REPORT_FIELDS = [
+    'program',
+    'practical',
+    'tools',
+    'trainerExpertise',
+    'trainerCommunication',
+    'followUp',
+    'positive',
+    'improvement',
+  ] as const;
+
+  it('resolves all eight in the NL export', () => {
+    const columns = resolved(NL_HEADER);
+
+    expect({
+      program: columns.program,
+      practical: columns.practical,
+      tools: columns.tools,
+      trainerExpertise: columns.trainerExpertise,
+      trainerCommunication: columns.trainerCommunication,
+      followUp: columns.followUp,
+      positive: columns.positive,
+      improvement: columns.improvement,
+    }).toEqual({
+      program: 2,
+      practical: 3,
+      tools: 4,
+      trainerExpertise: 5,
+      trainerCommunication: 6,
+      followUp: 8,
+      positive: 9,
+      improvement: 10,
+    });
+  });
+
+  /**
+   * The EN sheet asks the same nine questions in different words, so every field needs
+   * a marker in both languages. Written as its own assertion rather than folded into
+   * the NL one, because a marker that happens to match both is the exception here.
+   */
+  it('resolves all eight in the EN export', () => {
+    const columns = resolved(EN_HEADER);
+
+    expect({
+      program: columns.program,
+      practical: columns.practical,
+      tools: columns.tools,
+      trainerExpertise: columns.trainerExpertise,
+      trainerCommunication: columns.trainerCommunication,
+      followUp: columns.followUp,
+      positive: columns.positive,
+      improvement: columns.improvement,
+    }).toEqual({
+      program: 2,
+      practical: 3,
+      tools: 4,
+      trainerExpertise: 5,
+      trainerCommunication: 6,
+      followUp: 8,
+      positive: 9,
+      improvement: 10,
+    });
+  });
+
+  /**
+   * The live sheet and the 2024/2025 archives carry a bare `Code` column and no
+   * question text at all. Those must keep reading exactly as they do today.
+   */
+  it('resolves a header that has none of them, leaving each null', () => {
+    const columns = resolved(['Code', 'Eindcijfer']);
+
+    for (const field of REPORT_FIELDS) {
+      expect(columns[field], field).toBeNull();
+    }
+    expect(columns.code).toBe(0);
+    expect(columns.grade).toBe(1);
+  });
+
+  /**
+   * The property that protects the nightly job. A renamed question is a gap in the
+   * report, never a failed read.
+   */
+  it('keeps reading when one question has been renamed beyond recognition', () => {
+    const renamed = NL_HEADER.map((header, index) => (index === 8 ? 'Vraag 7' : header));
+
+    const columns = resolved(renamed);
+
+    expect(columns.followUp).toBeNull();
+    expect(columns.code).toBe(1);
+    expect(columns.grade).toBe(7);
+    expect(columns.positive).toBe(9);
+  });
+
+  /**
+   * Ambiguity on an OPTIONAL column yields null rather than failing the whole read.
+   * That is still "refusing to guess" — it just refuses at the granularity of the one
+   * column nobody's statistics depend on, instead of taking the corpus down with it.
+   */
+  it('yields null for an ambiguous report column instead of failing the read', () => {
+    const result = resolveColumns([
+      'Code',
+      'Eindcijfer',
+      'Lijkt het je waardevol om in een opvolgsessie verder te verdiepen?',
+      'Tweede vraag over een opvolgsessie',
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.columns.followUp : 'unresolved').toBeNull();
+  });
+
+  /** Ambiguity on a REQUIRED column stays fatal. Nothing about that changes. */
+  it('still fails on an ambiguous required column', () => {
+    expect(resolveColumns(['Code', 'Code', 'Eindcijfer']).ok).toBe(false);
+  });
+});

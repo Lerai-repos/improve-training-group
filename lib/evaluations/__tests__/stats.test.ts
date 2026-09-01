@@ -330,3 +330,57 @@ describe('toTrainerThemeEvals', () => {
     expect(scores.overallAvgScore).toBeCloseTo((7.67 * 12 + 9 * 4) / 16, 10);
   });
 });
+
+/**
+ * The distinct training count per trainer.
+ *
+ * It cannot be derived from the rows this function returns: those are per trainer PER
+ * THEME, so a training covering two themes lands in two of them. Summing overstates,
+ * taking the maximum understates. So the counter lives here, inside the same loop and
+ * behind the same completion filter as `timesTaught` — the two numbers have to be about
+ * the same population of trainings or the overview contradicts itself.
+ */
+describe('trainingsPerTrainer', () => {
+  it('counts a two-theme training once, though it produces two rows', () => {
+    const result = run({
+      history: [entry({ trainingItemId: 'tr1', themaExternalIds: ['th1', 'th2'] })],
+    });
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.trainingsPerTrainer).toEqual({ t1: 1 });
+  });
+
+  it('counts two separate trainings as two', () => {
+    const result = run({
+      history: [entry({ trainingItemId: 'tr1' }), entry({ trainingItemId: 'tr2' })],
+    });
+
+    expect(result.trainingsPerTrainer).toEqual({ t1: 2 });
+  });
+
+  it('counts the same training once per trainer on it', () => {
+    const result = run({
+      history: [entry({ trainingItemId: 'tr1', trainerExternalIds: ['t1', 't2'] })],
+    });
+
+    expect(result.trainingsPerTrainer).toEqual({ t1: 1, t2: 1 });
+  });
+
+  it('leaves out what the roll-up leaves out: future, undated and unstaffed', () => {
+    const result = run({
+      history: [
+        entry({ trainingItemId: 'tr1' }),
+        entry({ trainingItemId: 'tr2', datum: FUTURE }),
+        entry({ trainingItemId: 'tr3', datum: null }),
+        entry({ trainingItemId: 'tr4', trainerExternalIds: [] }),
+        entry({ trainingItemId: 'tr5', themaExternalIds: [] }),
+      ],
+    });
+
+    expect(result.trainingsPerTrainer).toEqual({ t1: 1 });
+  });
+
+  it('is empty when nothing completed', () => {
+    expect(run().trainingsPerTrainer).toEqual({});
+  });
+});

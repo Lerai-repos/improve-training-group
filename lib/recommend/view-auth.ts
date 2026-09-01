@@ -61,10 +61,16 @@ export function readBearerToken(request: Request): string | null {
  * who were never going to get in — which reads as a crash, and hides the actual
  * misconfiguration behind noise from unauthenticated traffic.
  */
+/**
+ * What a route demands. Not a ladder — see `capabilities.ts`; `view` is checked on top
+ * of whichever of these is asked for.
+ */
+export type RequiredCapability = 'view' | 'plan' | 'full';
+
 export async function authorizeToken(
   token: string,
   deps: AuthDeps,
-  required: 'view' | 'plan'
+  required: RequiredCapability
 ): Promise<AuthOutcome> {
   const verified = await verifySessionToken(token, deps.session);
   if (!verified.ok) {
@@ -78,7 +84,14 @@ export async function authorizeToken(
   // look at the list has no business recalculating it either, and checking only the
   // specific capability would let a `plan`-without-`view` entry act blind — which is
   // also why the capability parser rejects that combination outright.
-  if (!caps.view || (required === 'plan' && !caps.plan)) {
+  if (
+    !caps.view ||
+    (required === 'plan' && !caps.plan) ||
+    // `full` is a peer of `plan`, not a step above it: someone in finance may hold
+    // `view,full` and never `plan`. The trainer overview asks for it because the whole
+    // screen is scores, which the restricted row shape drops.
+    (required === 'full' && !caps.full)
+  ) {
     log.warn('recommendations: capability denied', {
       userId: verified.session.userId,
       required,

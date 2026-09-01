@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { createMemoryKvStore } from '@lib/recommend/kv';
 
+import { NO_REPORT_COLUMNS } from '../header-map';
 import { DROP_FACTOR, MIN_RESPONSES, MIN_ROWS, runNightly } from '../nightly';
+import { EMPTY_ANSWERS } from '../sheets-reader';
 import { createStatsStore } from '../stats-store';
 
 import type { AgendaHistory } from '../agenda-history';
@@ -27,6 +29,7 @@ function build(counts: { responses: number; trainings: number; qualPairs: number
     rawCode: `IE${i % counts.trainings}`,
     grade: 8,
     receivedAtRaw: 't',
+    answers: EMPTY_ANSWERS,
   }));
 
   const history: AgendaHistory = {
@@ -75,7 +78,8 @@ function deps(
               responses: fixture.responses.length,
               blankCodeRows: 0,
               unparseableGrades: 0,
-              columns: { code: 1, grade: 7, timestamp: 0 },
+              unparseableAnswers: 0,
+              columns: { code: 1, grade: 7, timestamp: 0, ...NO_REPORT_COLUMNS },
               anomalies: [],
             },
           ],
@@ -174,6 +178,7 @@ describe('runNightly', () => {
         today: '2026-08-11',
         // Yesterday the NL sheet had far more; today's 3.700 is a >10% fall.
         sources: { 'sheet:nl': 5_000, 'responses:total': 5_000, 'rows:total': 2_000 },
+      trainingsPerTrainer: {},
       });
 
       const report = await runNightly(d);
@@ -191,6 +196,7 @@ describe('runNightly', () => {
         writtenAt: '2026-08-11T02:45:00.000Z',
         today: '2026-08-11',
         sources: { 'sheet:nl': barelyLower, 'responses:total': barelyLower },
+      trainingsPerTrainer: {},
       });
 
       expect((await runNightly(d)).written).toBe(true);
@@ -259,6 +265,7 @@ describe('runNightly', () => {
         writtenAt: '2026-08-11T02:45:00.000Z',
         today: '2026-08-11',
         sources: { 'sheet:nl': 3_700, 'sheet:en': 235, 'responses:total': 3_935 },
+      trainingsPerTrainer: {},
       });
 
       // This run's fixture has only `sheet:nl`; `sheet:en` is simply gone.
@@ -323,6 +330,7 @@ describe('runNightly', () => {
       writtenAt: '2026-08-11T02:45:00.000Z',
       today: '2026-08-11',
       sources: {},
+      trainingsPerTrainer: {},
     });
 
     expect((await runNightly(d)).previousAgeHours).toBe(24);

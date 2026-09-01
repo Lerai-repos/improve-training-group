@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 import { resolveColumns, type ResolvedColumns } from './header-map';
 
-import type { EvaluationResponse, SheetRef } from './types';
+import type { EvaluationResponse, ResponseAnswers, SheetRef } from './types';
 
 /** What one tab contributed, for the run log and the per-document baseline. */
 export interface SheetReadSummary {
@@ -24,6 +24,12 @@ export interface SheetReadSummary {
   readonly responses: number;
   readonly blankCodeRows: number;
   readonly unparseableGrades: number;
+  /**
+   * Scored REPORT answers that would not parse. Counted rather than merely nulled: a
+   * question whose cells stop parsing shrinks a distribution in the report, which is a
+   * far quieter failure than a section going missing.
+   */
+  readonly unparseableAnswers: number;
   /** Which indexes were used. Printed every run — this is how a header change is noticed. */
   readonly columns: ResolvedColumns;
   readonly anomalies: readonly CellAnomaly[];
@@ -102,6 +108,40 @@ function isBlankRow(row: readonly string[]): boolean {
 }
 
 /**
+ * A scored cell → number.
+ *
+ * Same tolerance as the eindcijfer, deliberately: one decimal-comma rule for every
+ * number that comes out of these forms, rather than two that can drift apart. Returns
+ * `undefined` for "there was something here and it did not parse", which the caller
+ * counts, versus `null` for "nothing here".
+ */
+function parseScore(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const parsed = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/** What a sheet without any report columns contributes: nothing, in the right shape. */
+export const EMPTY_ANSWERS: ResponseAnswers = {
+  program: null,
+  practical: null,
+  tools: null,
+  trainerExpertise: null,
+  trainerCommunication: null,
+  followUp: null,
+  positive: null,
+  improvement: null,
+};
+
+/** A free-text cell, verbatim. Blank — including whitespace only — becomes null. */
+function textAnswer(raw: string): string | null {
+  return raw.trim() === '' ? null : raw;
+}
+
+/**
  * Grid → responses. No I/O; both adapters funnel through this.
  *
  * Three separate predicates, and the order matters:
@@ -137,6 +177,7 @@ export function decodeGrid(
   let blankRows = 0;
   let blankCodeRows = 0;
   let unparseableGrades = 0;
+  let unparseableAnswers = 0;
 
   dataRows.forEach((row, index) => {
     if (isBlankRow(row)) {
@@ -169,6 +210,25 @@ export function decodeGrid(
       }
     }
 
+    const score = (index: number | null): number | null => {
+      const parsed = parseScore(cell(row, index));
+      if (parsed === undefined) {
+        unparseableAnswers += 1;
+        return null;
+      }
+      return parsed;
+    };
+    const answers: ResponseAnswers = {
+      program: score(columns.program),
+      practical: score(columns.practical),
+      tools: score(columns.tools),
+      trainerExpertise: score(columns.trainerExpertise),
+      trainerCommunication: score(columns.trainerCommunication),
+      followUp: textAnswer(cell(row, columns.followUp)),
+      positive: textAnswer(cell(row, columns.positive)),
+      improvement: textAnswer(cell(row, columns.improvement)),
+    };
+
     const timestamp = cell(row, columns.timestamp).trim();
     responses.push({
       source,
@@ -176,6 +236,7 @@ export function decodeGrid(
       rawCode,
       grade,
       receivedAtRaw: timestamp === '' ? null : timestamp,
+      answers,
     });
   });
 
@@ -188,6 +249,7 @@ export function decodeGrid(
       responses: responses.length,
       blankCodeRows,
       unparseableGrades,
+      unparseableAnswers,
       columns,
       anomalies,
     },

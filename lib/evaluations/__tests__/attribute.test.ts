@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { attributeResponses, normalizeCode, splitIeCodes } from '../attribute';
+import { EMPTY_ANSWERS } from '../sheets-reader';
 
 import type { EvaluationResponse, SheetRef, TrainingRef } from '../types';
 
@@ -9,7 +10,7 @@ const SOURCE: SheetRef = { documentId: 'doc', sheetName: 'tab', label: 'nl' };
 let nextRow = 2;
 const response = (rawCode: string, grade: number | null = 8): EvaluationResponse => {
   nextRow += 1;
-  return { source: SOURCE, rowNumber: nextRow, rawCode, grade, receivedAtRaw: 't' };
+  return { source: SOURCE, rowNumber: nextRow, rawCode, grade, receivedAtRaw: 't', answers: EMPTY_ANSWERS };
 };
 
 const training = (

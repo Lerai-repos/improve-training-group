@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { attributeResponses } from '../attribute';
 import { csvEvaluationSource } from '../csv-source';
+import { REPORT_COLUMN_FIELDS } from '../header-map';
 
 import type { SheetRef, TrainingRef } from '../types';
 
@@ -104,7 +105,8 @@ describe.skipIf(!hasCorpus)('the full response exports', () => {
     const { responses, sheets } = await source.readResponses();
 
     expect(responses.filter((r) => r.grade === null)).toHaveLength(13);
-    // The one corrupt cell ('E') is in a sub-score column we do not read.
+    // The one corrupt cell ('E') sits in a sub-score column, so it never reaches this
+    // counter; the report-answer test below is where it shows up.
     expect(sheets.reduce((sum, s) => sum + s.unparseableGrades, 0)).toBe(0);
   });
 
@@ -113,6 +115,44 @@ describe.skipIf(!hasCorpus)('the full response exports', () => {
 
     expect(sheets.map((s) => s.columns.code)).toEqual([1, 1]);
     expect(sheets.map((s) => s.columns.grade)).toEqual([7, 7]);
+  });
+
+  /**
+   * The report columns, against the real thing. The two forms ask the same nine
+   * questions in different words, so this is the assertion that a marker written for
+   * Dutch did not quietly fail to find its English twin — the failure mode would be an
+   * English report with five empty charts.
+   */
+  it('resolves all eight report columns on both sheets', async () => {
+    const { sheets } = await source.readResponses();
+
+    for (const sheet of sheets) {
+      expect(
+        REPORT_COLUMN_FIELDS.map((field) => sheet.columns[field]),
+        sheet.source.label
+      ).toEqual([2, 3, 4, 5, 6, 8, 9, 10]);
+    }
+  });
+
+  it('carries the report answers on the real rows', async () => {
+    const { responses, sheets } = await source.readResponses();
+
+    expect({
+      scored: responses.filter((r) => r.answers.program !== null).length,
+      positive: responses.filter((r) => r.answers.positive !== null).length,
+      improvement: responses.filter((r) => r.answers.improvement !== null).length,
+      followUp: responses.filter((r) => r.answers.followUp !== null).length,
+      unparseable: sheets.reduce((sum, s) => sum + s.unparseableAnswers, 0),
+    }).toEqual({
+      scored: 3191,
+      positive: 2692,
+      improvement: 2140,
+      followUp: 3136,
+      // The single corrupt cell ('E') that the grade test notes as living "in a
+      // sub-score column we do not read". We read it now, and it surfaces as exactly
+      // one counted answer rather than a silently missing bar.
+      unparseable: 1,
+    });
   });
 });
 

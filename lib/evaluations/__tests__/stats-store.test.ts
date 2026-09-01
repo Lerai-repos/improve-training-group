@@ -16,11 +16,16 @@ const row = (over: Partial<TrainerThemaStatRow> = {}): TrainerThemaStatRow => ({
   ...over,
 });
 
-const snapshot = (rows: TrainerThemaStatRow[], sources: Record<string, number> = {}) => ({
+const snapshot = (
+  rows: TrainerThemaStatRow[],
+  sources: Record<string, number> = {},
+  trainingsPerTrainer: Record<string, number> = {}
+) => ({
   rows,
   writtenAt: '2026-08-12T02:45:00.000Z',
   today: '2026-08-12',
   sources,
+  trainingsPerTrainer,
 });
 
 describe('createStatsStore', () => {
@@ -35,6 +40,7 @@ describe('createStatsStore', () => {
       writtenAt: '2026-08-12T02:45:00.000Z',
       today: '2026-08-12',
       sources: {},
+      trainingsPerTrainer: {},
     });
   });
 
@@ -170,9 +176,78 @@ describe('createStatsStore', () => {
       row({ trainerExternalId: `trainer-${i % 200}`, themaExternalId: `thema-${i}` })
     );
 
-    const bytes = store.sizeOf(many);
+    // With the training counts included, because that is what actually gets written.
+    const counts = Object.fromEntries(
+      Array.from({ length: 200 }, (_, i): [string, number] => [`trainer-${i}`, i % 30])
+    );
+
+    const bytes = store.sizeOf(many, counts);
 
     expect(bytes).toBeLessThan(200_000);
     expect(bytes).toBeGreaterThan(1_000);
+  });
+});
+
+/**
+ * The distinct training count per trainer, added after the record was already in
+ * production. It is written as an OPTIONAL field rather than under a new key version:
+ * the schema strips unknown keys, so an older reader ignores it, and a newer reader
+ * treats its absence as "not computed yet". Additive in both directions, which is what
+ * the one-key-per-shape rule is actually protecting against.
+ */
+describe('the training counts', () => {
+  it('round-trips them', async () => {
+    const store = createStatsStore(createMemoryKvStore());
+
+    await store.write(snapshot([row()], {}, { t1: 9, t2: 4 }));
+
+    expect((await store.read())?.trainingsPerTrainer).toEqual({ t1: 9, t2: 4 });
+  });
+
+  it('reads a record written before the field existed as empty, not as a failure', async () => {
+    const kv = createMemoryKvStore();
+    const store = createStatsStore(kv);
+    await store.write(snapshot([row()], {}, { t1: 9 }));
+
+    const stored = await kv.get('evalstats:v1');
+    const withoutField: Record<string, unknown> = JSON.parse(stored ?? '{}');
+    delete withoutField.trainings;
+    await kv.set('evalstats:v1', JSON.stringify(withoutField), { ttlMs: STATS_TTL_MS });
+
+    const read = await store.read();
+
+    expect(read?.trainingsPerTrainer).toEqual({});
+    expect(read?.rows).toHaveLength(1);
+  });
+});
+
+/**
+ * `sizeOf` exists so the nightly report can show the record growing. It therefore has to
+ * measure what is actually written: an earlier version serialized an empty counts map
+ * while `commitNightly` wrote a populated one, so the reported bytes silently excluded
+ * the newest field — the one most likely to grow.
+ */
+describe('sizeOf', () => {
+  it('counts the training counts, not just the rows', async () => {
+    const store = createStatsStore(createMemoryKvStore());
+
+    const bare = store.sizeOf([row()], {});
+    const withCounts = store.sizeOf([row()], { t1: 9, t2: 4, t3: 1 });
+
+    expect(withCounts).toBeGreaterThan(bare);
+  });
+
+  it('measures the same bytes the store would write', async () => {
+    const kv = createMemoryKvStore();
+    const store = createStatsStore(kv);
+    const counts = { t1: 9, t2: 4 };
+
+    await store.write(snapshot([row()], {}, counts));
+    const stored = await kv.get('evalstats:v1');
+
+    // The two differ only in the timestamps `sizeOf` cannot know, so compare the shape
+    // rather than the exact figure: what matters is that no whole FIELD is missing.
+    expect(JSON.parse(stored ?? '{}')).toHaveProperty('trainings', counts);
+    expect(store.sizeOf([row()], counts)).toBeGreaterThan(store.sizeOf([row()], {}));
   });
 });

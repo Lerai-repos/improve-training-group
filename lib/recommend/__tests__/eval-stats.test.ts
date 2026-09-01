@@ -35,7 +35,13 @@ const write = async (
   rows: TrainerThemaStatRow[],
   writtenAt: string = new Date().toISOString()
 ) => {
-  await createStatsStore(kv).write({ rows, writtenAt, today: writtenAt.slice(0, 10), sources: {} });
+  await createStatsStore(kv).write({
+    rows,
+    writtenAt,
+    today: writtenAt.slice(0, 10),
+    sources: {},
+    trainingsPerTrainer: {},
+  });
 };
 
 describe('readTrainerThemeStats', () => {

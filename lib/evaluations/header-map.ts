@@ -19,7 +19,57 @@ export interface ResolvedColumns {
   readonly grade: number;
   /** Carried for the report; nothing parses it. Absent is fine. */
   readonly timestamp: number | null;
+
+  /**
+   * The eight columns only the evaluation REPORT reads: five more 1-5 questions, the
+   * follow-up question, and the two free-text fields the quote lists come from.
+   *
+   * All nullable, and that is deliberate. This resolver is shared with the nightly
+   * statistics job, which opens only `code` and `grade`. A required question column
+   * would mean that ITG renaming a question — which has happened once already — takes
+   * the trainer statistics down over a column that job never reads. A gap here is a
+   * gap in one report section; a refusal here would be a blank corpus.
+   */
+  readonly program: number | null;
+  readonly practical: number | null;
+  readonly tools: number | null;
+  readonly trainerExpertise: number | null;
+  readonly trainerCommunication: number | null;
+  readonly followUp: number | null;
+  readonly positive: number | null;
+  readonly improvement: number | null;
 }
+
+/** The report-only fields, in the order the report presents them. */
+export const REPORT_COLUMN_FIELDS = [
+  'program',
+  'practical',
+  'tools',
+  'trainerExpertise',
+  'trainerCommunication',
+  'followUp',
+  'positive',
+  'improvement',
+] as const;
+
+export type ReportColumnField = (typeof REPORT_COLUMN_FIELDS)[number];
+
+/**
+ * The report half of a resolution for a sheet that has none of those columns — the live
+ * tab and the 2024/2025 archives. Written out rather than derived, because deriving it
+ * from `REPORT_COLUMN_FIELDS` needs a cast to satisfy the record type, and this repo
+ * does not cast.
+ */
+export const NO_REPORT_COLUMNS: Readonly<Record<ReportColumnField, null>> = {
+  program: null,
+  practical: null,
+  tools: null,
+  trainerExpertise: null,
+  trainerCommunication: null,
+  followUp: null,
+  positive: null,
+  improvement: null,
+};
 
 export type HeaderResolution =
   | { readonly ok: true; readonly columns: ResolvedColumns }
@@ -43,7 +93,7 @@ export function normalizeHeader(raw: string): string {
 }
 
 interface ColumnSpec {
-  readonly field: 'code' | 'grade' | 'timestamp';
+  readonly field: 'code' | 'grade' | 'timestamp' | ReportColumnField;
   /** Exact normalized names, tried first, in order. */
   readonly aliases: readonly string[];
   /** Substrings, tried only when no alias hit. Each must match EXACTLY one header. */
@@ -68,6 +118,64 @@ const COLUMN_SPECS: readonly ColumnSpec[] = [
     field: 'timestamp',
     aliases: ['tijdstempel', 'timestamp'],
     markers: ['tijdstempel', 'timestamp'],
+    required: false,
+  },
+
+  /**
+   * The report questions. Every one needs a Dutch AND an English marker: the two live
+   * forms ask the same nine questions in different words, and the EN sheet is a real
+   * source (235 responses) that legacy never read.
+   *
+   * The markers below were each checked against the full NL and EN exports — all
+   * eleven columns resolve to exactly one header in both, with no collisions. No
+   * aliases: nobody types these questions as a short column name.
+   */
+  {
+    field: 'program',
+    aliases: [],
+    markers: ['programma inhoudelijk', 'in terms of content'],
+    required: false,
+  },
+  {
+    field: 'practical',
+    aliases: [],
+    markers: ['praktijkgericht', 'practical hands on'],
+    required: false,
+  },
+  {
+    field: 'tools',
+    aliases: [],
+    markers: ['concrete handvatten', 'concrete tools'],
+    required: false,
+  },
+  {
+    field: 'trainerExpertise',
+    aliases: [],
+    markers: ['vakkundig', 'knowledgeable'],
+    required: false,
+  },
+  {
+    field: 'trainerCommunication',
+    aliases: [],
+    markers: ['communicatie en omgang', 'communication and interaction'],
+    required: false,
+  },
+  {
+    field: 'followUp',
+    aliases: [],
+    markers: ['opvolgsessie', 'follow up session'],
+    required: false,
+  },
+  {
+    field: 'positive',
+    aliases: [],
+    markers: ['positief terug', 'back on positively'],
+    required: false,
+  },
+  {
+    field: 'improvement',
+    aliases: [],
+    markers: ['ruimte voor verbetering', 'room for improvement'],
     required: false,
   },
 ];
@@ -128,6 +236,11 @@ export function resolveColumns(header: readonly string[]): HeaderResolution {
     const resolution = resolveField(headers, spec);
 
     if (resolution.kind === 'ambiguous') {
+      if (!spec.required) {
+        // Still refusing to guess — just at the granularity of the one column nobody's
+        // statistics depend on, rather than failing the read and blanking the corpus.
+        continue;
+      }
       return {
         ok: false,
         reason:
@@ -156,5 +269,22 @@ export function resolveColumns(header: readonly string[]): HeaderResolution {
     return { ok: false, reason: 'required columns unresolved', headers };
   }
 
-  return { ok: true, columns: { code, grade, timestamp: found.get('timestamp') ?? null } };
+  const optional = (field: ColumnSpec['field']): number | null => found.get(field) ?? null;
+
+  return {
+    ok: true,
+    columns: {
+      code,
+      grade,
+      timestamp: optional('timestamp'),
+      program: optional('program'),
+      practical: optional('practical'),
+      tools: optional('tools'),
+      trainerExpertise: optional('trainerExpertise'),
+      trainerCommunication: optional('trainerCommunication'),
+      followUp: optional('followUp'),
+      positive: optional('positive'),
+      improvement: optional('improvement'),
+    },
+  };
 }

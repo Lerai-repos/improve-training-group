@@ -27,6 +27,32 @@ export interface SheetRef {
  * delete them behind a green run. Nothing downstream needs the moment a response
  * arrived; attribution is by IE-code alone.
  */
+/**
+ * The eight answers only the evaluation report reads.
+ *
+ * Split out from the response itself because the recommendation path never opens them:
+ * attribution and the trainer statistics work from `rawCode` and `grade` alone. Keeping
+ * them in their own object says so, and keeps the top level of `EvaluationResponse` the
+ * shape those modules were written against.
+ *
+ * Every field is nullable for two separate reasons that both really happen: the sheet
+ * may not have that column at all (the live tab and the 2024/2025 archives carry a bare
+ * `Code` and no question text), or the respondent left it blank.
+ */
+export interface ResponseAnswers {
+  /** The four remaining 1-5 questions, plus the trainer pair. Null when unparseable. */
+  readonly program: number | null;
+  readonly practical: number | null;
+  readonly tools: number | null;
+  readonly trainerExpertise: number | null;
+  readonly trainerCommunication: number | null;
+  /** Ja / Nee / free text — never parsed here; the report decides what counts as yes. */
+  readonly followUp: string | null;
+  /** The two quote sources, verbatim. Escaping is the renderer's job, not the reader's. */
+  readonly positive: string | null;
+  readonly improvement: string | null;
+}
+
 export interface EvaluationResponse {
   readonly source: SheetRef;
   /** 1-based row number IN THE SHEET (the header is row 1), so a report can point at it. */
@@ -36,6 +62,8 @@ export interface EvaluationResponse {
   /** The eindcijfer, or null when the cell was blank or unparseable. */
   readonly grade: number | null;
   readonly receivedAtRaw: string | null;
+  /** Everything the report needs and the statistics ignore. */
+  readonly answers: ResponseAnswers;
 }
 
 /**

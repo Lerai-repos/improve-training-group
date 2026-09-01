@@ -191,6 +191,8 @@ export interface PreparedNightly {
   readonly report: NightlyReport;
   readonly rows: readonly TrainerThemaStatRow[];
   readonly writtenAt: string;
+  /** Distinct completed trainings per trainer — stored beside the rows. */
+  readonly trainingsPerTrainer: Readonly<Record<string, number>>;
   /** Whether {@link commitNightly} would write; false when refused or in a dry run. */
   readonly writable: boolean;
 }
@@ -234,7 +236,7 @@ export async function prepareNightly(
     responses,
     history.trainings.map((training) => training.ref)
   );
-  const { rows, report: stats } = computeTrainerThemaStats({
+  const { rows, report: stats, trainingsPerTrainer } = computeTrainerThemaStats({
     history: history.trainings.map((training) => training.entry),
     aggregates,
     qualifications: [...byPair.values()],
@@ -271,7 +273,7 @@ export async function prepareNightly(
     rows: rows.length,
     rowsWithEvaluations: rows.filter((row) => row.evaluationCount > 0).length,
     rowsQualificationOnly: stats.rowsFromQualificationOnly,
-    bytes: deps.store.sizeOf(rows),
+    bytes: deps.store.sizeOf(rows, trainingsPerTrainer),
     attribution,
     stats,
     sheets,
@@ -292,6 +294,7 @@ export async function prepareNightly(
       report: { ...base, written: false, refused: refusal.reason, detail: refusal.detail },
       rows,
       writtenAt,
+      trainingsPerTrainer,
       writable: false,
     };
   }
@@ -304,6 +307,7 @@ export async function prepareNightly(
     report: { ...base, written: !dryRun, refused: null, detail },
     rows,
     writtenAt,
+    trainingsPerTrainer,
     writable: !dryRun,
   };
 }
@@ -328,6 +332,7 @@ export async function commitNightly(
     // Written together with the data they describe, so the baseline can never advance
     // on its own and a refused run cannot half-update it.
     sources: prepared.report.sources,
+    trainingsPerTrainer: prepared.trainingsPerTrainer,
   });
   return prepared.report;
 }

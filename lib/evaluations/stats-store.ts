@@ -71,6 +71,18 @@ const recordSchema = z.object({
    * per document (`sheet:nl`) plus the derived totals.
    */
   sources: z.record(z.string(), z.number()),
+  /**
+   * Distinct completed trainings per trainer — the one figure the rows cannot produce,
+   * because they are per trainer per THEME.
+   *
+   * **Optional, and deliberately not a new key version.** The rule above is about
+   * shapes an old reader would MISREAD. This field is additive in both directions: the
+   * schema strips unknown keys, so a pre-existing reader ignores it, and a reader that
+   * wants it treats absence as "not computed yet" rather than as zero trainings.
+   * Versioning the key here would mean a night with no statistics for the engine, to
+   * protect against a misreading that cannot happen.
+   */
+  trainings: z.record(z.string(), z.number()).optional(),
   rows: z.array(rowTuple),
 });
 
@@ -79,6 +91,8 @@ export interface StatsSnapshot {
   readonly writtenAt: string;
   readonly today: string;
   readonly sources: Record<string, number>;
+  /** Empty for a record written before this field existed. */
+  readonly trainingsPerTrainer: Record<string, number>;
 }
 
 /** Everything a write needs; the same shape `read` gives back. */
@@ -88,8 +102,17 @@ export interface StatsStore {
   /** The whole set, or null when nothing has ever been written. */
   read(): Promise<StatsSnapshot | null>;
   write(snapshot: StatsWrite): Promise<void>;
-  /** Bytes of the serialized record — reported by the job, so growth is visible. */
-  sizeOf(rows: readonly TrainerThemaStatRow[]): number;
+  /**
+   * Bytes of the serialized record — reported by the job, so growth is visible.
+   *
+   * Takes BOTH parts of the payload. Measuring only the rows would leave the training
+   * counts out of the one number that exists to notice the record getting bigger, which
+   * is precisely the field most likely to grow next.
+   */
+  sizeOf(
+    rows: readonly TrainerThemaStatRow[],
+    trainingsPerTrainer: Readonly<Record<string, number>>
+  ): number;
 }
 
 function encode(snapshot: StatsWrite): string {
@@ -98,6 +121,7 @@ function encode(snapshot: StatsWrite): string {
     writtenAt: snapshot.writtenAt,
     today: snapshot.today,
     sources: snapshot.sources,
+    trainings: snapshot.trainingsPerTrainer,
     rows: snapshot.rows.map((row) => [
       row.trainerExternalId,
       row.themaExternalId,
@@ -157,6 +181,7 @@ export function createStatsStore(kv: KvStore, ttlMs: number = STATS_TTL_MS): Sta
         writtenAt: parsed.data.writtenAt,
         today: parsed.data.today,
         sources: parsed.data.sources,
+        trainingsPerTrainer: parsed.data.trainings ?? {},
       };
     },
 
@@ -164,8 +189,11 @@ export function createStatsStore(kv: KvStore, ttlMs: number = STATS_TTL_MS): Sta
       await kv.set(KEY, encode(snapshot), { ttlMs });
     },
 
-    sizeOf(rows): number {
-      return Buffer.byteLength(encode({ rows, writtenAt: '', today: '', sources: {} }), 'utf8');
+    sizeOf(rows, trainingsPerTrainer): number {
+      return Buffer.byteLength(
+        encode({ rows, writtenAt: '', today: '', sources: {}, trainingsPerTrainer }),
+        'utf8'
+      );
     },
   };
 }
