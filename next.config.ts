@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
      * weigert uit te rollen ("files in symlinked directories"). `prebuild` zet daarom
      * echte kopieën in `.chromium-bin/`, en dat pad wordt getraceerd.
      */
-    '/api/report/spike': ['./.chromium-bin/**'],
+    '/api/report/[itemId]': ['./.chromium-bin/**'],
   },
 };
 

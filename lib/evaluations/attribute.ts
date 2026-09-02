@@ -64,6 +64,22 @@ export interface AttributionReport {
 export interface AttributionResult {
   readonly aggregates: readonly TrainingAggregate[];
   readonly report: AttributionReport;
+  /**
+   * De toegekende responses zelf, per training.
+   *
+   * Bestaat voor het evaluatierapport, dat de rúwe rijen nodig heeft — citaten en
+   * verdelingen zijn niet uit een gemiddelde af te leiden. Het is met opzet dezélfde
+   * toekenning als die de statistiek voedt en geen tweede implementatie: de regels
+   * hierboven (hoofdlettergevoelig matchen, `', '` als scheidingsteken, en vooral "één
+   * sessie of een botsing?" op klant én thema) zijn gemeten, niet bedacht. Een rapport
+   * dat zijn eigen selectie maakt zou vroeg of laat andere getallen tonen dan het
+   * trainer-overzicht, en dan is niet te zeggen welke van de twee klopt.
+   *
+   * Zit NIET in `TrainingAggregate`: dat type gaat de nachtjob in en wordt naar Redis
+   * geschreven, en duizenden responses meeslepen naar een cache-record is precies het
+   * soort ongeluk dat pas opvalt als de sleutel te groot is.
+   */
+  readonly responsesByTraining: ReadonlyMap<string, readonly EvaluationResponse[]>;
 }
 
 /** How many example rows a loss bucket carries. */
@@ -166,12 +182,7 @@ export function attributeResponses(
   const oneSession = (claimants: readonly string[]): boolean => {
     const clients = new Set(claimants.map((id) => clientOf.get(id) ?? null));
     const themas = new Set(claimants.map((id) => themaOf.get(id) ?? null));
-    return (
-      clients.size === 1 &&
-      themas.size === 1 &&
-      !clients.has(null) &&
-      !themas.has(null)
-    );
+    return clients.size === 1 && themas.size === 1 && !clients.has(null) && !themas.has(null);
   };
 
   // 2. Group the responses by their normalized code.
@@ -288,10 +299,15 @@ export function attributeResponses(
 
   return {
     aggregates,
+    responsesByTraining: new Map(
+      [...matched.entries()].map(([id, entry]) => [id, entry.responses])
+    ),
     report: {
       totalResponses: responses.length,
       attributedResponses,
-      losses: [...losses].sort((a, b) => a.kind.localeCompare(b.kind) || a.code.localeCompare(b.code)),
+      losses: [...losses].sort(
+        (a, b) => a.kind.localeCompare(b.kind) || a.code.localeCompare(b.code)
+      ),
       trainingsTotal: trainings.length,
       trainingsWithoutCode,
       trainingsWithoutResponses: trainings.length - matched.size,

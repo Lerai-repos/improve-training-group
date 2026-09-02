@@ -51,7 +51,11 @@
     "agenda:cotrainer": "tsx scripts/agenda-cotrainer.ts",
     "themas:conceptinhoud": "tsx scripts/themas-conceptinhoud.ts",
     "briefings:create": "tsx scripts/briefings-create.ts",
-    "labels:create": "tsx scripts/labels-create.ts"
+    "labels:create": "tsx scripts/labels-create.ts",
+    "report:demo": "tsx scripts/report-demo.ts",
+    "report:generate": "tsx scripts/report-generate.ts",
+    "agenda:evalkolommen": "tsx scripts/agenda-eval-columns.ts",
+    "eval:reports": "tsx scripts/eval-reports.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",

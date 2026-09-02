@@ -209,8 +209,8 @@ const AGENDA_2025_WHATSAPP_COLUMNS: readonly WhatsappColumn[] = AGENDA_2026_WHAT
     column.field === 'themaRelation' ? { ...column, id: 'board_relation_mkz4hjnt' } : column
 );
 
-const AGENDA_2024_WHATSAPP_COLUMNS: readonly WhatsappColumn[] = AGENDA_2026_WHATSAPP_COLUMNS.flatMap(
-  (column) => {
+const AGENDA_2024_WHATSAPP_COLUMNS: readonly WhatsappColumn[] =
+  AGENDA_2026_WHATSAPP_COLUMNS.flatMap((column) => {
     switch (column.field) {
       // Acteuraantal does not exist on Agenda 2024 — a property of that board, not drift.
       case 'acteurs':
@@ -222,8 +222,7 @@ const AGENDA_2024_WHATSAPP_COLUMNS: readonly WhatsappColumn[] = AGENDA_2026_WHAT
       default:
         return [column];
     }
-  }
-);
+  });
 
 const WHATSAPP_COLUMNS_BY_BOARD: Record<string, readonly WhatsappColumn[]> = {
   [AGENDA_2026_PRODUCTION_BOARD]: AGENDA_2026_WHATSAPP_COLUMNS,

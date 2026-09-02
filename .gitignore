@@ -77,3 +77,15 @@ __pycache__/
 
 # Chromium-binaries, neergezet door scripts/copy-chromium.mjs vóór elke build
 .chromium-bin/
+
+# Gegenereerde evaluatierapporten: klantnamen, trainersnamen en letterlijke
+# deelnemersantwoorden. Horen nooit in de geschiedenis.
+#
+# De patronen zijn VERANKERD aan de wortel en noemen de extensie. Een kaal
+# `report-demo.*` slokte `scripts/report-demo.ts` op: het bronbestand werd
+# onzichtbaar voor git, dus het zou nooit meegecommit worden en `pnpm report:demo`
+# breekt voor iedereen die de repo kloont.
+report-output/
+/rapport-*.pdf
+/report-demo.pdf
+/report-demo.html

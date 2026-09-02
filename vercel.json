@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/eval-stats",
       "schedule": "45 2 * * *"
+    },
+    {
+      "path": "/api/cron/eval-reports",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/eval-reports",
+      "schedule": "30 5 * * *"
     }
   ]
 }
