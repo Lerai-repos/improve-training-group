@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { config as loadEnv } from 'dotenv';
@@ -12,14 +11,16 @@ import {
   AGENDA_2026_PRODUCTION_BOARD,
   MONDAY_API_VERSION,
 } from '@lib/monday/board-config';
+import { agendaOverrideVerdict, checkColumn, type ColumnVerdict } from '@lib/monday/provisioning';
 import {
-  agendaOverrideVerdict,
-  checkColumn,
-  sampleCleanupPlan,
+  assertBoardIdentity,
+  captureSamples,
+  cleanupSamples,
+  intentFile,
+  keyFor,
   unresolvedCreateVerdict,
-  type ColumnVerdict,
-  type SampleState,
-} from '@lib/monday/provisioning';
+  type ProvisionIntent,
+} from '@lib/monday/provision-shell';
 import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
@@ -54,21 +55,6 @@ const INTENT_FILE = join(process.cwd(), '.briefings-create.json');
 const WORKSPACE_ID = '5308763';
 const BOARD_KIND = 'private';
 const BOARD_NAME = 'Briefings';
-
-interface Intent {
-  runId: string;
-  /**
-   * Wanneer deze poging begon, zodat een hervatting weet of Monday's idempotency-sleutel nog
-   * iets betekent. Zie `unresolvedCreateVerdict`.
-   */
-  startedAt: number;
-  boardId?: string;
-  /** Hoe ver het opruimen van Monday's voorbeeldinhoud is — zie `sampleCleanupPlan`. */
-  samples: SampleState;
-}
-
-/** Deterministisch per operatie, zodat een herhaling de sleutel hergebruikt in plaats van een nieuwe te maken. */
-const keyFor = (intent: Intent, op: string): string => `${intent.runId}:${op}`;
 
 interface ColumnSpec {
   id: string;
@@ -165,67 +151,6 @@ const COLUMNS: ColumnSpec[] = [
   { id: 'itg_gegenereerd', title: 'Laatst gegenereerd', type: 'date' },
 ];
 
-/**
- * Leest het intentiebestand, en vult aan wat een oudere versie nog niet opschreef.
- *
- * Het eerste formaat had alleen `runId` en `boardId`. Zo'n bestand blind als `Intent`
- * behandelen laat `samples` op `undefined` staan, en dan struikelt `sampleCleanupPlan` over
- * `samples.phase` — een crash bij precies de herstelrun waar dit bestand voor bestaat.
- *
- * `startedAt` krijgt dan `0`: dat is ouder dan elk idempotentievenster, dus een onbeslist
- * `create_board` wordt geweigerd in plaats van opnieuw verstuurd. De veilige kant, want bij
- * een oud bestand weten we niet meer wanneer die aanroep is gedaan.
- */
-function readIntent(): Intent | null {
-  if (!existsSync(INTENT_FILE)) {
-    return null;
-  }
-  const raw: unknown = JSON.parse(readFileSync(INTENT_FILE, 'utf8'));
-  if (typeof raw !== 'object' || raw === null) {
-    throw new Error(`${INTENT_FILE} is geen object; verwijder het bestand en begin opnieuw.`);
-  }
-  const record: Record<string, unknown> = { ...raw };
-  const runId = record.runId;
-  if (typeof runId !== 'string' || runId === '') {
-    throw new Error(`${INTENT_FILE} mist runId; verwijder het bestand en begin opnieuw.`);
-  }
-  const boardId = record.boardId;
-  const startedAt = record.startedAt;
-  return {
-    runId,
-    boardId: typeof boardId === 'string' && boardId !== '' ? boardId : undefined,
-    startedAt: typeof startedAt === 'number' ? startedAt : 0,
-    samples: readSampleState(record.samples),
-  };
-}
-
-/** Een `SampleState` uit het bestand, of `uncaptured` als hij er niet (goed) in staat. */
-function readSampleState(value: unknown): SampleState {
-  if (typeof value !== 'object' || value === null) {
-    return { phase: 'uncaptured' };
-  }
-  const record: Record<string, unknown> = { ...value };
-  if (record.phase === 'cleared') {
-    return { phase: 'cleared' };
-  }
-  if (record.phase === 'captured') {
-    const itemIds = record.itemIds;
-    const groupIds = record.groupIds;
-    if (Array.isArray(itemIds) && Array.isArray(groupIds)) {
-      return {
-        phase: 'captured',
-        itemIds: itemIds.map(String),
-        groupIds: groupIds.map(String),
-      };
-    }
-  }
-  return { phase: 'uncaptured' };
-}
-
-function writeIntent(intent: Intent): void {
-  writeFileSync(INTENT_FILE, `${JSON.stringify(intent, null, 2)}\n`);
-}
-
 async function main(): Promise<void> {
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) {
@@ -267,11 +192,14 @@ async function main(): Promise<void> {
     { b: [agendaBoardId()] }
   );
   if (agenda.boards?.[0] === undefined) {
-    throw new Error(`Agendabord ${agendaBoardId()} niet gevonden; de relatie zou nergens heen wijzen.`);
+    throw new Error(
+      `Agendabord ${agendaBoardId()} niet gevonden; de relatie zou nergens heen wijzen.`
+    );
   }
   console.log(`\nRelatie gaat naar: ${agenda.boards[0].id} — ${agenda.boards[0].name}\n`);
 
-  const intent: Intent = readIntent() ?? {
+  const file = intentFile(INTENT_FILE);
+  const intent: ProvisionIntent = file.read() ?? {
     runId: `briefings-${Date.now()}`,
     startedAt: Date.now(),
     samples: { phase: 'uncaptured' },
@@ -279,7 +207,9 @@ async function main(): Promise<void> {
   let boardId = intent.boardId;
 
   if (boardId === undefined) {
-    console.log(`${apply ? '  APPLY ' : '  would '}create ${BOARD_KIND} board "${BOARD_NAME}" in workspace ${WORKSPACE_ID}`);
+    console.log(
+      `${apply ? '  APPLY ' : '  would '}create ${BOARD_KIND} board "${BOARD_NAME}" in workspace ${WORKSPACE_ID}`
+    );
     if (apply) {
       /**
        * De sleutel wordt VÓÓR de eerste mutatie vastgelegd.
@@ -289,7 +219,7 @@ async function main(): Promise<void> {
        * `runId` ontstaan, dus een andere sleutel, dus een tweede bord. Dit bestand staat in
        * `.gitignore`, dus datzelfde geldt voor een run vanaf een andere machine.
        */
-      writeIntent(intent);
+      file.write(intent);
 
       const verdict = unresolvedCreateVerdict(intent.startedAt, Date.now());
       if (verdict.kind === 'refuse') {
@@ -313,12 +243,12 @@ async function main(): Promise<void> {
       boardId = made.create_board.id;
       // Direct weggeschreven: alles hierna is te repareren, het id kwijtraken niet.
       intent.boardId = boardId;
-      writeIntent(intent);
+      file.write(intent);
       console.log(`  bord aangemaakt: ${boardId}  (opgeslagen in ${INTENT_FILE})`);
 
       // Vastleggen wat van Monday is, op het enige moment dat "alles op dit bord" en
       // "Monday's voorbeeldinhoud" hetzelfde zijn: vóór onze eerste kolom.
-      await captureSamples(read, boardId, intent);
+      await captureSamples(read, boardId, intent, file);
     }
   } else {
     console.log(`  bord bestaat al uit een eerdere run: ${boardId}`);
@@ -350,11 +280,27 @@ async function main(): Promise<void> {
    * alleen `boardId` in het intentiebestand, staat `samples` nog op `uncaptured`, en werd
    * het opruimen overgeslagen omdat de kolommen er inmiddels waren.
    */
-  await cleanupSamples(read, write, boardId, intent);
+  /**
+   * Vóór er iets verdwijnt: is dit het bord dat we denken?
+   *
+   * Zonder merkteken, want dit bord is in augustus aangemaakt en draagt er geen — zie
+   * `BoardIdentity.fingerprint`. Naam en werkruimte blijven over, en de echte bescherming
+   * zit in `cleanupSamples`: die weigert te verwijderen op een bord dat er niet uitziet als
+   * net aangemaakt. Dat werkt zonder merkteken en beschermt tegen de schade zelf.
+   */
+  await assertBoardIdentity(read, boardId, { name: BOARD_NAME, workspaceId: WORKSPACE_ID });
+
+  await cleanupSamples(read, write, boardId, intent, file, {
+    ourColumnIds: COLUMNS.map((c) => c.id),
+    groupTitle: 'Gegenereerde briefings',
+    log: (line) => console.log(line),
+  });
 
   const meta = await read.query<{
     boards: Array<{ columns: Array<{ id: string; type: string; settings_str?: string | null }> }>;
-  }>('query ($b: [ID!]) { boards(ids: $b) { columns { id type settings_str } } }', { b: [boardId] });
+  }>('query ($b: [ID!]) { boards(ids: $b) { columns { id type settings_str } } }', {
+    b: [boardId],
+  });
   const boardColumns = meta.boards?.[0]?.columns ?? [];
   const existing = new Map(boardColumns.map((c) => [c.id, c]));
 
@@ -395,7 +341,9 @@ async function main(): Promise<void> {
         { board: boardId, title: spec.title, type: spec.type, id: spec.id, defaults },
         { idempotencyKey: keyFor(intent, `column:${spec.id}`) }
       );
-      console.log(`  aangemaakt: ${made.create_column.id.padEnd(18)} "${spec.title}" (${spec.type})`);
+      console.log(
+        `  aangemaakt: ${made.create_column.id.padEnd(18)} "${spec.title}" (${spec.type})`
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (spec.optional !== true) {
@@ -415,10 +363,13 @@ async function main(): Promise<void> {
    * configuratie heeft genegeerd, en een niet-gekoppelde spiegel is in de interface niet te
    * onderscheiden van een gekoppelde spiegel zonder waarde.
    */
-  const na = await read.query<{ boards: Array<{ columns: Array<{ id: string; title: string; type: string; settings_str?: string | null }> }> }>(
-    'query ($b: [ID!]) { boards(ids: $b) { columns { id title type settings_str } } }',
-    { b: [boardId] }
-  );
+  const na = await read.query<{
+    boards: Array<{
+      columns: Array<{ id: string; title: string; type: string; settings_str?: string | null }>;
+    }>;
+  }>('query ($b: [ID!]) { boards(ids: $b) { columns { id title type settings_str } } }', {
+    b: [boardId],
+  });
   const ongeconfigureerd = (na.boards?.[0]?.columns ?? []).filter(
     (c) => c.type === 'mirror' && (c.settings_str ?? '{}').replace(/\s/g, '') === '{}'
   );
@@ -431,12 +382,22 @@ async function main(): Promise<void> {
     }
   }
   if (ongeconfigureerd.length > 0) {
-    console.log(`\n  HANDWERK NODIG — ${ongeconfigureerd.length} spiegelkolom(men) staan er wel, maar wijzen nergens heen.`);
+    console.log(
+      `\n  HANDWERK NODIG — ${ongeconfigureerd.length} spiegelkolom(men) staan er wel, maar wijzen nergens heen.`
+    );
     console.log('  Monday laat dat niet via de API instellen; het moet in de interface:');
     for (const c of ongeconfigureerd) {
       const bron =
-        c.id === 'itg_klant' ? 'Bedrijf' : c.id === 'itg_datum' ? 'Datum' : c.id === 'itg_thema' ? "Thema's" : '?';
-      console.log(`     ${c.id.padEnd(16)} "${c.title}"  →  kolom via Training, toon "${bron}" van Agenda 2026`);
+        c.id === 'itg_klant'
+          ? 'Bedrijf'
+          : c.id === 'itg_datum'
+            ? 'Datum'
+            : c.id === 'itg_thema'
+              ? "Thema's"
+              : '?';
+      console.log(
+        `     ${c.id.padEnd(16)} "${c.title}"  →  kolom via Training, toon "${bron}" van Agenda 2026`
+      );
     }
   }
   console.log(`\n  Zet dit id in de code: BRIEFINGS_BOARD = '${boardId}'\n`);
@@ -456,133 +417,6 @@ function describeVerdict(verdict: ColumnVerdict, spec: ColumnSpec): string {
     case 'ok':
       return 'klopt';
   }
-}
-
-/**
- * Leg vast wat van Monday is, zolang dat nog met zekerheid vast te stellen is.
- *
- * Monday zet in elk nieuw bord een voorbeelditem en een groep "Group Title". Dit draait direct
- * na `create_board` en vóór onze eerste kolom — het enige moment waarop "alles wat op dit bord
- * staat" en "Monday's voorbeeldinhoud" hetzelfde zijn. De ids gaan naar het intentiebestand
- * vóórdat er iets wordt verwijderd, zodat een hervatting tegen die vastgelegde verzameling
- * werkt in plaats van hem opnieuw af te leiden uit een bord dat dan echte briefings bevat.
- */
-async function captureSamples(
-  read: ReturnType<typeof createMondayGraphQLClient>,
-  boardId: string,
-  intent: Intent
-): Promise<void> {
-  const board = await readBoardContent(read, boardId);
-  if (board === null) {
-    return;
-  }
-  const samples: SampleState = {
-    phase: 'captured',
-    itemIds: board.items.map((i) => i.id),
-    groupIds: board.groups.filter((g) => SAMPLE_GROUP_TITLES.has(g.title)).map((g) => g.id),
-  };
-  intent.samples = samples;
-  writeIntent(intent);
-}
-
-const SAMPLE_GROUP_TITLES = new Set(['Group Title', 'Group 1']);
-
-/**
- * Ruim op wat als voorbeeldinhoud is vastgelegd — en niets anders.
- *
- * De regressie die dit dichtzet: dit verwijderde de eerste 50 items van het bord, ongeacht wat
- * ze waren, na élke `--apply`. Het Briefings-bord bestaat juist om één rij per gegenereerd
- * document te bewaren, dus zodra het in gebruik is wiste een herstelrun productiegegevens.
- *
- * Onze kolommen worden strikt ná het opruimen aangemaakt: staan ze er, dan is het bord dit
- * stadium voorbij en valt er niets meer op te ruimen.
- */
-async function cleanupSamples(
-  read: ReturnType<typeof createMondayGraphQLClient>,
-  write: ReturnType<typeof createMondayMutationClient>,
-  boardId: string,
-  intent: Intent
-): Promise<void> {
-  const board = await readBoardContent(read, boardId);
-  if (board === null) {
-    return;
-  }
-
-  const plan = sampleCleanupPlan(
-    intent.samples,
-    { columnIds: board.columns.map((c) => c.id) },
-    COLUMNS.map((c) => c.id)
-  );
-
-  if (plan.kind === 'done') {
-    return;
-  }
-  if (plan.kind === 'already_done') {
-    console.log('  voorbeeldinhoud was al opgeruimd (onze kolommen bestaan)');
-    intent.samples = { phase: 'cleared' };
-    writeIntent(intent);
-    return;
-  }
-  if (plan.kind === 'capture') {
-    // Alleen bereikbaar als het bord uit een eerdere run komt waarvan het antwoord verloren
-    // ging: er staat nog niets van ons, dus wat er staat is van Monday.
-    await captureSamples(read, boardId, intent);
-    await cleanupSamples(read, write, boardId, intent);
-    return;
-  }
-
-  const present = new Set(board.items.map((i) => i.id));
-  for (const itemId of plan.itemIds) {
-    if (!present.has(itemId)) {
-      continue; // Al verwijderd in een eerdere poging.
-    }
-    console.log(`  voorbeelditem verwijderen: ${itemId}`);
-    await write.mutate('mutation ($i: ID!) { delete_item(item_id: $i) { id } }', { i: itemId }, {
-      idempotencyKey: keyFor(intent, `delete_item:${itemId}`),
-    });
-  }
-  for (const groupId of plan.groupIds) {
-    console.log(`  groep hernoemen: ${groupId} → "Gegenereerde briefings"`);
-    await write.mutate(
-      'mutation ($b: ID!, $g: String!, $t: String!) { update_group(board_id: $b, group_id: $g, group_attribute: title, new_value: $t) { id } }',
-      { b: boardId, g: groupId, t: 'Gegenereerde briefings' },
-      { idempotencyKey: keyFor(intent, `group:${groupId}`) }
-    );
-  }
-
-  intent.samples = { phase: 'cleared' };
-  writeIntent(intent);
-}
-
-interface BoardContent {
-  columns: Array<{ id: string }>;
-  groups: Array<{ id: string; title: string }>;
-  items: Array<{ id: string; name: string }>;
-}
-
-async function readBoardContent(
-  read: ReturnType<typeof createMondayGraphQLClient>,
-  boardId: string
-): Promise<BoardContent | null> {
-  const d = await read.query<{
-    boards: Array<{
-      columns: Array<{ id: string }>;
-      groups: Array<{ id: string; title: string }>;
-      items_page: { items: Array<{ id: string; name: string }> };
-    }>;
-  }>(
-    'query ($b: [ID!]) { boards(ids: $b) { columns { id } groups { id title } items_page(limit: 50) { items { id name } } } }',
-    { b: [boardId] }
-  );
-  const board = d.boards?.[0];
-  if (board === undefined) {
-    return null;
-  }
-  return {
-    columns: board.columns ?? [],
-    groups: board.groups ?? [],
-    items: board.items_page?.items ?? [],
-  };
 }
 
 main().catch((error: unknown) => {
