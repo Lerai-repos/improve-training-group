@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { LABEL_COLUMNS } from '../columns';
 import { LABEL_SEED } from '../catalog';
-import { mapLabelItems, readLabels } from '../read';
+import { mapLabelItems, readLabelRows, readLabels } from '../read';
 
 const C = LABEL_COLUMNS;
 
@@ -14,7 +14,11 @@ interface Cell {
 }
 
 /** Een rij zoals Monday hem teruggeeft: alleen de kolommen die gevraagd zijn. */
-const item = (name: string, cells: Cell[] = []) => ({ id: `i-${name}`, name, column_values: cells });
+const item = (name: string, cells: Cell[] = []) => ({
+  id: `i-${name}`,
+  name,
+  column_values: cells,
+});
 
 const filled = (name: string, over: Cell[] = []) =>
   item(name, [
@@ -200,9 +204,7 @@ describe('readLabels', () => {
   });
 
   it('noemt een rij met een onbekende naam in de foutmelding', async () => {
-    await expect(readLabels(clientFor([...allNine(), filled('TMT')]), 'b1')).rejects.toThrow(
-      'TMT'
-    );
+    await expect(readLabels(clientFor([...allNine(), filled('TMT')]), 'b1')).rejects.toThrow('TMT');
   });
 
   /** Alle problemen in één melding, zodat een reparatieronde er niet drie kost. */
@@ -231,5 +233,55 @@ describe('readLabels', () => {
       },
     ]);
     await expect(readLabels(clientFor(rows), 'b1')).rejects.toThrow('Logo');
+  });
+});
+
+/**
+ * De diagnostische lezer bestaat omdat twee lezers tegengestelde eisen hebben: de rapportmotor
+ * moet een onvolledig bord weigeren, de dagelijkse controle moet het juist kunnen lezen — een
+ * ontbrekende rij is daar geen storing maar de melding zelf.
+ */
+describe('readLabelRows', () => {
+  it('geeft een ontbrekende rij terug als probleem in plaats van te werpen', async () => {
+    const rows = allNine().filter((r) => r.name !== 'CP');
+    const { records, problems } = await readLabelRows(clientFor(rows), 'b1');
+    expect(records).toHaveLength(8);
+    expect(problems).toContainEqual({ kind: 'missing_label', code: 'CP' });
+  });
+
+  it('geeft een leeg verplicht veld terug als probleem in plaats van te werpen', async () => {
+    // Een rij waarvan de Kleur-cel leeg is; de rest staat er gewoon.
+    const leegITem = item('IT', [
+      { id: C.volledigeNaam, text: 'Naam IT' },
+      { id: C.kleur, text: '' },
+      { id: C.term, text: 'Training' },
+      { id: C.rapportterm, text: 'de training' },
+    ]);
+    const rows = [leegITem, ...allNine().filter((r) => r.name !== 'IT')];
+
+    const { records, problems } = await readLabelRows(clientFor(rows), 'b1');
+
+    expect(records).toHaveLength(9);
+    expect(problems).toContainEqual({ kind: 'empty_field', code: 'IT', field: 'Kleur' });
+  });
+
+  /**
+   * Structurele problemen blijven wél fataal: bij twee rijen "IT" is niet te bepalen welke
+   * configuratie geldt, en dat kan geen enkele melding uitdrukken.
+   */
+  it('werpt nog steeds bij een dubbele rij', async () => {
+    await expect(readLabelRows(clientFor([...allNine(), filled('IT')]), 'b1')).rejects.toThrow(
+      /niet eenduidig/
+    );
+  });
+
+  it('werpt nog steeds als het bord niet bestaat', async () => {
+    const empty = { query: async () => ({ boards: [] }) };
+    await expect(readLabelRows(empty, 'b1')).rejects.toThrow('niet gevonden');
+  });
+
+  it('laat de strikte lezer ongemoeid: die weigert een ontbrekende rij nog steeds', async () => {
+    const rows = allNine().filter((r) => r.name !== 'CP');
+    await expect(readLabels(clientFor(rows), 'b1')).rejects.toThrow('CP');
   });
 });

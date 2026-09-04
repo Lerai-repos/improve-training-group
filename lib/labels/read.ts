@@ -2,6 +2,7 @@ import { LABEL_COLUMNS } from './columns';
 import { isLabelCode } from './catalog';
 import { describeProblem, validateCatalog } from './validate';
 
+import type { CatalogProblem } from './validate';
 import type { LabelCode, LabelConfig } from './types';
 
 /**
@@ -142,10 +143,7 @@ const ASSET_COLUMNS = [
   [LABEL_COLUMNS.achterblad, 'Achterblad'],
 ] as const;
 
-function toRecord(
-  item: LabelItem,
-  code: LabelCode
-): { record: LabelRecord; ambiguous: string[] } {
+function toRecord(item: LabelItem, code: LabelCode): { record: LabelRecord; ambiguous: string[] } {
   const ambiguous: string[] = [];
   const assets: Record<string, LabelAsset | null> = {};
 
@@ -215,10 +213,26 @@ export function mapLabelItems(items: readonly LabelItem[]): {
  * Werpt in plaats van een deelresultaat terug te geven, om dezelfde reden als `readSettings`:
  * de aanroeper is een generatiestap die anders vrolijk doorloopt.
  */
-export async function readLabels(
+/**
+ * De rijen zoals ze op het bord staan, mét hun gebreken — geen oordeel.
+ *
+ * Bestaat omdat er twee lezers zijn met tegengestelde eisen. De rapportmotor moet een
+ * onvolledig bord WEIGEREN: een rapport in de verkeerde huisstijl is aan het resultaat niet te
+ * zien. De dagelijkse controle moet datzelfde bord juist kunnen LEZEN, want een ontbrekende rij
+ * of een leeg veld is precies wat zij hoort te melden.
+ *
+ * Structurele problemen horen bij geen van beide thuis en blijven hier staan: een bord dat niet
+ * bestaat, twee rijen met dezelfde code, een rij waarvan de naam geen labelcode is, of een
+ * bestandskolom met meer dan één bruikbaar bestand. Bij die vier is niet te zeggen wélke rij of
+ * wélk bestand bedoeld is, en dat kan geen enkele melding uitdrukken.
+ */
+export async function readLabelRows(
   client: LabelsReader,
   boardId: string
-): Promise<ReadonlyMap<LabelCode, LabelRecord>> {
+): Promise<{
+  readonly records: readonly LabelRecord[];
+  readonly problems: readonly CatalogProblem[];
+}> {
   const data = await client.query(
     `query ($b: [ID!]) { boards(ids: $b) { items_page(limit: 100) { items { ${itemFields()} } } } }`,
     { b: [boardId] }
@@ -232,12 +246,38 @@ export async function readLabels(
   const { records, unknown, ambiguous } = mapLabelItems(board.items_page?.items ?? []);
   const problems = validateCatalog(records);
 
-  if (problems.length > 0 || unknown.length > 0 || ambiguous.length > 0) {
+  const structureel = problems.filter(
+    (p) => p.kind === 'duplicate_label' || p.kind === 'unknown_label'
+  );
+  if (structureel.length > 0 || unknown.length > 0 || ambiguous.length > 0) {
     const lines = [
-      ...problems.map(describeProblem),
+      ...structureel.map(describeProblem),
       ...unknown.map((name) => `"${name}": rij zonder geldige labelcode als naam`),
       ...ambiguous,
     ];
+    throw new Error(
+      `Het Labels-bord (${boardId}) is niet eenduidig te lezen:\n  ${lines.join('\n  ')}\n` +
+        'Bij een dubbele of naamloze rij is niet te bepalen welke configuratie geldt.'
+    );
+  }
+
+  return { records, problems };
+}
+
+/**
+ * De strikte lezer: alles moet kloppen, anders werpt hij.
+ *
+ * Dit is de lezer voor de RAPPORTMOTOR. De dagelijkse controle gebruikt hem met opzet niet —
+ * zie `readLabelRows` en `lib/signals/deps.ts`.
+ */
+export async function readLabels(
+  client: LabelsReader,
+  boardId: string
+): Promise<ReadonlyMap<LabelCode, LabelRecord>> {
+  const { records, problems } = await readLabelRows(client, boardId);
+
+  if (problems.length > 0) {
+    const lines = problems.map(describeProblem);
     throw new Error(
       `Het Labels-bord (${boardId}) klopt niet:\n  ${lines.join('\n  ')}\n` +
         'Zonder een kloppende labelconfiguratie wordt een rapport in de verkeerde huisstijl ' +

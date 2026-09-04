@@ -30,11 +30,12 @@ export function normaliseHex(value: string): string | null {
  * Bewust kort: website en inventarisatieformulier staan er niet in, want die voeden de
  * briefing. Een ontbrekende website mag geen rapport tegenhouden, en andersom.
  */
-const REPORT_REQUIRED: ReadonlyArray<readonly ['volledigeNaam' | 'kleur' | 'rapportterm', string]> = [
-  ['volledigeNaam', 'Volledige naam'],
-  ['kleur', 'Kleur'],
-  ['rapportterm', 'Rapportterm'],
-];
+const REPORT_REQUIRED: ReadonlyArray<readonly ['volledigeNaam' | 'kleur' | 'rapportterm', string]> =
+  [
+    ['volledigeNaam', 'Volledige naam'],
+    ['kleur', 'Kleur'],
+    ['rapportterm', 'Rapportterm'],
+  ];
 
 /**
  * Wat er gekeurd wordt: een rij zoals hij van het BORD komt, met `code` als gewone string.
