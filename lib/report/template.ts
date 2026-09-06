@@ -62,9 +62,9 @@ function bleedPage(dataUri: string | null): string {
 
 function quoteList(items: readonly string[]): string {
   if (items.length === 0) {
-    return '<li>Geen feedback ontvangen.</li>';
+    return '<li data-block="item">Geen feedback ontvangen.</li>';
   }
-  return items.map((quote) => `<li>&ldquo;${esc(quote)}&rdquo;</li>`).join('');
+  return items.map((quote) => `<li data-block="item">&ldquo;${esc(quote)}&rdquo;</li>`).join('');
 }
 
 function logoHtml(artwork: LabelArtwork, labelNaam: string, className: string): string {
@@ -164,16 +164,20 @@ export function renderReportHtml(
   .pie-legend li{display:flex;align-items:center;gap:8px;font-size:14px}
   .swatch{width:14px;height:14px;border-radius:3px;display:inline-block}
   .page-logo{position:absolute;bottom:12px;right:20px;height:64px;width:auto;}
-  /* De citaten mogen NIET afkappen: geen vaste hoogte, geen overflow. Dat was een expliciete reparatie. */
-  .feedback-page{page-break-before:always;position:relative;padding:16mm;}
+  /*
+   * Een citatenpagina is een ECHTE pagina, net als de andere: eigen padding, eigen logo
+   * rechtsonder. lib/report/paginate.ts legt uit waarom dat niet met CSS alleen lukt.
+   *
+   * min-height en overflow:visible, niet de vaste hoogte van .page. De verdeling zorgt
+   * dat de inhoud past, dus normaal is dit exact één pagina. Zou er ooit één citaat staan dat
+   * in zijn eentje langer is dan een pagina, dan groeit deze mee in plaats van hem af te
+   * kappen — de citaten mogen NIET afkappen, en dat was een expliciete reparatie.
+   */
+  .feedback-page{height:auto;min-height:${PAPER.height};overflow:visible;}
   .quotes ul{margin:6px 0 0;padding-left:22px;}
   .quotes li{margin:6px 0;font-size:14px;page-break-inside:avoid;}
   .quotes li::marker{color:var(--brand)}
   .quotes .section-title{page-break-after:avoid;}
-  /* ABSOLUTE, niet fixed. Een fixed element herhaalt Chromium op ELKE pagina van het
-     document - dus ook boven op het voor- en achterblad. Absolute zet hem onderaan de
-     citatensectie, precies zoals de bestaande rapporten het doen. */
-  .feedback-logo{position:absolute;bottom:12px;right:20px;height:64px;width:auto;}
 </style>
 </head>
 <body>
@@ -233,16 +237,14 @@ ${bleedPage(artwork.voorblad?.dataUri ?? null)}
   </main>
   ${logo}
 </article>
-<article class="feedback-page">
-  <section class="quotes">
-    <h3 class="section-title">Op welk(e) aspect(en) van de sessie kijk je positief terug en waarom?</h3>
+<article class="page document-section feedback-page" data-feedback-source>
+  <main class="quotes">
+    <h3 class="section-title" data-block="title">Op welk(e) aspect(en) van de sessie kijk je positief terug en waarom?</h3>
     <ul>${quoteList(model.positieveCitaten)}</ul>
-  </section>
-  <section class="quotes">
-    <h3 class="section-title">Waar zie jij nog ruimte voor verbetering of aanpassing van deze training?</h3>
+    <h3 class="section-title" data-block="title">Waar zie jij nog ruimte voor verbetering of aanpassing van deze training?</h3>
     <ul>${quoteList(model.verbeterCitaten)}</ul>
-  </section>
-  ${logoHtml(artwork, model.labelNaam, 'feedback-logo')}
+  </main>
+  ${logo}
 </article>
 ${bleedPage(artwork.achterblad?.dataUri ?? null)}
 </body>

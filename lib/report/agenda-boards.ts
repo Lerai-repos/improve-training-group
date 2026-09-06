@@ -73,6 +73,24 @@ export function agendaTrainerRelations(boardId: string): TrainerRelations | null
   return { lead: board.trainerRelation, co: board.coTrainerRelation ?? null };
 }
 
+/**
+ * De themarelatie van dit bord, of `null` als we het bord niet kennen.
+ *
+ * Om exact dezelfde reden apart als `agendaTrainerRelations`: 2026 draagt de thema's in
+ * `board_relation_mkz4920y` en 2025 in `board_relation_mkz4hjnt`. Een id van het verkeerde
+ * bord geeft geen fout maar een LEGE relatie, en dan schrijft de aftersalesmail "de sessie"
+ * waar "de sessie over Onderhandelen" hoorde te staan — een brief die er verzorgd uitziet en
+ * een thema mist. Gemeten op een echt 2025-item vóór deze reparatie: precies dat gebeurde.
+ */
+export function agendaThemaRelation(boardId: string): string | null {
+  return reportAgendaBoards().find((b) => b.boardId === boardId)?.themaRelation ?? null;
+}
+
+/** Elk themarelatie-id dat op enig gelezen agendabord voorkomt. Voor één projectie. */
+export function allThemaRelationColumns(): readonly string[] {
+  return [...new Set(reportAgendaBoards().map((b) => b.themaRelation))];
+}
+
 /** Elk trainerrelatie-id dat op enig gelezen agendabord voorkomt. Voor één projectie. */
 export function allTrainerRelationColumns(): readonly string[] {
   const ids = reportAgendaBoards().flatMap((b) =>

@@ -56,6 +56,7 @@
     "report:generate": "tsx scripts/report-generate.ts",
     "agenda:evalkolommen": "tsx scripts/agenda-eval-columns.ts",
     "eval:reports": "tsx scripts/eval-reports.ts",
+    "mail:preview": "tsx scripts/mail-preview.ts",
     "systeem:create": "tsx scripts/systeem-create.ts",
     "daily:check": "tsx scripts/daily-check.ts"
   },

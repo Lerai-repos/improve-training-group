@@ -16,7 +16,7 @@ function record(over: Partial<LabelRecord> = {}): LabelRecord {
     kleur: '#0A2B58',
     term: 'Training',
     rapportterm: 'de training',
-    evaluatieformulier: '',
+    evaluatieformulier: 'www.incompanytrainer.nl/evaluatieformulier',
     website: '',
     inventarisatieformulier: '',
     logo: asset,
@@ -39,12 +39,20 @@ describe('unusableLabelFields', () => {
   });
 
   it('kijkt NIET naar de velden die nog door niets gelezen worden', () => {
-    // Alle drie leeg in `record()`. Zouden ze meetellen, dan meldt de controle op dag één
-    // vijf bekende gaten die niemand hoeft op te lossen.
-    const leeg = unusableLabelFields(
-      record({ evaluatieformulier: '', website: '', inventarisatieformulier: '' })
-    );
+    // `website` en `inventarisatieformulier` zijn allebei leeg in `record()`. Zouden ze
+    // meetellen, dan meldt de controle bekende gaten die niemand hoeft op te lossen.
+    const leeg = unusableLabelFields(record({ website: '', inventarisatieformulier: '' }));
     expect(leeg).toEqual([]);
+  });
+
+  /**
+   * Sinds 4-Sep-2026 wél gelezen: de aftersalesmail zet deze URL in de zin "je vindt het
+   * formulier hier:". Een leeg veld levert daar een blokhaak op in een brief aan een klant.
+   */
+  it('meldt een ontbrekend evaluatieformulier, want de mail leest het nu', () => {
+    expect(unusableLabelFields(record({ evaluatieformulier: '' }))).toEqual([
+      { veld: 'evaluatieformulier', reden: 'leeg' },
+    ]);
   });
 
   it('meldt een leeg bestandsveld', () => {

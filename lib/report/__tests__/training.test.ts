@@ -10,6 +10,9 @@ const AGENDA_2025 = '1703587792';
 /** Gemeten 2-Sep-2026; 2025 gebruikt een ANDER id en heeft geen co-trainerkolom. */
 const LEAD_2026 = 'board_relation_mkz4y7tb';
 const LEAD_2025 = 'board_relation_mkz4w78';
+/** En de thema's óók: dezelfde val, een andere kolom. */
+const THEMA_2026 = 'board_relation_mkz4920y';
+const THEMA_2025 = 'board_relation_mkz4hjnt';
 
 interface Cell {
   id: string;
@@ -189,5 +192,49 @@ describe('readTrainingForReport', () => {
     expect(query).toContain(LEAD_2025);
     expect(query).toContain('board { id }');
     expect(client.query).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * De themarelatie verschilt per jaargang, net als de trainerrelatie.
+ *
+ * Gemeten op agenda-item 2047464755 (1 oktober 2025): met het 2026-id gaf Monday geen fout
+ * maar een lege relatie, en de aftersalesmail schreef "we organiseerden bij jullie de sessie"
+ * in plaats van "de sessie over Onderhandelen". Een brief die er verzorgd uitziet en een
+ * thema mist.
+ */
+describe('de themarelatie per jaargang', () => {
+  it("leest de thema's van een 2026-item", async () => {
+    const t = await readTrainingForReport(
+      clientFor(item(AGENDA_2026, [linked(LEAD_2026, 'Jan'), linked(THEMA_2026, 'Onderhandelen')])),
+      'i1'
+    );
+    expect(t?.themaNamen).toEqual(['Onderhandelen']);
+  });
+
+  it("leest de thema's van een 2025-item uit de ANDERE kolom", async () => {
+    const t = await readTrainingForReport(
+      clientFor(item(AGENDA_2025, [linked(LEAD_2025, 'Jan'), linked(THEMA_2025, 'Onderhandelen')])),
+      'i1'
+    );
+    expect(t?.themaNamen).toEqual(['Onderhandelen']);
+  });
+
+  it('pakt niet de kolom van de verkeerde jaargang', async () => {
+    // Staat het thema in de 2026-kolom terwijl het item op 2025 staat, dan hoort het NIET
+    // gelezen te worden; anders zou de lezer op beide kolommen tegelijk gokken.
+    const t = await readTrainingForReport(
+      clientFor(item(AGENDA_2025, [linked(LEAD_2025, 'Jan'), linked(THEMA_2026, 'Fout thema')])),
+      'i1'
+    );
+    expect(t?.themaNamen).toEqual([]);
+  });
+
+  it('vraagt beide themakolommen op in één projectie', async () => {
+    const client = clientFor(item(AGENDA_2026, [linked(LEAD_2026, 'Jan')]));
+    await readTrainingForReport(client, 'i1');
+    const [query] = client.query.mock.calls[0];
+    expect(query).toContain(THEMA_2026);
+    expect(query).toContain(THEMA_2025);
   });
 });

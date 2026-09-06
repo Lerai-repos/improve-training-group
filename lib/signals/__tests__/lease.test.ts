@@ -108,6 +108,7 @@ describe('runDailyCheckExclusive', () => {
     readAgendaUsage: async () => usage({ labels: new Map(), themas: new Map() }),
     readLabels: async () => new Map(),
     readThemas: async () => new Map(),
+    readMailFailures: async () => [],
     readTrainers: async () => new Set(),
     writer,
     groups: GROUPS,

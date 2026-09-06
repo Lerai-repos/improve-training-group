@@ -30,6 +30,10 @@ const training: TrainingForReport = {
   rawIeCode: '251050',
   rawLabel: 'IT',
   ieStatus: '',
+  datum: '2026-09-03',
+  themaNamen: ['Onderhandelen'],
+  trainerItemIds: ['t1'],
+  accountmanager: 'Dirkje',
 };
 
 const response = (rawCode: string): EvaluationResponse => ({

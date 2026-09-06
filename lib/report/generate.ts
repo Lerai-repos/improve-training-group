@@ -1,5 +1,6 @@
 import { fetchArtwork } from './assets';
 import { chartColours } from './colours';
+import { followUpTally, vervolgPercentage } from './distribution';
 import { buildReportModel } from './model';
 import { renderReportHtml } from './template';
 
@@ -27,6 +28,14 @@ export interface GeneratedReport {
    * in het document ziet staan.
    */
   readonly gemiddeldeBeoordeling: string | null;
+  /**
+   * Het percentage dat een verdiepende sessie waardevol vindt, of `null`.
+   *
+   * Om dezelfde reden meegegeven als het gemiddelde: dit getal staat in de begeleidende mail
+   * én als taartgrafiek in dít document. Twee berekeningen van hetzelfde percentage zijn twee
+   * kansen om te gaan afwijken van wat de klant een bladzijde verderop ziet.
+   */
+  readonly vervolgPercentage: number | null;
 }
 
 export type ReportOutcome =
@@ -69,6 +78,9 @@ export async function generateReport(
       warnings: artwork.problems,
       responseCount: input.responses.length,
       gemiddeldeBeoordeling: model.gemiddeldeBeoordeling,
+      vervolgPercentage: vervolgPercentage(
+        followUpTally(input.responses.map((r) => r.answers.followUp))
+      ),
     },
   };
 }

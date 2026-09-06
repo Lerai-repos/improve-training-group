@@ -1,5 +1,10 @@
 import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
-import { agendaTrainerRelations, allTrainerRelationColumns } from './agenda-boards';
+import {
+  agendaThemaRelation,
+  agendaTrainerRelations,
+  allThemaRelationColumns,
+  allTrainerRelationColumns,
+} from './agenda-boards';
 import { IE_STATUS_COLUMN } from './record';
 import { resolveLabelCode } from '@lib/labels';
 
@@ -24,6 +29,20 @@ const C = BRIEFING_AGENDA_COLUMNS;
 export interface TrainingForReport extends ReportTraining {
   /** De labelcode, al door de aliaslijst gehaald. `null` als het label onbekend is. */
   readonly labelCode: LabelCode | null;
+  /** `YYYY-MM-DD`, of null als er geen datum staat. De mails zetten hem in de openingszin. */
+  readonly datum: string | null;
+  /** De namen van de gekoppelde thema's. Mag leeg zijn; de relatie is niet verplicht. */
+  readonly themaNamen: readonly string[];
+  /**
+   * De itemnummers van de trainers op het trainersbord.
+   *
+   * Alleen om er de e-mailadressen bij te zoeken. Die staan niet op de agenda en backoffice
+   * heeft ze nodig om de trainermail door te sturen; dat is een van de vier reparaties uit
+   * `04-evaluatierapportage.md`.
+   */
+  readonly trainerItemIds: readonly string[];
+  /** De naam uit de people-kolom, voor de CC-regel in de trainermail. Mag leeg zijn. */
+  readonly accountmanager: string;
   /** Ruwe inhoud van de IE-codekolom; de toekenning splitst hem zelf. */
   readonly rawIeCode: string | null;
   /** Wat er in `status23` stond, ook als wij het niet kennen — voor de foutmelding. */
@@ -64,6 +83,8 @@ const FIELDS = [
   C.label,
   C.ieCode,
   C.qr,
+  C.datum,
+  C.accountmanager,
   IE_STATUS_COLUMN,
 ] as const;
 
@@ -92,7 +113,9 @@ export async function readTrainingForReport(
   client: AgendaReader,
   itemId: string
 ): Promise<TrainingForReport | null> {
-  const ids = [...FIELDS, ...allTrainerRelationColumns()].map((id) => `"${id}"`).join(', ');
+  const ids = [...FIELDS, ...allTrainerRelationColumns(), ...allThemaRelationColumns()]
+    .map((id) => `"${id}"`)
+    .join(', ');
   const data = await client.query(
     `query ($i: [ID!]) { items(ids: $i) { id name board { id } ` +
       `column_values(ids: [${ids}]) { id text ` +
@@ -129,6 +152,7 @@ export async function readTrainingForReport(
   const trainerColumns = relations.co === null ? [relations.lead] : [relations.lead, relations.co];
   const seen = new Set<string>();
   const trainerNamen: string[] = [];
+  const trainerItemIds: string[] = [];
   for (const columnId of trainerColumns) {
     for (const linked of cell(item, columnId)?.linked_items ?? []) {
       const naam = linked.name.trim();
@@ -137,7 +161,23 @@ export async function readTrainingForReport(
       }
       seen.add(linked.id);
       trainerNamen.push(naam);
+      trainerItemIds.push(linked.id);
     }
+  }
+
+  /**
+   * De themarelatie hoort bij de JAARGANG, net als de trainerrelatie.
+   *
+   * `agendaTrainerRelations` heeft hierboven al geweigerd op een onbekend bord, dus als we
+   * hier zijn is dit bord bekend en levert dit een id op. De controle staat er toch, omdat
+   * een `null` die stil doorloopt precies het lege thema oplevert waar dit voor bestaat.
+   */
+  const themaRelation = agendaThemaRelation(boardId);
+  if (themaRelation === null) {
+    throw new Error(
+      `Agenda-item ${itemId} staat op bord ${boardId || '(onbekend)'}, en van dat bord weten ` +
+        "we niet welke kolom de thema's draagt."
+    );
   }
 
   const rawLabel = textOf(item, C.label);
@@ -159,5 +199,23 @@ export async function readTrainingForReport(
     rawIeCode: rawIeCode === '' ? null : rawIeCode,
     rawLabel,
     ieStatus: textOf(item, IE_STATUS_COLUMN),
+    /**
+     * De datumkolom levert `YYYY-MM-DD` als tekst. Leeg wordt `null` en niet de lege string,
+     * zodat de mailtekst het verschil kan maken tussen "geen datum" en een lege zin.
+     */
+    datum: textOf(item, C.datum) === '' ? null : textOf(item, C.datum),
+    themaNamen: (cell(item, themaRelation)?.linked_items ?? [])
+      .map((l) => l.name.trim())
+      .filter((n) => n !== ''),
+    trainerItemIds,
+    /**
+     * De people-kolom via `text`, niet via een `users`-bevraging.
+     *
+     * De briefing haalt de accountmanager wél op bij `users`, maar die heeft zijn mobiele
+     * nummer nodig en dat staat niet op het bord. De mail gebruikt alleen de naam, en die
+     * staat gewoon in `text` — een extra bevraging per training zou niets toevoegen aan een
+     * job die dit voor elke training van gisteren doet.
+     */
+    accountmanager: textOf(item, C.accountmanager),
   };
 }

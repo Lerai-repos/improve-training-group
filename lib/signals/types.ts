@@ -30,6 +30,26 @@ export type Finding =
       readonly themaId: string;
       readonly naam: string;
       readonly trainingen: number;
+    }
+  /**
+   * Een evaluatiemail die de deur niet uit is gekomen.
+   *
+   * De enige variant die NIET over ITG's gegevens gaat maar over een storing bij ons, en de
+   * enige die niet uit een bordscan komt: de rapportagejob laat hem achter in KV en deze
+   * controle raapt hem op. Zie `lib/mail/failure-store.ts` voor waarom dat via KV loopt en
+   * niet rechtstreeks naar het bord.
+   *
+   * Draagt geen `trainingen`, want het gaat over één specifieke training — het getal dat de
+   * andere varianten meedragen is er juist om te bewijzen dát een melding ergens over gaat, en
+   * hier is dat de training zelf.
+   */
+  | {
+      readonly kind: 'mail-mislukt';
+      readonly itemId: string;
+      readonly variant: 'met' | 'zonder';
+      readonly klanttitel: string;
+      readonly datum: string;
+      readonly reden: string;
     };
 
 /**
@@ -69,6 +89,15 @@ export function findingKey(finding: Finding): string {
       return `trainer-ontbreekt:${finding.trainerId}`;
     case 'thema-zonder-inhoud':
       return `thema-zonder-inhoud:${finding.themaId}`;
+    /**
+     * De variant hoort in de sleutel.
+     *
+     * Een training kan eerst als `zonder` mislukken en later, als de reacties alsnog binnen
+     * zijn, als `met`. Dat zijn twee verschillende mails en dus twee meldingen; op alleen het
+     * item-id zou de tweede de eerste overschrijven.
+     */
+    case 'mail-mislukt':
+      return `mail-mislukt:${finding.itemId}:${finding.variant}`;
   }
 }
 

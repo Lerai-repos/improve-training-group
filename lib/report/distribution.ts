@@ -142,3 +142,22 @@ export function averageLabel(values: readonly (number | null)[]): string | null 
 export function answeredCount(values: readonly (number | null)[]): number {
   return values.filter((v) => v !== null && Number.isFinite(v)).length;
 }
+
+/**
+ * Het percentage dat een verdiepende sessie waardevol vindt, of null als niemand de vraag
+ * beantwoordde.
+ *
+ * Over de BEANTWOORDERS, niet over alle respondenten. Dat is dezelfde noemer als de
+ * taartgrafiek in het rapport, en dat moet ook: de mail noemt dit percentage in een zin die
+ * de klant een bijlage verderop terugziet als grafiek. Zou de mail over alle respondenten
+ * rekenen, dan noemen die twee verschillende getallen over dezelfde vraag.
+ */
+export function vervolgPercentage(tally: {
+  readonly ja: number;
+  readonly total: number;
+}): number | null {
+  if (tally.total === 0) {
+    return null;
+  }
+  return Math.round((tally.ja / tally.total) * PERCENT);
+}

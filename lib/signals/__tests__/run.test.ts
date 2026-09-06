@@ -23,7 +23,7 @@ const label = (over: Partial<LabelRecord> = {}): LabelRecord => ({
   kleur: '#0A2B58',
   term: 'Training',
   rapportterm: 'de training',
-  evaluatieformulier: '',
+  evaluatieformulier: 'www.incompanytrainer.nl/evaluatieformulier',
   website: '',
   inventarisatieformulier: '',
   logo: asset,
@@ -92,6 +92,7 @@ function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
       new Map([['IT', label()]]),
     readThemas: async (): Promise<ReadonlyMap<string, ThemaRecord>> =>
       new Map([['12', { naam: 'Boksen', conceptInhoud: '' }]]),
+    readMailFailures: async () => [],
     readTrainers: async (): Promise<ReadonlySet<string>> => new Set(),
     writer: null,
     groups: GROUPS,
@@ -99,6 +100,58 @@ function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
     ...over,
   };
 }
+
+/**
+ * Een niet-verstuurde evaluatiemail is de enige melding die niet over ITG's gegevens gaat maar
+ * over een storing bij ons, en de enige die niet uit een bordscan komt.
+ */
+describe('niet-verstuurde evaluatiemails', () => {
+  const failure = {
+    itemId: 'a1',
+    variant: 'met' as const,
+    klanttitel: 'Onderhandelen',
+    datum: '2026-09-03',
+    reden: 'fetch failed',
+    atMs: 1,
+  };
+
+  it('wordt een melding op het Systeem-bord', async () => {
+    const report = await runDailyCheck(
+      deps({ writer: null, readMailFailures: async () => [failure] })
+    );
+    const gevonden = report.findings.filter((f) => f.kind === 'mail-mislukt');
+    expect(gevonden).toHaveLength(1);
+  });
+
+  /**
+   * Valt het agendabord weg, dan is dat geen reden om een mail die gisteren is blijven liggen
+   * niet te melden — die staat in KV en heeft met de agenda niets te maken.
+   */
+  it('wordt óók gemeld als de agenda niet gelezen kan worden', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readAgendaUsage: async () => {
+          throw new Error('agenda weg');
+        },
+        readMailFailures: async () => [failure],
+      })
+    );
+    expect(report.findings.some((f) => f.kind === 'mail-mislukt')).toBe(true);
+  });
+
+  it('meldt een storing in KV als mislukte controle, niet als "niets aan de hand"', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readMailFailures: async () => {
+          throw new Error('redis weg');
+        },
+      })
+    );
+    expect(report.failures.map((f) => f.check)).toContain('mails');
+  });
+});
 
 describe('runDailyCheck', () => {
   it('vindt het onbekende label en het lege thema', async () => {
@@ -522,6 +575,7 @@ describe('runDailyCheck — verweesde trainers en stale markers', () => {
       deps({
         writer,
         readAgendaUsage: async () => usage({ trainers: new Map([['999', 4]]) }),
+        readMailFailures: async () => [],
         readTrainers: async () => new Set(['111']),
       })
     );
@@ -534,6 +588,7 @@ describe('runDailyCheck — verweesde trainers en stale markers', () => {
       deps({
         writer,
         readAgendaUsage: async () => usage({ trainers: new Map([['111', 4]]) }),
+        readMailFailures: async () => [],
         readTrainers: async () => new Set(['111']),
       })
     );
@@ -546,6 +601,7 @@ describe('runDailyCheck — verweesde trainers en stale markers', () => {
       deps({
         writer,
         readAgendaUsage: async () => usage(),
+        readMailFailures: async () => [],
         readTrainers: async () => {
           throw new Error('trainersbord weg');
         },

@@ -6,18 +6,104 @@ import {
   readAgendaHistory,
 } from '@lib/evaluations';
 import { labelsBoardId } from '@lib/labels';
-import { readLabels } from '@lib/labels/read';
+import {
+  createFailureStore,
+  createGraphMailSender,
+  createSentGuard,
+  deadlineSignal,
+  deliveryNamespace,
+  isRedirected,
+  mailRecipients,
+} from '@lib/mail';
 import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
+import { readLabels } from '@lib/labels/read';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
+import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
+import { createGraphClient, graphConfigFromEnv } from '@lib/sharepoint/graph';
 
 import { reportAgendaBoards } from './agenda-boards';
 import { readTrainingForReport } from './training';
+import { readTrainerEmails } from './trainer-emails';
 
 import { createPdfRenderer } from './pdf';
 
-import type { DailyDeps } from './daily';
+import type { DailyDeps, DailyMailDeps } from './daily';
 import type { ReportRunDeps } from './run';
+
+/**
+ * De echte verzendkant: Graph voor de mail, Chromium voor het rapport, Redis voor de grendel.
+ *
+ * Dezelfde Graph-app als de briefingupload — het recht om te mailen komt uit een
+ * Exchange-roltoewijzing op één postvak, niet uit een Entra-permissie. Werpt als de
+ * omgevingsvariabelen ontbreken, en dat is de bedoeling: een dagjob die stilletjes niet mailt
+ * omdat er een sleutel weg is, is er een waar niemand achter komt.
+ *
+ * ## De looptijdgrens wordt LAAT opgehaald, niet hier
+ *
+ * `currentDeadlineMs` leest uit `AsyncLocalStorage`, en de route bouwt deze deps vóórdat hij
+ * `runWithDeadline` binnengaat. Wie hem hier meteen uitleest krijgt dus `null` en geeft Graph
+ * helemaal geen afbreeksignaal mee — waarna een vastgelopen upload doorloopt tot Vercel de
+ * functie afkapt. Dán is er geen `catch` meer, dus ook geen `release`, en blijft de claim
+ * staan zonder dat er iets verstuurd is.
+ *
+ * En het is een ABSOLUUT tijdstip, geen resterende duur. Dat rechtstreeks aan
+ * `AbortSignal.timeout` geven levert een tijdslimiet van tienduizenden jaren op: een signaal
+ * dat er is en nooit afgaat, wat erger is dan geen signaal, want het ziet eruit als dekking.
+ */
+function buildMailDeps(
+  client: Parameters<typeof readTrainerEmails>[0],
+  deadlineMs?: () => number | null
+): DailyMailDeps {
+  const signalNu = (): AbortSignal | undefined => deadlineSignal(() => deadlineMs?.() ?? null);
+
+  const config = graphConfigFromEnv();
+
+  /**
+   * De client komt er pas bij de eerste aanroep, en dat is bewust.
+   *
+   * Tegen die tijd loopt de run wél binnen `runWithDeadline`, dus dan pas is er een echte
+   * grens om mee te geven. Eén client voor de hele run, zodat het token hergebruikt wordt in
+   * plaats van per mail opnieuw opgehaald.
+   */
+  let graph: ReturnType<typeof createGraphClient> | null = null;
+  const lazyGraph = {
+    json: (pad: string, init?: RequestInit): Promise<unknown> => {
+      graph ??= createGraphClient(config, { signal: signalNu() });
+      return graph.json(pad, init);
+    },
+  };
+
+  const recipients = mailRecipients();
+  /** Eén ruimte voor de grendel én de meldingen; zie `deliveryNamespace`. */
+  const namespace = deliveryNamespace({ ...recipients, redirected: isRedirected(recipients) });
+
+  return {
+    recipients,
+    sender: createGraphMailSender({
+      client: lazyGraph,
+      sender: recipients.sender,
+      /**
+       * De brokken gaan buiten de Graph-client om, naar een vooraf geautoriseerde URL. Zonder
+       * deze regel draagt juist de traagste stap van allemaal geen grens.
+       */
+      uploadFetch: (url, init) => fetch(url, { ...init, signal: signalNu() }),
+    }),
+    /**
+     * De grendel krijgt een eigen ruimte zodra de bestemming is omgeleid.
+     *
+     * Anders blokkeert één geslaagde testverzending naar je eigen adres de échte levering aan
+     * `aanvragen@` en `backoffice@` — en dat is precies wat er gebeurt bij de eerste keer dat
+     * iemand dit voorzichtig uitprobeert.
+     */
+    failures: createFailureStore(createUpstashKvStore(createRedisClient()), namespace),
+    guard: createSentGuard(createRedisClient(), namespace),
+    /** Mét de looptijdgrens: Chromium is de traagste stap en had er als enige geen. */
+    renderer: createPdfRenderer(deadlineMs),
+    readTrainerEmails: (ids) => readTrainerEmails(client, ids),
+    nowMs: () => Date.now(),
+  };
+}
 
 /**
  * De echte aansluitingen voor de dagjob, op één plek.
@@ -33,6 +119,13 @@ export function buildDailyReportDeps(options: {
   /** De dag die verwerkt wordt; zit in de idempotency-sleutel. */
   date: string;
   deadlineMs?: () => number | null;
+  /**
+   * Of de mails de deur uit mogen.
+   *
+   * Geen standaardwaarde: elke aanroeper zegt het hardop. Een verstuurde mail is niet terug
+   * te nemen, en dat verdient geen impliciete keuze in een hulpfunctie.
+   */
+  mail: boolean;
 }): { deps: DailyDeps; boardId: string } {
   const { date, deadlineMs } = options;
   const token = process.env.MONDAY_API_TOKEN;
@@ -47,6 +140,7 @@ export function buildDailyReportDeps(options: {
   return {
     boardId,
     deps: {
+      mail: options.mail ? buildMailDeps(client, deadlineMs) : undefined,
       readAgenda: async () =>
         (await readAgendaHistory(client, reportAgendaBoards())).trainings.map((t) => ({
           trainingItemId: t.entry.trainingItemId,
@@ -121,6 +215,6 @@ export function buildReportRunDeps(deadlineMs?: () => number | null): ReportRunD
       ).responses,
     readTrainings: async () =>
       (await readAgendaHistory(client, reportAgendaBoards())).trainings.map((t) => t.ref),
-    renderer: createPdfRenderer(),
+    renderer: createPdfRenderer(deadlineMs),
   };
 }

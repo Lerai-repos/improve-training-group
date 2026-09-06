@@ -1,4 +1,4 @@
-import { labelFindings, themaFindings, trainerFindings } from './findings';
+import { labelFindings, mailFindings, themaFindings, trainerFindings } from './findings';
 import { withBoardLease } from './lease';
 import { groupMoves, staleClosedByMarkers } from './move';
 import { reconcile } from './reconcile';
@@ -8,6 +8,7 @@ import { findingKey } from './types';
 
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
+import type { MailFailure } from '@lib/mail';
 import type { AgendaUsage, ThemaRecord } from './findings';
 import type { SignalGroupIds } from './groups';
 import type { LeaseDeps } from './lease';
@@ -23,6 +24,7 @@ const LABEL_KINDS: readonly FindingKind[] = [
 ];
 const THEMA_KINDS: readonly FindingKind[] = ['thema-ontbreekt', 'thema-zonder-inhoud'];
 const TRAINER_KINDS: readonly FindingKind[] = ['trainer-ontbreekt'];
+const MAIL_KINDS: readonly FindingKind[] = ['mail-mislukt'];
 
 export interface DailyCheckDeps {
   readonly readSignals: () => Promise<readonly ExistingSignal[]>;
@@ -31,6 +33,13 @@ export interface DailyCheckDeps {
   readonly readThemas: () => Promise<ReadonlyMap<string, ThemaRecord>>;
   /** De ids van elk bestaand trainer-item, voor de verweesde-verwijzingcontrole. */
   readonly readTrainers: () => Promise<ReadonlySet<string>>;
+  /**
+   * Evaluatiemails die niet verstuurd zijn, uit KV.
+   *
+   * Geen bordbevraging: de rapportagejob laat ze achter en deze controle raapt ze op, zodat er
+   * één schrijver op het Systeem-bord blijft.
+   */
+  readonly readMailFailures: () => Promise<readonly MailFailure[]>;
   /** `null` in een droogloop: dan wordt er niets geschreven, ook niet de samenvatting. */
   readonly writer: SignalWriter | null;
   readonly groups: SignalGroupIds;
@@ -80,17 +89,19 @@ const message = (error: unknown): string =>
  * controle als "niets gevonden" doorgaat — de soorten van een mislukte controle komen niet in
  * `checked`, en `reconcile` raakt dan geen enkele openstaande melding van die soort aan.
  */
-async function attempt(
-  check: string,
-  kinds: readonly FindingKind[],
-  run: () => Promise<readonly Finding[]>
-): Promise<{
+interface CheckResult {
   /** Welke controle dit was — nodig om te weten of we over zijn storingsrij mogen oordelen. */
   check: string;
   findings: readonly Finding[];
   checked: readonly FindingKind[];
   failure: CheckFailure | null;
-}> {
+}
+
+async function attempt(
+  check: string,
+  kinds: readonly FindingKind[],
+  run: () => Promise<readonly Finding[]>
+): Promise<CheckResult> {
   try {
     return { check, findings: await run(), checked: kinds, failure: null };
   } catch (error) {
@@ -129,7 +140,7 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
     agendaFailure = { check: 'agenda', error: message(error) };
   }
 
-  const results =
+  const results: CheckResult[] =
     usage === null
       ? []
       : [
@@ -143,6 +154,18 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
             trainerFindings(usage, await deps.readTrainers())
           ),
         ];
+
+  /**
+   * De niet-verstuurde mails, en die hangen NIET aan de agenda.
+   *
+   * Ze komen uit KV, niet uit een bordscan, dus ze horen buiten de `usage === null`-tak: valt
+   * het agendabord weg, dan is dat geen reden om een mail die gisteren is blijven liggen niet
+   * te melden. Wél door dezelfde `attempt`, zodat een storing in KV net zo goed een
+   * `controle-mislukt`-rij oplevert als elke andere.
+   */
+  results.push(
+    await attempt('mails', MAIL_KINDS, async () => mailFindings(await deps.readMailFailures()))
+  );
 
   const findings = results.flatMap((r) => r.findings);
   const checked = results.flatMap((r) => r.checked);
@@ -320,7 +343,13 @@ export function summaryText(input: SummaryInput): string {
     const hits = input.findings.filter((f) => kinds.includes(f.kind));
     return {
       meldingen: hits.length,
-      trainingen: hits.reduce((sum, f) => sum + f.trainingen, 0),
+      /**
+       * `mail-mislukt` draagt geen trainingental, want hij gáát over één training.
+       *
+       * De andere varianten tellen hoeveel trainingen een configuratiefout raakt; dat getal is
+       * daar het bewijs dat de melding ergens over gaat. Hier is de training zelf de melding.
+       */
+      trainingen: hits.reduce((sum, f) => sum + ('trainingen' in f ? f.trainingen : 1), 0),
     };
   };
 

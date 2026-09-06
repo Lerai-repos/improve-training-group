@@ -3,6 +3,7 @@ import { normaliseHex } from '@lib/labels/validate';
 
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
+import type { MailFailure } from '@lib/mail';
 import type { Finding, LabelFieldIssue } from './types';
 
 /** Hoe vaak elke labelwaarde en elk thema-item op de agendaborden voorkomt. */
@@ -45,6 +46,7 @@ export const LABEL_REQUIRED_FIELDS: readonly string[] = [
   'volledigeNaam',
   'kleur',
   'rapportterm',
+  'evaluatieformulier',
   'logo',
   'voorblad',
   'achterblad',
@@ -73,6 +75,15 @@ export function unusableLabelFields(record: LabelRecord): readonly LabelFieldIss
     issues.push({ veld: 'kleur', reden: 'ongeldig' });
   }
   leegAls('rapportterm', record.rapportterm);
+  /**
+   * Sinds 4-Sep-2026 leest de aftersalesmail deze URL.
+   *
+   * Hij stond hier niet, omdat de lijst met opzet alleen velden bevat die vandaag écht
+   * gelezen worden — een melding over een veld dat nergens toe doet leert ITG de meldingen
+   * te negeren. Nu staat de zin "je vindt het formulier hier:" in een mail aan een klant, en
+   * een leeg veld zet daar een blokhaak in plaats van een link.
+   */
+  leegAls('evaluatieformulier', record.evaluatieformulier);
 
   for (const [veld, asset] of [
     ['logo', record.logo],
@@ -191,4 +202,26 @@ export function trainerFindings(usage: AgendaUsage, live: ReadonlySet<string>): 
       trainerId,
       trainingen: usage.trainers.get(trainerId) ?? 0,
     }));
+}
+
+/**
+ * De niet-verstuurde evaluatiemails, zoals de rapportagejob ze heeft achtergelaten.
+ *
+ * De enige vondst die niet uit een bordscan komt maar uit KV, en daarmee de enige die over een
+ * storing bij ONS gaat in plaats van over ITG's gegevens. Zie `lib/mail/failure-store.ts` voor
+ * waarom die omweg er is: één schrijver op het Systeem-bord.
+ *
+ * Er wordt niets gefilterd. Anders dan bij de configuratievondsten is hier geen sprake van
+ * "staat het wel in gebruik" — een mail die niet verstuurd is, is er één, ongeacht wat er
+ * verder op de agenda staat.
+ */
+export function mailFindings(failures: readonly MailFailure[]): readonly Finding[] {
+  return failures.map((f) => ({
+    kind: 'mail-mislukt',
+    itemId: f.itemId,
+    variant: f.variant,
+    klanttitel: f.klanttitel,
+    datum: f.datum,
+    reden: f.reden,
+  }));
 }

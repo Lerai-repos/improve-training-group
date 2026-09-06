@@ -76,6 +76,18 @@ export function findingName(finding: Finding): string {
       return `Thema "${finding.naam}" heeft geen concept-inhoud — ${trainingen(finding.trainingen)}`;
     case 'trainer-ontbreekt':
       return `Trainer ${finding.trainerId} bestaat niet meer — ${trainingen(finding.trainingen)}`;
+    /**
+     * De reden hoort in de NAAM, niet alleen in het detail.
+     *
+     * De naam is de vingerafdruk waarop `reconcile` een wijziging ziet. Verandert een
+     * wegvallende verbinding in een geweigerde verzending, dan is dat een ander probleem met
+     * een andere reparatie, en hoort de melding bijgewerkt te worden in plaats van stil te
+     * blijven staan met de oude oorzaak.
+     */
+    case 'mail-mislukt':
+      return (
+        `Evaluatiemail niet verstuurd — ${finding.klanttitel} (${finding.datum}) — ` + finding.reden
+      );
   }
 }
 
@@ -142,6 +154,20 @@ export function findingDetail(finding: Finding): string {
           'nodig? ' +
           AFVINKEN,
       ].join('\n\n');
+
+    case 'mail-mislukt':
+      return [
+        `De evaluatiemails voor "${finding.klanttitel}" van ${finding.datum} zijn niet ` +
+          `verstuurd. Reden: ${finding.reden}`,
+        finding.variant === 'met'
+          ? 'Het gaat om de twee mails MET rapport, naar aanvragen@ en backoffice@. Het cijfer ' +
+            'en het aantal respondenten staan wél op het agendabord; alleen de mails ontbreken.'
+          : 'Het gaat om de twee mails ZONDER rapport (geen reacties gevonden), naar ' +
+            'aanvragen@ en backoffice@. De status op het agendabord staat wél goed.',
+        'Dit lost zichzelf niet op: de dagelijkse verwerking kijkt alleen naar de dag ervoor. ' +
+          `Laat Lerai de verwerking van ${finding.datum} opnieuw draaien; alleen de ontbrekende ` +
+          'mails gaan dan alsnog weg, de rest wordt overgeslagen.',
+      ].join('\n\n');
   }
 }
 
@@ -157,6 +183,8 @@ export function findingOnderdeel(finding: Finding): string {
       return "Thema's";
     case 'trainer-ontbreekt':
       return 'Trainers';
+    case 'mail-mislukt':
+      return 'Evaluatiemails';
   }
 }
 

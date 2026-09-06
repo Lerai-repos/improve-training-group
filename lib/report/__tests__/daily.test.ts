@@ -5,7 +5,10 @@ import { amsterdamHour, classify, previousDay, runDailyReports, shouldRunNow } f
 
 import type { EvaluationResponse } from '@lib/evaluations';
 import type { LabelRecord } from '@lib/labels/read';
-import type { DailyAgendaTraining, DailyDeps } from '../daily';
+import { mailRecipients } from '@lib/mail';
+
+import type { MailFailure, OutgoingMail } from '@lib/mail';
+import type { DailyAgendaTraining, DailyDeps, DailyMailDeps } from '../daily';
 import type { TrainingForReport } from '../training';
 
 const AGENDA_2026 = '5087396949';
@@ -34,6 +37,10 @@ const training: TrainingForReport = {
   rawIeCode: '251050',
   rawLabel: 'IT',
   ieStatus: '',
+  datum: '2026-09-03',
+  themaNamen: ['Onderhandelen'],
+  trainerItemIds: ['t1'],
+  accountmanager: 'Dirkje',
 };
 
 const response = (grade: number | null): EvaluationResponse => ({
@@ -360,5 +367,429 @@ describe('amsterdamHour', () => {
   /** Middernacht moet 0 zijn en niet 24 — `hour12:false` levert in sommige locales `24`. */
   it('geeft middernacht als 0', () => {
     expect(amsterdamHour(new Date('2026-07-14T22:00:00Z'))).toBe(0);
+  });
+});
+
+/**
+ * De mailkant van de dagjob.
+ *
+ * De teksten zelf zijn getest in `lib/mail`; hier gaat het om de bedrading: welke uitkomst
+ * welke variant oplevert, dat de grendel voorkomt dat een herstelrun dubbel stuurt, en dat
+ * een mislukte mail de dag niet stilzet maar wél zichtbaar wordt.
+ */
+describe('de mails vanuit de dagjob', () => {
+  const mailHarness = (over: Partial<DailyMailDeps> = {}) => {
+    const verstuurd: OutgoingMail[] = [];
+    /** Kort geclaimd (verzending loopt) tegenover duurzaam bevestigd (verzending gelukt). */
+    const geclaimd = new Set<string>();
+    const bevestigd = new Set<string>();
+    /** Wat de dagelijkse controle morgen op het Systeem-bord zou zetten. */
+    const gemeld = new Map<string, MailFailure>();
+    const mail: DailyMailDeps = {
+      /**
+       * De ECHTE bestemmingen als standaard, want `isRedirected` vergelijkt daarmee. Met
+       * verzonnen adressen zou elke test als "omgeleid" tellen en zou de test die juist een
+       * omleiding aantoont niets meer bewijzen.
+       */
+      recipients: mailRecipients({}),
+      sender: {
+        send: async (m) => {
+          verstuurd.push(m);
+        },
+      },
+      guard: {
+        claim: async (itemId, variant) => {
+          const sleutel = `${itemId}:${variant}`;
+          if (geclaimd.has(sleutel)) {
+            // Bevestigd = aantoonbaar verstuurd; anders is een andere run nog bezig.
+            return { kind: 'bezet', reden: bevestigd.has(sleutel) ? 'verstuurd' : 'bezig' };
+          }
+          geclaimd.add(sleutel);
+          return { kind: 'claimed', token: `token:${sleutel}` };
+        },
+        confirm: async (itemId, variant, token) => {
+          const sleutel = `${itemId}:${variant}`;
+          // Alleen de eigenaar mag bevestigen; een vreemd token hoort af te ketsen.
+          if (token !== `token:${sleutel}`) {
+            return 'verloren';
+          }
+          bevestigd.add(sleutel);
+          return 'ok';
+        },
+        release: async (itemId, variant, token) => {
+          const sleutel = `${itemId}:${variant}`;
+          if (token !== `token:${sleutel}`) {
+            return 'verloren';
+          }
+          geclaimd.delete(sleutel);
+          return 'ok';
+        },
+      },
+      failures: {
+        record: async (f) => {
+          gemeld.set(`${f.itemId}:${f.variant}`, f);
+        },
+        clear: async (itemId, variant) => {
+          gemeld.delete(`${itemId}:${variant}`);
+        },
+        list: async () => [...gemeld.values()],
+      },
+      renderer: { render: async () => new Uint8Array([1, 2, 3]) },
+      readTrainerEmails: async () => ['jan@voorbeeld.nl'],
+      nowMs: () => 1,
+      ...over,
+    };
+    return { mail, verstuurd, geclaimd, bevestigd, gemeld };
+  };
+
+  it('stuurt bij een beoordeelde training twee mails, met het rapport erbij', async () => {
+    const { mail, verstuurd } = mailHarness();
+    const report = await runDailyReports(deps({ mail }), options);
+
+    expect(report.mailed).toBe(2);
+    expect(verstuurd.map((m) => m.to[0])).toEqual([
+      'aanvragen@improvetraininggroup.nl',
+      'backoffice@improvetraininggroup.nl',
+    ]);
+    expect(verstuurd.every((m) => m.attachment !== undefined)).toBe(true);
+  });
+
+  it('stuurt zonder reacties twee mails zónder bijlage', async () => {
+    const { mail, verstuurd } = mailHarness();
+    const report = await runDailyReports(deps({ mail, readResponses: async () => [] }), options);
+
+    expect(report.mailed).toBe(2);
+    expect(verstuurd.every((m) => m.attachment === undefined)).toBe(true);
+    expect(verstuurd[0].subject).toContain('GEEN evaluaties');
+  });
+
+  /**
+   * De vier overige uitkomsten schrijven ook niets naar het bord. Een mail zou hier iets
+   * beweren wat niet waar is: zonder code is er nooit een evaluatie uitgezet, en bij een
+   * dubbele code bestaan de reacties wél.
+   */
+  it('mailt niet bij een uitkomst die ook niets naar het bord schrijft', async () => {
+    for (const kapot of [
+      { ...training, rawIeCode: null },
+      { ...training, labelCode: null },
+      { ...training, trainerNamen: [] },
+    ]) {
+      const { mail, verstuurd } = mailHarness();
+      const report = await runDailyReports(
+        deps({ mail, readTraining: async () => kapot }),
+        options
+      );
+      expect(report.mailed).toBe(0);
+      expect(verstuurd).toHaveLength(0);
+    }
+  });
+
+  it('verstuurt niets bij een droogloop, maar zegt wel wat het zou doen', async () => {
+    const { mail, verstuurd, geclaimd } = mailHarness();
+    const report = await runDailyReports(deps({ mail }), { ...options, dryRun: true });
+
+    expect(verstuurd).toHaveLength(0);
+    expect(report.mailed).toBe(0);
+    // De grendel mag ook niet geclaimd worden: dan zou de échte run erdoor geblokkeerd zijn.
+    expect(geclaimd.size).toBe(0);
+    expect(report.lines[0].mailNote).toContain('zou');
+  });
+
+  it('stuurt bij een herstelrun niet nog een keer dezelfde mail', async () => {
+    const { mail, verstuurd } = mailHarness();
+    await runDailyReports(deps({ mail }), options);
+    const tweede = await runDailyReports(deps({ mail }), options);
+
+    expect(verstuurd).toHaveLength(2);
+    expect(tweede.mailed).toBe(0);
+    expect(tweede.lines[0].mailNote).toContain('al eerder verstuurd');
+  });
+
+  /**
+   * Precies het geval waarvoor de sleutel de variant bevat: de reacties komen later alsnog
+   * binnen, en dan hoort het rapport er alsnog uit te gaan.
+   */
+  it('stuurt de MET-mails alsnog als de reacties later binnenkomen', async () => {
+    const { mail, verstuurd } = mailHarness();
+    await runDailyReports(deps({ mail, readResponses: async () => [] }), options);
+    expect(verstuurd).toHaveLength(2);
+
+    const tweede = await runDailyReports(deps({ mail }), options);
+    expect(tweede.mailed).toBe(2);
+    expect(verstuurd).toHaveLength(4);
+    expect(verstuurd[2].attachment).toBeDefined();
+  });
+
+  it('werkt het bord bij ook als het mailen mislukt', async () => {
+    const { mail, geclaimd } = mailHarness({
+      sender: {
+        send: async () => {
+          throw new Error('Exchange zei nee');
+        },
+      },
+    });
+    const writeColumns = vi.fn(async () => undefined);
+    const report = await runDailyReports(deps({ mail, writeColumns }), options);
+
+    expect(writeColumns).toHaveBeenCalledTimes(1);
+    expect(report.written).toBe(1);
+    expect(report.mailFailures).toEqual(['i1']);
+    expect(report.lines[0].mailNote).toContain('Exchange zei nee');
+    // De claim is teruggegeven, dus een herstelrun mag het opnieuw proberen.
+    expect(geclaimd.size).toBe(0);
+  });
+
+  it('bevestigt de claim pas nadat beide mails weg zijn', async () => {
+    const { mail, bevestigd } = mailHarness();
+    await runDailyReports(deps({ mail }), options);
+    expect([...bevestigd]).toEqual(['i1:met']);
+  });
+
+  /**
+   * De claim mag NIET blijvend worden als het versturen mislukt: dan zou een half jaar lang
+   * geen enkele herstelrun deze mail nog oppakken, zonder dat iemand iets merkt.
+   */
+  it('bevestigt niets als het versturen mislukt', async () => {
+    const { mail, bevestigd } = mailHarness({
+      sender: {
+        send: async () => {
+          throw new Error('Exchange zei nee');
+        },
+      },
+    });
+    await runDailyReports(deps({ mail }), options);
+    expect(bevestigd.size).toBe(0);
+  });
+
+  it('bevestigt niets bij een droogloop', async () => {
+    const { mail, bevestigd } = mailHarness();
+    await runDailyReports(deps({ mail }), { ...options, dryRun: true });
+    expect(bevestigd.size).toBe(0);
+  });
+
+  it('meldt waar de mails heen gingen', async () => {
+    const { mail } = mailHarness();
+    const report = await runDailyReports(deps({ mail }), options);
+    expect(report.delivery).toEqual({
+      klant: 'aanvragen@improvetraininggroup.nl',
+      trainer: 'backoffice@improvetraininggroup.nl',
+      redirected: false,
+    });
+  });
+
+  /**
+   * Blijft een testomleiding per ongeluk in productie staan, dan slaagt elke run terwijl elk
+   * rapport naar een testadres gaat. Dat mag niet uit de uitkomst te halen zijn.
+   */
+  it('markeert een omgeleide bestemming als omgeleid', async () => {
+    const { mail } = mailHarness({
+      recipients: {
+        klant: 'tim@lerai.nl',
+        trainer: 'tim@lerai.nl',
+        sender: 'automatisering@improvetraininggroup.nl',
+      },
+    });
+    const report = await runDailyReports(deps({ mail }), options);
+    expect(report.delivery?.redirected).toBe(true);
+  });
+
+  it('geeft ontbrekende huisstijl door in plaats van hem te laten verdwijnen', async () => {
+    /**
+     * Een onbruikbare URL laat `fetch` meteen struikelen, zonder netwerk — precies wat een
+     * verlopen Monday-asset in het echt doet, en deterministisch in een test.
+     */
+    const kapotLogo = {
+      ...label,
+      logo: { id: 'a', name: 'logo.png', publicUrl: 'geen-url' },
+    };
+    const { mail, verstuurd } = mailHarness();
+    const report = await runDailyReports(
+      deps({ mail, readLabels: async () => new Map([['IT', kapotLogo]]) }),
+      options
+    );
+
+    expect(report.lines[0].warnings).toHaveLength(1);
+    expect(report.lines[0].warnings[0]).toContain('logo.png');
+    expect(verstuurd[0].body.startsWith('LET OP')).toBe(true);
+  });
+
+  /**
+   * Een mislukte mail komt NIET vanzelf goed: de dagjob kijkt alleen naar de dag ervoor. Zonder
+   * melding blijft hij liggen tot iemand toevallig in een log kijkt.
+   */
+  it('laat een mislukte mail achter voor de dagelijkse controle', async () => {
+    const { mail, gemeld } = mailHarness({
+      sender: {
+        send: async () => {
+          throw new Error('Exchange zei nee');
+        },
+      },
+    });
+    await runDailyReports(deps({ mail }), options);
+
+    expect([...gemeld.keys()]).toEqual(['i1:met']);
+    expect(gemeld.get('i1:met')).toMatchObject({
+      itemId: 'i1',
+      variant: 'met',
+      klanttitel: 'Onderhandelen',
+      datum: '2026-09-03',
+    });
+    expect(gemeld.get('i1:met')?.reden).toContain('Exchange zei nee');
+  });
+
+  it('haalt de melding weg zodra dezelfde mail alsnog verstuurd is', async () => {
+    let stuk = true;
+    const { mail, gemeld } = mailHarness({
+      sender: {
+        send: async () => {
+          if (stuk) {
+            throw new Error('Exchange zei nee');
+          }
+        },
+      },
+    });
+    await runDailyReports(deps({ mail }), options);
+    expect(gemeld.size).toBe(1);
+
+    stuk = false;
+    await runDailyReports(deps({ mail }), options);
+    expect(gemeld.size).toBe(0);
+  });
+
+  it('meldt niets bij een storing die vanzelf overwaait', async () => {
+    // Eén weggevallen socket, tweede poging goed: geen mail kwijt, dus ook niets te melden.
+    let n = 0;
+    const { mail, gemeld } = mailHarness({
+      sender: {
+        send: async () => {
+          n += 1;
+          if (n === 1) {
+            throw new Error('fetch failed', { cause: new Error('read ECONNRESET') });
+          }
+        },
+      },
+    });
+    const report = await runDailyReports(deps({ mail }), options);
+    expect(gemeld.size).toBe(0);
+    expect(report.mailed).toBe(2);
+    expect(report.lines[0].mailNote).toContain('opnieuw');
+  });
+
+  /**
+   * De mails zijn dan al weg. Struikelt het opruimen van een oude melding daarna, dan mag dat
+   * de verzending niet alsnog als mislukt boeken — een herstelrun zou allebei de mails nóg een
+   * keer sturen om een hikje in KV.
+   */
+  it('boekt de verzending niet als mislukt als alleen het opruimen struikelt', async () => {
+    const { mail, verstuurd, bevestigd } = mailHarness();
+    const brekend: typeof mail.failures = {
+      record: mail.failures.record,
+      clear: async () => {
+        throw new Error('redis hikje');
+      },
+      list: mail.failures.list,
+    };
+    const report = await runDailyReports(deps({ mail: { ...mail, failures: brekend } }), options);
+
+    expect(report.mailFailures).toEqual([]);
+    expect(report.mailed).toBe(2);
+    expect(verstuurd).toHaveLength(2);
+    expect([...bevestigd]).toEqual(['i1:met']);
+    expect(report.lines[0].mailNote).toContain('oude melding bleef staan');
+  });
+
+  /**
+   * De enige plek waar een blijven-hangen-melding nog weggaat. Lukte het opruimen destijds
+   * niet, dan komt de verzendkant er nooit meer langs — die stopt bij een bevestigde claim.
+   * Zonder dit blijft er voorgoed "mail mislukt" op het bord staan over een aangekomen mail.
+   */
+  it('ruimt een achterstallige melding op bij een herstelrun', async () => {
+    let opruimenKapot = true;
+    const { mail, gemeld, verstuurd } = mailHarness();
+    const wankel: typeof mail.failures = {
+      record: mail.failures.record,
+      clear: async (itemId, variant) => {
+        if (opruimenKapot) {
+          throw new Error('redis hikje');
+        }
+        await mail.failures.clear(itemId, variant);
+      },
+      list: mail.failures.list,
+    };
+    // Een eerdere run liet een melding achter die niet opgeruimd kon worden.
+    await wankel.record({
+      itemId: 'i1',
+      variant: 'met',
+      klanttitel: 'Onderhandelen',
+      datum: '2026-09-03',
+      reden: 'fetch failed',
+      atMs: 1,
+    });
+
+    const deps1 = deps({ mail: { ...mail, failures: wankel } });
+    await runDailyReports(deps1, options);
+    expect(gemeld.size).toBe(1);
+    expect(verstuurd).toHaveLength(2);
+
+    // De herstelrun verstuurt niets meer, maar ruimt de melding wél op.
+    opruimenKapot = false;
+    const tweede = await runDailyReports(deps1, options);
+    expect(tweede.mailed).toBe(0);
+    expect(verstuurd).toHaveLength(2);
+    expect(gemeld.size).toBe(0);
+    expect(tweede.lines[0].mailNote).toContain('al eerder verstuurd');
+  });
+
+  it('raakt niets aan terwijl een andere run nog bezig is', async () => {
+    // 'bezig' is de voorzichtige lezing: dan is er nog niets bewezen om op te ruimen.
+    const { mail, gemeld } = mailHarness();
+    const blijftHangen: typeof mail.guard = {
+      claim: async () => ({ kind: 'bezet', reden: 'bezig' }),
+      confirm: mail.guard.confirm,
+      release: mail.guard.release,
+    };
+    await mail.failures.record({
+      itemId: 'i1',
+      variant: 'met',
+      klanttitel: 'Onderhandelen',
+      datum: '2026-09-03',
+      reden: 'fetch failed',
+      atMs: 1,
+    });
+
+    const report = await runDailyReports(deps({ mail: { ...mail, guard: blijftHangen } }), options);
+    expect(gemeld.size).toBe(1);
+    expect(report.lines[0].mailNote).toContain('bezig');
+  });
+
+  /**
+   * Juist bij een halve verzending is het getal belangrijk: de herstelrun stuurt de eerste
+   * mail opnieuw, en `0 verstuurd` in het logboek verbergt dat.
+   */
+  it('houdt vast hoeveel er wél weg zijn als de tweede mail mislukt', async () => {
+    let n = 0;
+    const { mail } = mailHarness({
+      sender: {
+        send: async () => {
+          n += 1;
+          if (n === 2) {
+            throw new Error('Exchange zei nee');
+          }
+        },
+      },
+    });
+    const report = await runDailyReports(deps({ mail }), options);
+
+    expect(report.mailed).toBe(1);
+    expect(report.lines[0].mailed).toBe(1);
+    expect(report.mailFailures).toEqual(['i1']);
+    expect(report.lines[0].mailNote).toContain('1 van de 2 was al weg');
+  });
+
+  it('doet niets aan de mailkant als er geen verzender is aangesloten', async () => {
+    const report = await runDailyReports(deps(), options);
+    expect(report.mailed).toBe(0);
+    expect(report.lines[0].mailNote).toBe('');
+    expect(report.mailFailures).toEqual([]);
   });
 });

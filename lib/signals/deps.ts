@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { labelsBoardId } from '@lib/labels';
+import { createFailureStore } from '@lib/mail';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
@@ -82,6 +83,11 @@ export function buildDailyCheckDeps(options: {
       readLabels: () => readLabelsForCheck(client, labelsBoardId()),
       readThemas: () => readThemas(client),
       readTrainers: () => readTrainers(client),
+      /**
+       * Uit KV, niet van een bord: de rapportagejob laat hier achter welke evaluatiemails
+       * niet verstuurd zijn, zodat er één schrijver op het Systeem-bord blijft.
+       */
+      readMailFailures: () => createFailureStore(createUpstashKvStore(createRedisClient())).list(),
       writer: options.dryRun ? null : createSignalWriter(write, boardId, runId, now),
       groups: options.groups,
       now,
