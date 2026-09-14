@@ -2,7 +2,7 @@ import { THEMAS_BOARD, TRAINERS_BOARD } from '@lib/monday/board-config';
 import { THEMAS_COLUMNS } from '@lib/briefing/columns';
 import { readLabelRows } from '@lib/labels/read';
 import { assertColumns } from '@lib/monday/schema-check';
-import { agendaTrainerRelations, reportAgendaBoards } from '@lib/report/agenda-boards';
+import { trainerRelationColumns } from '@lib/evaluations';
 
 import { CLOSED_BY_CHECK, SIGNAL_COLUMNS, SIGNAL_EXPECTED_COLUMNS } from './columns';
 
@@ -47,22 +47,8 @@ function agendaUsageExpectedColumns(board: AgendaHistoryColumns): readonly Expec
       type: 'board_relation',
       settingsIncludes: [`"boardIds":[${THEMAS_BOARD}]`],
     },
-    ...trainerColumns(board.boardId).map(trainer),
+    ...trainerRelationColumns(board).map(trainer),
   ];
-}
-
-/**
- * De trainerkolommen van dit bord: lead en, waar hij bestaat, co-trainer.
- *
- * **Allebei**, want een co-trainer is net zo goed een verwijzing die kan verwijzen naar een
- * verwijderd item — en op 2025 bestaat de co-kolom niet, dus de lijst is per jaargang anders.
- */
-function trainerColumns(boardId: string): readonly string[] {
-  const relaties = agendaTrainerRelations(boardId);
-  if (relaties === null) {
-    return [];
-  }
-  return relaties.co === null ? [relaties.lead] : [relaties.lead, relaties.co];
 }
 
 const THEMA_EXPECTED_COLUMNS: readonly ExpectedColumn[] = [
@@ -120,14 +106,23 @@ export function isChecked(cell: { checked?: boolean | string | null } | undefine
 }
 
 /**
- * Hoeveel trainingen elk label en elk thema gebruiken, over álle agendaborden.
+ * Hoeveel trainingen elk label en elk thema gebruiken, over de meegegeven agendaborden.
+ *
+ * De aanroeper geeft de ACTIEVE borden mee: een gearchiveerd jaar gebruikt geen labels meer, en
+ * zijn trainingen tellen voor een configuratiemelding niet mee.
+ *
+ * Lead- én co-trainerkolom per bord, want een co-trainer kan net zo goed naar een verwijderd
+ * item wijzen; op 2025 bestaat de co-kolom niet.
  *
  * Gaat door `fetchBoardItems`, dat een onvolledige of incoherente pull weigert. Dat is hier
  * geen luxe: een halve agenda levert lágere tellingen op, en een label dat daardoor op nul
  * uitkomt verdwijnt uit de vondsten — waarna de opruimstap de openstaande melding afvinkt.
  * Een gemiste pagina zou dus een melding wégpoetsen in plaats van er een bij te maken.
  */
-export async function readAgendaUsage(client: MondayGraphQLClient): Promise<AgendaUsage> {
+export async function readAgendaUsage(
+  client: MondayGraphQLClient,
+  boards: readonly AgendaHistoryColumns[]
+): Promise<AgendaUsage> {
   const labels = new Map<string, number>();
   const themas = new Map<string, number>();
   const trainers = new Map<string, number>();
@@ -139,9 +134,9 @@ export async function readAgendaUsage(client: MondayGraphQLClient): Promise<Agen
     }
   };
 
-  for (const board of reportAgendaBoards()) {
+  for (const board of boards) {
     const count = await checkedSchema(client, board.boardId, agendaUsageExpectedColumns(board));
-    const relaties = trainerColumns(board.boardId);
+    const relaties = trainerRelationColumns(board);
     const ids = [AGENDA_LABEL_COLUMN, board.themaRelation, ...relaties]
       .map((id) => `"${id}"`)
       .join(', ');

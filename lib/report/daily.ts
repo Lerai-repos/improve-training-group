@@ -51,6 +51,11 @@ export interface DailyAgendaTraining {
   /** `YYYY-MM-DD`, of null wanneer er geen datum staat. */
   readonly datum: string | null;
   readonly boardId: string;
+  /**
+   * Staat het bord actief in Monday? Alleen die trainingen worden verwerkt. Een gearchiveerd
+   * jaar is historie: het telt mee voor de toekenning, maar zijn statussen bewegen niet meer.
+   */
+  readonly live: boolean;
   readonly ref: TrainingRef;
 }
 
@@ -85,7 +90,8 @@ export interface DailyDeps {
   readTraining: (itemId: string) => Promise<TrainingForReport | null>;
   readLabels: () => Promise<ReadonlyMap<LabelCode, LabelRecord>>;
   readResponses: () => Promise<readonly EvaluationResponse[]>;
-  writeColumns: (itemId: string, values: Record<string, unknown>) => Promise<void>;
+  /** Op het bord van de training zelf: een 2027-item schrijven met het id van 2026 mislukt. */
+  writeColumns: (itemId: string, boardId: string, values: Record<string, unknown>) => Promise<void>;
   /**
    * Weglaten betekent: niet mailen.
    *
@@ -99,8 +105,6 @@ export interface DailyDeps {
 export interface DailyOptions {
   /** De dag die verwerkt wordt, `YYYY-MM-DD`. De aanroeper bepaalt hem, niet dit bestand. */
   readonly date: string;
-  /** Alleen trainingen van dit bord. De lopende jaargang; oudere jaargangen zijn historie. */
-  readonly boardId: string;
   readonly dryRun: boolean;
 }
 
@@ -507,12 +511,12 @@ export async function runDailyReports(
   const agenda = await deps.readAgenda();
 
   /**
-   * Filteren op datum ÉN bord.
+   * Filteren op datum ÉN op een actief bord.
    *
-   * Zonder de bordcheck zou een oude jaargang met dezelfde datum meelopen; die trainingen
-   * zijn historie en hun status hoort niet meer te bewegen.
+   * Elk actief agendabord doet mee, dus ook een nieuwe jaargang die ITG heeft gedupliceerd.
+   * Een gearchiveerd jaar niet: dat is historie, en die statussen horen niet meer te bewegen.
    */
-  const today = agenda.filter((t) => t.datum === options.date && t.boardId === options.boardId);
+  const today = agenda.filter((t) => t.datum === options.date && t.live);
 
   if (today.length === 0) {
     return {
@@ -580,7 +584,7 @@ export async function runDailyReports(
     const heeftWaarden = Object.keys(write.values).length > 0;
 
     if (heeftWaarden && !options.dryRun) {
-      await deps.writeColumns(item.trainingItemId, write.values);
+      await deps.writeColumns(item.trainingItemId, item.boardId, write.values);
       written += 1;
     }
 

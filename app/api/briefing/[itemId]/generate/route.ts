@@ -141,7 +141,7 @@ export async function POST(
       return scope.response;
     }
 
-    const { monday, mutate, checklists, boardId } = guarded.deps;
+    const { monday, mutate, checklists } = guarded.deps;
     const site = siteConfigFromEnv();
     const graphConfig = graphConfigFromEnv();
     const graph = createGraphClient(graphConfig, { signal: afbreken.signal });
@@ -157,12 +157,17 @@ export async function POST(
 
     const uit = await runGenerate(
       {
-        readTraining: () => readBriefingTraining(monday, itemId, { boardId }),
+        readTraining: () =>
+          readBriefingTraining(monday, itemId, {
+            boardId: scope.boardId,
+            relations: scope.relations,
+          }),
         readChecklist: () => checklists.read(itemId),
         store,
         site,
         buildContext: (training, invoer) => buildGenerateContext(monday, training, invoer),
-        recorder: createBriefingRecorder(mutate, boardId),
+        // Op het bord van deze training: een 2027-item bijwerken met het id van 2026 mislukt.
+        recorder: createBriefingRecorder(mutate, scope.boardId),
         // De Nederlandse kalenderdag: `toISOString` geeft de UTC-datum, en dan staat er
         // tussen middernacht en 01:00 (winter) of 02:00 (zomer) gisteren in Monday.
         today: () => amsterdamToday(new Date()),

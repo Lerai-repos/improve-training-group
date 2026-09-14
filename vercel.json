@@ -24,6 +24,10 @@
     {
       "path": "/api/cron/daily-check",
       "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/cron/sync-webhooks",
+      "schedule": "7 * * * *"
     }
   ]
 }

@@ -386,6 +386,63 @@ describe('buildTabView', () => {
     expect(uit.issues.some((i) => i.kind === 'interne_trainer')).toBe(true);
   });
 
+  describe('gereedheid', () => {
+    /** Een QR-waarde die de opmaak kent; `Nee` uit de basisfixture is dat niet. */
+    const KLAAR: BriefingTraining = { ...TRAINING, evaluatie: 'Verzonden' };
+
+    it('is compleet als er niets te melden is', () => {
+      const uit = buildTabView(KLAAR, opgeslagen());
+      expect(uit.gereedheid).toEqual({ compleet: true, blokkeert: [], ontbreekt: [] });
+    });
+
+    /**
+     * Elke briefing krijgt «nog niet aangesloten: inventarisatie». Telt die mee, dan is geen
+     * enkele training ooit compleet.
+     */
+    it('telt een bron die Lerai nog niet heeft gebouwd niet mee', () => {
+      const uit = buildTabView(KLAAR, opgeslagen());
+      expect(uit.issues.some((i) => i.tekst.toLowerCase().includes('inventarisatie'))).toBe(false);
+    });
+
+    it('meldt een QR-kolom zonder bruikbare waarde als iets wat de adviseur kan oplossen', () => {
+      const uit = buildTabView({ ...KLAAR, evaluatie: '0. NOTK' }, opgeslagen());
+      expect(uit.gereedheid.compleet).toBe(false);
+      expect(uit.gereedheid.ontbreekt.map((i) => i.tekst)).toEqual([
+        'Evaluatie deelnemers: de QR-kolom staat op "0. NOTK"',
+      ]);
+      expect(uit.kanGenereren).toBe(true);
+    });
+
+    it('meldt een thema zonder bullets als er ook niets eigens is ingevuld', () => {
+      const uit = buildTabView({ ...KLAAR, themaInhoud: '' }, opgeslagen());
+      expect(uit.gereedheid.ontbreekt.map((i) => i.tekst)).toEqual([
+        expect.stringMatching(/^Concept-inhoud: /),
+      ]);
+    });
+
+    /** "Achtergrondinformatie is leeg" staat er al als leeg veld; niet nog eens als regel. */
+    it('meldt een lege achtergrond één keer', () => {
+      const uit = buildTabView(
+        {
+          ...KLAAR,
+          achtergrond: '',
+          missing: [{ column: 'itg_achtergrond', label: 'Achtergrondinformatie' }],
+        },
+        opgeslagen()
+      );
+      expect(uit.gereedheid.ontbreekt).toHaveLength(1);
+    });
+
+    it('zet blokkades apart van wat alleen ontbreekt', () => {
+      const uit = buildTabView(
+        { ...KLAAR, brie: 'Interne trainer', evaluatie: '0. NOTK' },
+        opgeslagen()
+      );
+      expect(uit.gereedheid.blokkeert.map((i) => i.kind)).toEqual(['interne_trainer']);
+      expect(uit.gereedheid.ontbreekt.map((i) => i.kind)).toEqual(['onbepaald']);
+    });
+  });
+
   /**
    * Dirkje's eigen wens was *"joh, er ontbreekt nog informatie"* — melden dus, niet
    * tegenhouden. Het document komt er wel, met een zichtbare regel op de lege plek.

@@ -10,7 +10,9 @@ import {
   type ItemBoardReader,
 } from '@lib/recommend';
 import { createUpstashChecklistStore, type ChecklistStore } from '@lib/briefing/checklist-store';
-import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
+import { briefingRelationsFor, type BriefingRelations } from '@lib/briefing/read';
+import { agendaBoardOverride, readAgendaBoard, type AgendaClassification } from '@lib/evaluations';
+import { MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient, type MondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient, type MondayMutationClient } from '@lib/monday/mutate';
 import { createRedisClient } from '@lib/recommend/kv';
@@ -34,7 +36,6 @@ export interface BriefingDeps {
   readonly mutate: MondayMutationClient;
   readonly checklists: ChecklistStore;
   readonly boards: ItemBoardReader;
-  readonly boardId: string;
   /** Ook hierbinnen: ontbrekende sessievariabelen zijn net zo goed "niet ingericht". */
   readonly auth: Parameters<typeof authorizeToken>[1];
 }
@@ -51,7 +52,7 @@ const refuse = (status: number, error: string): { ok: false; response: NextRespo
 /**
  * Alles wat ontbreekt is *niet geconfigureerd*, niet *kapot*.
  *
- * De Redis-client, `agendaBoardId()` én de sessie- en capability-configuratie werpen allemaal
+ * De Redis-client én de sessie- en capability-configuratie werpen allemaal
  * op ontbrekende omgevingsvariabelen. Die buiten deze grens laten leverde een kale 500 op voor
  * precies de toestand die deze klasse bestaat om als 503 te melden — een deploy die nog niet af
  * is, met een voor de hand liggende oplossing.
@@ -83,7 +84,6 @@ function buildDeps(deadlines: GuardDeadlines): BriefingDeps {
       }),
       checklists: createUpstashChecklistStore(createRedisClient()),
       boards: createItemBoardReader(monday),
-      boardId: agendaBoardId(),
       auth: { session: sessionTokenConfigFromEnv(), policy: capabilityPolicyFromEnv() },
     };
   } catch (error) {
@@ -144,21 +144,31 @@ export async function guard(
 }
 
 /**
- * Staat dit item wel op het agendabord?
+ * Staat dit item op een actief agendabord? En zo ja, welk?
  *
  * Zonder deze controle is het item-id uit de URL een vrij te kiezen sleutel in KV. Een
  * planner met `plan`-rechten kon zo willekeurige sleutels aanmaken, en via het botsingsantwoord
  * — dat de huidige stand meestuurt — de opgeslagen waarde van een item búiten deze tab
- * teruglezen. Het leespad krijgt dit gratis omdat `readBriefingTraining` van het ingestelde
- * bord leest; het schrijfpad raakt Monday niet en heeft de controle dus apart nodig.
+ * teruglezen.
+ *
+ * **Elk actief agendabord telt, niet één ingesteld bord.** ITG dupliceert elk jaar het
+ * agendabord, en met één vast bord weigerde de tab alle trainingen van de nieuwe jaargang.
+ * Het bord wordt daarom zelf gekeurd: een relatie naar trainers én thema's, en alle kolommen
+ * die we lezen. Het bord-id gaat terug naar de aanroeper, want lezen en `Brie` schrijven
+ * moeten op het bord van déze training gebeuren.
  */
 export async function requireAgendaItem(
   deps: BriefingDeps,
   itemId: string
-): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+): Promise<
+  | { ok: true; boardId: string; relations: BriefingRelations }
+  | { ok: false; response: NextResponse }
+> {
   let board: string | null;
+  let soort: AgendaClassification;
   try {
     board = await deps.boards.readBoardId(itemId);
+    soort = board === null ? { kind: 'niet-gevonden' } : await readAgendaBoard(deps.monday, board);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('briefing: bordcontrole mislukt', { itemId, message });
@@ -166,11 +176,33 @@ export async function requireAgendaItem(
     // ons of aan Monday, niet aan de aanroeper.
     return refuse(502, 'kon niet vaststellen bij welk bord dit item hoort');
   }
-  if (board !== deps.boardId) {
-    // 404 en geen 403: of het item bestaat is niets wat deze aanroeper hoort te leren.
-    return refuse(404, 'deze training staat niet op het agendabord');
+
+  /**
+   * 404 en geen 403 in elk geval hieronder: of het item bestaat is niets wat deze aanroeper
+   * hoort te leren. De tekst zegt wél wat eraan te doen is, want het scherm toont hem.
+   */
+  if (board === null || soort.kind === 'niet-gevonden') {
+    // Het token ziet het item niet. Bij een nieuw bord is dat bijna altijd: niet gedeeld.
+    return refuse(
+      404,
+      'deze training is niet te lezen. Is het bord gedeeld met het Automatisering-account?'
+    );
   }
-  return { ok: true };
+  const override = agendaBoardOverride();
+  if (override !== null && board !== override) {
+    return refuse(404, 'deze training staat niet op het ingestelde testbord');
+  }
+  if (soort.kind === 'onbruikbaar') {
+    return refuse(404, `dit bord lijkt een agendabord, maar ${soort.rejected.reden}`);
+  }
+  if (soort.kind === 'geen-agenda') {
+    return refuse(404, 'deze training staat niet op een agendabord');
+  }
+  if (soort.board.gearchiveerd) {
+    return refuse(404, 'dit agendabord is gearchiveerd; daar worden geen briefings meer gemaakt');
+  }
+  // De relatie-ids van dít bord: een oudere jaargang heeft andere dan 2026.
+  return { ok: true, boardId: board, relations: briefingRelationsFor(soort.board) };
 }
 
 /** Een JSON-body lezen, of de 400 die zegt dat het er geen was. */

@@ -80,14 +80,14 @@ export async function GET(request: Request): Promise<NextResponse> {
   const startedMs = Date.now();
 
   try {
-    const { deps, boardId } = buildDailyReportDeps({
+    const { deps } = buildDailyReportDeps({
       date,
       deadlineMs: currentDeadlineMs,
       mail: !noMail,
     });
 
     const report = await runWithDeadline(startedMs + RUN_DEADLINE_MS, async () =>
-      runDailyReports(deps, { date, boardId, dryRun })
+      runDailyReports(deps, { date, dryRun })
     );
 
     const durationMs = Date.now() - startedMs;

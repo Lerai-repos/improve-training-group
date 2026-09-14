@@ -88,6 +88,15 @@ export function findingName(finding: Finding): string {
       return (
         `Evaluatiemail niet verstuurd — ${finding.klanttitel} (${finding.datum}) — ` + finding.reden
       );
+    case 'agendabord-nieuw':
+      return (
+        `Agendabord "${finding.naam}" doet mee` +
+        (finding.gearchiveerd ? ' — gearchiveerd, alleen historie' : '')
+      );
+    case 'agendabord-onbruikbaar':
+      return `Agendabord "${finding.naam}" doet niet mee — ${finding.reden}`;
+    case 'aanbevelingen-niet-aangesloten':
+      return `Agendabord "${finding.naam}" krijgt geen aanbevelingen — ${finding.reden}`;
   }
 }
 
@@ -148,8 +157,9 @@ export function findingDetail(finding: Finding): string {
       return [
         `Het thema "${finding.naam}" staat op het Thema's-bord, maar de kolom Concept inhoud is ` +
           `leeg. ${trainingen(finding.trainingen)} gebruiken dit thema.`,
-        'Gevolg: in de briefing komt op die plek de regel «nog niet aangesloten: concept-inhoud» ' +
-          'te staan in plaats van de bullets, en de briefing telt als niet af.',
+        'Gevolg: in de briefing komt op die plek de regel «nog niet bepaald: concept-inhoud» ' +
+          'te staan in plaats van de bullets, tenzij de adviseur in de tab zelf een concept ' +
+          'typt. Zonder dat telt de briefing als niet af.',
         "Vul de standaardbullets in op het Thema's-bord. Heeft dit thema helemaal geen briefing " +
           'nodig? ' +
           AFVINKEN,
@@ -168,6 +178,47 @@ export function findingDetail(finding: Finding): string {
           `Laat Lerai de verwerking van ${finding.datum} opnieuw draaien; alleen de ontbrekende ` +
           'mails gaan dan alsnog weg, de rest wordt overgeslagen.',
       ].join('\n\n');
+
+    case 'agendabord-nieuw':
+      return [
+        `"${finding.naam}" (bord ${finding.boardId}) is herkend als agendabord: het heeft een ` +
+          "relatie naar het trainersbord en naar het Thema's-bord, en alle kolommen die we lezen.",
+        finding.gearchiveerd
+          ? 'Het bord is gearchiveerd, dus het telt alleen mee voor de evaluatiecijfers en de ' +
+            'klanthistorie in briefings.'
+          : 'De trainingen op dit bord doen nu mee in de briefing-tab, de evaluatiecijfers, de ' +
+            'dagelijkse evaluatieverwerking en deze controle. De aanbevelingen bij Inplannen ' +
+            'worden binnen een uur vanzelf aangesloten. Lukt dat niet, dan staat daar een ' +
+            'aparte melding over.',
+        'Is dit geen echte agenda, bijvoorbeeld een testkopie? Verwijder het bord dan. ' +
+          'Archiveren is niet genoeg: dan telt het nog mee voor de evaluatiecijfers.',
+        'Klopt dit zo? ' + AFVINKEN,
+      ].join('\n\n');
+
+    case 'agendabord-onbruikbaar':
+      return [
+        `"${finding.naam}" (bord ${finding.boardId}) lijkt een agendabord, want het heeft een ` +
+          "relatie naar het trainersbord en naar het Thema's-bord. Maar het is niet te " +
+          `gebruiken: ${finding.reden}.`,
+        'Gevolg: de trainingen op dit bord doen nergens aan mee: geen briefing, geen ' +
+          'evaluatiecijfers, geen dagelijkse evaluatieverwerking.',
+        'Is dit een echte agenda? Laat Lerai kijken welke kolom er ontbreekt of veranderd is. ' +
+          'Is het geen agenda? ' +
+          AFVINKEN,
+      ].join('\n\n');
+
+    case 'aanbevelingen-niet-aangesloten':
+      return [
+        `Op "${finding.naam}" (bord ${finding.boardId}) werken de aanbevelingen niet: ` +
+          `${finding.reden}.`,
+        'Gevolg: een training naar Inplannen of Herplannen slepen start geen berekening, en de ' +
+          'knop Opnieuw berekenen in de aanbevelingen weigert.',
+        'Is dit bord een kopie van Agenda 2026? Dan hoort de kolom Status Aanbevelingen er ' +
+          'gewoon op te staan; laat Lerai kijken. Is het een afgesloten jaar? Archiveer het ' +
+          'bord, of ' +
+          AFVINKEN.charAt(0).toLowerCase() +
+          AFVINKEN.slice(1),
+      ].join('\n\n');
   }
 }
 
@@ -185,6 +236,11 @@ export function findingOnderdeel(finding: Finding): string {
       return 'Trainers';
     case 'mail-mislukt':
       return 'Evaluatiemails';
+    case 'agendabord-nieuw':
+    case 'agendabord-onbruikbaar':
+      return 'Agendaborden';
+    case 'aanbevelingen-niet-aangesloten':
+      return 'Aanbevelingen';
   }
 }
 

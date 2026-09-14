@@ -344,6 +344,15 @@ function readPage(
 const PAGE_SIZE = 500;
 const MAX_PAGES = 8;
 
+/** The columns one Agenda board is scanned with. */
+export interface AgendaScanInput {
+  boardId: string;
+  dateColumnId: string;
+  trainerColumnIds: readonly string[];
+  timesColumnId?: string;
+  clientColumnId?: string;
+}
+
 /**
  * Scan one Agenda board for dates and trainer links.
  *
@@ -353,14 +362,22 @@ const MAX_PAGES = 8;
  */
 export async function readAgendaScan(
   client: QueryClient,
-  input: {
-    boardId: string;
-    dateColumnId: string;
-    trainerColumnIds: readonly string[];
-    timesColumnId?: string;
-    clientColumnId?: string;
-  }
+  input: AgendaScanInput
 ): Promise<AgendaScan> {
+  return buildAgendaScan(await readAgendaRows(client, input));
+}
+
+/**
+ * The rows of one Agenda board, before they are indexed.
+ *
+ * Separate from `readAgendaScan` so the workload can span several boards: a trainer booked
+ * on Agenda 2026 and on its 2027 copy is one person with one workload, and indexing each
+ * board on its own would hand out two half-counts.
+ */
+export async function readAgendaRows(
+  client: QueryClient,
+  input: AgendaScanInput
+): Promise<AssignmentRow[]> {
   // The column ids travel with the call rather than sitting in module state: they differ
   // per Agenda board year — the trap that made 202 trainings look trainer-less during the
   // evaluation analysis — and shared mutable ids would let two runs corrupt each other.
@@ -423,7 +440,7 @@ export async function readAgendaScan(
         all.map((row) => row.itemId),
         `Agenda scan (board ${input.boardId})`
       );
-      return buildAgendaScan(all);
+      return all;
     }
     // A repeated cursor would loop us over the same page and double every count in it.
     if (seen.has(cursor)) {

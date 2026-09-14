@@ -7,6 +7,7 @@ import {
   createMemoryTravelCacheStore,
   createTravelCache,
 } from '@lib/recommend/travel-cache';
+import { loadAgendaBoards } from '@lib/evaluations';
 import { loadSettingsOnce } from '@lib/settings/load';
 
 import { readHistorie } from './historie';
@@ -164,11 +165,15 @@ export async function buildGenerateContext(
    * kunnen zien dát er eerdere sessies zijn vóórdat hij dat vinkje zet — anders moet hij dat
    * zelf in de agenda opzoeken, precies het werk dat dit blok hoort weg te nemen.
    */
-  const historie = await readHistorie(client, {
-    bedrijf: training.opdrachtgever,
-    excludeItemId: training.itemId,
-    limit: input.historieLimit,
-  });
+  const historie = await readHistorie(
+    client,
+    {
+      bedrijf: training.opdrachtgever,
+      excludeItemId: training.itemId,
+      limit: input.historieLimit,
+    },
+    (await loadAgendaBoards(client)).boards
+  );
 
   const reis = await resolveReis(client, training, input.trainerItemIds, notes);
 

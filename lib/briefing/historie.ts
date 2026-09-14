@@ -32,7 +32,10 @@ import type { HistoryRow } from './blocks';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 
 /**
- * De agendaborden waar de historie uit komt, met per bord de trainerrelatie.
+ * Een agendabord zoals de historie het leest: het id en de trainerrelaties.
+ *
+ * Welke borden dat zijn wordt per run ontdekt (`loadAgendaBoards`), gearchiveerde jaargangen
+ * inbegrepen: een vaste klant uit 2025 hoort in de tabel, en een nieuwe jaargang doet vanzelf mee.
  *
  * **Zes van de zeven kolommen hebben op beide borden hetzelfde id**, gemeten. Alleen de
  * trainerrelatie verschilt, en dat is precies de val die tijdens de evaluatie-analyse 202
@@ -46,15 +49,6 @@ export interface HistorieBoard {
   readonly trainerRelation: string;
   readonly coTrainerRelation?: string;
 }
-
-export const HISTORIE_BOARDS: readonly HistorieBoard[] = [
-  {
-    boardId: '5087396949',
-    trainerRelation: 'board_relation_mkz4y7tb',
-    coTrainerRelation: 'itg_cotrainers',
-  },
-  { boardId: '1703587792', trainerRelation: 'board_relation_mkz4w78' },
-];
 
 /** De kolommen die op béíde borden hetzelfde heten. */
 const SHARED = {
@@ -337,7 +331,8 @@ export interface HistorieInput {
  */
 export async function readHistorie(
   client: MondayGraphQLClient,
-  input: HistorieInput
+  input: HistorieInput,
+  boards: readonly HistorieBoard[]
 ): Promise<HistoryRow[]> {
   if (!isRealClient(input.bedrijf)) {
     return [];
@@ -345,9 +340,7 @@ export async function readHistorie(
   const wanted = clientKey(input.bedrijf);
   const matches = (bedrijf: string): boolean => clientKey(bedrijf) === wanted;
 
-  const perBoard = await Promise.all(
-    HISTORIE_BOARDS.map((board) => readBoard(client, board, matches))
-  );
+  const perBoard = await Promise.all(boards.map((board) => readBoard(client, board, matches)));
   const sessions = perBoard
     .flat()
     .filter((session) => session.itemId !== input.excludeItemId)

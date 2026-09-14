@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import {
+  buildEngineBoards,
   buildQueueDeps,
   handleParsedWebhook,
   parseWebhook,
+  requireReadable,
   verifyWebhookToken,
   webhookRouting,
 } from '@lib/recommend';
@@ -31,6 +33,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   const parse = parseWebhook(body, webhookRouting());
   // No opportunistic drain: QStash owns delivery, so the only job here is to record
   // the trigger durably and hand it over.
-  const result = await handleParsedWebhook(buildQueueDeps().queue, parse);
+  // Elk agendabord met aanbevelingen heeft een eigen abonnement; zie `webhook-sync.ts`.
+  const boards = buildEngineBoards();
+  const result = await handleParsedWebhook(
+    buildQueueDeps().queue,
+    parse,
+    // Onleesbaar werpt, en dan antwoordt de handler 500: Monday levert het event opnieuw.
+    async (mondayItemId) => requireReadable(await boards.forItem(mondayItemId)).kind === 'served'
+  );
   return NextResponse.json(result.body, { status: result.status });
 }

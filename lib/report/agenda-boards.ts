@@ -1,53 +1,14 @@
-import { AGENDA_2026_HISTORY, AGENDA_HISTORY_BOARDS } from '@lib/evaluations';
-import { agendaBoardId, AGENDA_2026_PRODUCTION_BOARD } from '@lib/monday/board-config';
-
 import type { AgendaHistoryColumns } from '@lib/evaluations';
 
 /**
- * Welke agendaborden het rapport leest, en met welke kolommen — mét de testoverride.
+ * Welke kolom op welk agendabord de trainers en de thema's draagt.
  *
- * **Het gat dat dit dichtzet.** `MONDAY_AGENDA_BOARD_ID` wijst de hele pijplijn naar een
- * KOPIE van Agenda 2026; `docs/m2b/README.md` beschrijft hem als *"every Agenda read + the
- * status write"*. Maar `readAgendaHistory` leest standaard de vaste productieborden, terwijl
- * de dagjob zijn resultaten filtert op `agendaBoardId()`. Met de override aan leverde dat
- * nul overeenkomsten op: de job draaide, meldde 0 trainingen en deed niets — precies het
- * stille niets-doen waar het bordoverzicht in de documentatie voor waarschuwt.
- *
- * Een Monday-bordkopie behoudt élk kolom-id en groep-id, dus de 2026-kolommen kloppen
- * onverkort voor de kopie; alleen het bord-id verschilt.
+ * De borden zelf komen uit `loadAgendaBoards`, dat ze per run ontdekt en daarbij de
+ * testoverride toepast. Hier worden ze meegegeven in plaats van uit een vaste lijst gelezen,
+ * zodat een nieuwe jaargang zonder codewijziging meedoet.
  */
 
-/**
- * Bij een override ALLEEN de kopie, niet ook productie-2025.
- *
- * De override bestaat om van ITG's echte gegevens af te blijven. Er een productiebord naast
- * zetten zou testtrainingen en echte trainingen in één toekenning gooien, en dan kan een
- * gedeelde code een echte klant aan een testrij koppelen.
- */
-export function reportAgendaBoards(): readonly AgendaHistoryColumns[] {
-  const board = agendaBoardId();
-  if (board === AGENDA_2026_PRODUCTION_BOARD) {
-    return AGENDA_HISTORY_BOARDS;
-  }
-  return [
-    {
-      ...AGENDA_2026_HISTORY,
-      boardId: board,
-      // `jaargang` is een vaste unie ('2026' | '2025'); de kopie IS een 2026-bord.
-      jaargang: '2026',
-      /**
-       * De ondergrens vervalt op een kopie.
-       *
-       * `minimumItems` beschermt de statistiek tegen een bord dat plots te weinig rijen
-       * teruggeeft, maar een testkopie heeft er legitiem een handvol. De drempel van 600
-       * zou elke testrun laten falen op een gegrond aantal.
-       */
-      minimumItems: 0,
-    },
-  ];
-}
-
-/** De trainerrelaties van één bord, of `null` als we dat bord niet kennen. */
+/** De trainerrelaties van één bord. */
 export interface TrainerRelations {
   readonly lead: string;
   /** `null` op een jaargang waar de co-trainerkolom niet bestaat, zoals 2025. */
@@ -55,18 +16,17 @@ export interface TrainerRelations {
 }
 
 /**
- * Welke kolommen de trainers dragen op dit bord.
- *
- * Afgeleid van `AGENDA_HISTORY_BOARDS` en niet uit een eigen tabel: die ids stonden er al
- * (2025 draagt de trainers in `board_relation_mkz4w78` en heeft geen co-trainerkolom), en
- * een tweede lijst met dezelfde waarden is een lijst die gaat afwijken.
+ * Welke kolommen de trainers dragen op dit bord, of `null` als het geen bekend agendabord is.
  *
  * `null` en geen terugval op 2026: een kolom-id van het verkeerde bord levert bij Monday
  * geen fout op maar een LEGE relatie, en dat leest als "er stond geen trainer bij deze
  * training".
  */
-export function agendaTrainerRelations(boardId: string): TrainerRelations | null {
-  const board = reportAgendaBoards().find((b) => b.boardId === boardId);
+export function agendaTrainerRelations(
+  boards: readonly AgendaHistoryColumns[],
+  boardId: string
+): TrainerRelations | null {
+  const board = boards.find((b) => b.boardId === boardId);
   if (board === undefined) {
     return null;
   }
@@ -76,24 +36,30 @@ export function agendaTrainerRelations(boardId: string): TrainerRelations | null
 /**
  * De themarelatie van dit bord, of `null` als we het bord niet kennen.
  *
- * Om exact dezelfde reden apart als `agendaTrainerRelations`: 2026 draagt de thema's in
+ * Om dezelfde reden apart als `agendaTrainerRelations`: 2026 draagt de thema's in
  * `board_relation_mkz4920y` en 2025 in `board_relation_mkz4hjnt`. Een id van het verkeerde
  * bord geeft geen fout maar een LEGE relatie, en dan schrijft de aftersalesmail "de sessie"
- * waar "de sessie over Onderhandelen" hoorde te staan — een brief die er verzorgd uitziet en
- * een thema mist. Gemeten op een echt 2025-item vóór deze reparatie: precies dat gebeurde.
+ * waar "de sessie over Onderhandelen" hoorde te staan.
  */
-export function agendaThemaRelation(boardId: string): string | null {
-  return reportAgendaBoards().find((b) => b.boardId === boardId)?.themaRelation ?? null;
+export function agendaThemaRelation(
+  boards: readonly AgendaHistoryColumns[],
+  boardId: string
+): string | null {
+  return boards.find((b) => b.boardId === boardId)?.themaRelation ?? null;
 }
 
-/** Elk themarelatie-id dat op enig gelezen agendabord voorkomt. Voor één projectie. */
-export function allThemaRelationColumns(): readonly string[] {
-  return [...new Set(reportAgendaBoards().map((b) => b.themaRelation))];
+/** Elk themarelatie-id dat op enig agendabord voorkomt. Voor één projectie. */
+export function allThemaRelationColumns(
+  boards: readonly AgendaHistoryColumns[]
+): readonly string[] {
+  return [...new Set(boards.map((b) => b.themaRelation))];
 }
 
-/** Elk trainerrelatie-id dat op enig gelezen agendabord voorkomt. Voor één projectie. */
-export function allTrainerRelationColumns(): readonly string[] {
-  const ids = reportAgendaBoards().flatMap((b) =>
+/** Elk trainerrelatie-id dat op enig agendabord voorkomt. Voor één projectie. */
+export function allTrainerRelationColumns(
+  boards: readonly AgendaHistoryColumns[]
+): readonly string[] {
+  const ids = boards.flatMap((b) =>
     b.coTrainerRelation === undefined
       ? [b.trainerRelation]
       : [b.trainerRelation, b.coTrainerRelation]

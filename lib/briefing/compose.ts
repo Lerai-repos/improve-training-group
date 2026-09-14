@@ -142,14 +142,44 @@ const MISSING = {
     'de kolom Achtergrondinformatie op de gekoppelde Opportunity is nog leeg'
   ),
   extraInfo: notConnected('extra informatie trainer', 'Monday-updates met "voor in briefing:"'),
-  bullets: notConnected(
+  /**
+   * `nog niet bepaald` en niet `nog niet aangesloten`: de bron bestaat, en de adviseur lost dit
+   * zelf op door in de tab een concept te typen. Als "niet aangesloten" telde het niet mee
+   * voor `Staat klaar`, en ging een briefing zonder programma als compleet de deur uit.
+   */
+  bullets: notDecided(
     'concept-inhoud',
-    'de standaardbullets per thema in Monday (skelettenbestand van ITG), of de afwijkende ' +
-      'versie die de AM er zelf in plakt'
+    "het thema heeft geen standaardbullets op het Thema's-bord en er is in de tab niets " +
+      'eigens ingevuld'
   ),
   inventarisatie: notConnected('inventarisatie klant', 'Google Form van het label'),
-  reis: notConnected('km en reistijd', 'route van de trainer naar de locatie'),
+  /**
+   * `nog niet bepaald`: bij genereren is de routebron er altijd. Ontbreekt de regel dan, dan is
+   * de Locatie onbruikbaar, heeft de trainer geen adres, of is er geen route. Allemaal gegevens
+   * die iemand kan aanvullen, dus het document is niet af. Een online training krijgt 0 km en
+   * dus geen regel.
+   */
+  reis: notDecided(
+    'km en reistijd',
+    'er is geen route berekend van deze trainer naar de locatie; controleer Locatie en het adres ' +
+      'van de trainer'
+  ),
 } as const;
+
+/**
+ * De regel voor een lege achtergrondtekst.
+ *
+ * Geëxporteerd zodat de tab hem kan herkennen: daar staat hetzelfde feit al als leeg veld
+ * ("Achtergrondinformatie is leeg"), en twee regels voor één lege kolom lezen als twee
+ * problemen.
+ */
+export const ACHTERGROND_LEEG = MISSING.achtergrond;
+
+/**
+ * De regel voor een ontbrekende route. De tab rekent geen reistijd uit, dus in zijn
+ * voorvertoning staat deze regel er altijd; daar hoort hij niet als ontbrekend te tellen.
+ */
+export const REIS_ONBEKEND = MISSING.reis;
 
 /**
  * Zet de training om in de velden van het sjabloon.

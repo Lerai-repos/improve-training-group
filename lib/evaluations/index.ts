@@ -64,8 +64,27 @@ export {
   AGENDA_2026_HISTORY,
   AGENDA_HISTORY_BOARDS,
   agendaHistoryExpectedColumns,
+  trainerRelationColumns,
   type AgendaHistoryColumns,
 } from './agenda-columns';
+
+export {
+  agendaBoardOverride,
+  classifyAgendaBoard,
+  classifyAgendaBoards,
+  discoverAgendaBoards,
+  KNOWN_AGENDA_BOARD_IDS,
+  liveAgendaBoards,
+  loadAgendaBoards,
+  readAgendaBoard,
+  resolveAgendaBoards,
+  type AgendaBoard,
+  type AgendaBoardSet,
+  type AgendaClassification,
+  type BoardsQueryClient,
+  type DiscoveredBoard,
+  type RejectedAgendaBoard,
+} from './agenda-discovery';
 
 export {
   readAgendaHistory,
@@ -73,9 +92,6 @@ export {
   type AgendaHistoryClient,
   type AgendaTraining,
 } from './agenda-history';
-
-
-
 
 export {
   EVALUATION_DOCUMENTS,
@@ -94,12 +110,7 @@ export {
   type GoogleAuth,
 } from './google-sheets-source';
 
-export {
-  STATS_TTL_MS,
-  createStatsStore,
-  type StatsSnapshot,
-  type StatsStore,
-} from './stats-store';
+export { STATS_TTL_MS, createStatsStore, type StatsSnapshot, type StatsStore } from './stats-store';
 
 export {
   DROP_FACTOR,
@@ -126,11 +137,7 @@ export {
   type TierAResult,
 } from './tier-a';
 
-export {
-  buildTrainerOverview,
-  type OverviewThemeRow,
-  type OverviewTrainerRow,
-} from './overview';
+export { buildTrainerOverview, type OverviewThemeRow, type OverviewTrainerRow } from './overview';
 
 export {
   OVERVIEW_STALE_AFTER_MS,

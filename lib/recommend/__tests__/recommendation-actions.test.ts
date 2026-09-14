@@ -12,16 +12,14 @@ import {
   type RecalculateDeps,
 } from '../recommendation-actions';
 import { storedRow } from './stored-row.fixture';
-import type { ItemBoardReader } from '../item-board';
 import type { JobPublisher } from '../queue';
 
 const ITEM = '5029726254';
 const AGENDA = '5087396949';
 const ACTION = 'a1b2c3d4e5f6';
 
-const boardsSaying = (boardId: string | null): ItemBoardReader => ({
-  readBoardId: () => Promise.resolve(boardId),
-});
+/** Het bord van het item, zoals `EngineBoards.forItem` het zou beoordelen. */
+const servesWhenOn = (boardId: string | null) => async (): Promise<boolean> => boardId === AGENDA;
 
 function harness(boardId: string | null = AGENDA) {
   const kv = createMemoryKvStore();
@@ -38,15 +36,13 @@ function harness(boardId: string | null = AGENDA) {
 
   const recalculate: RecalculateDeps = {
     queue: createRunQueue(store, publisher),
-    boards: boardsSaying(boardId),
-    agendaBoardId: AGENDA,
+    servesItem: servesWhenOn(boardId),
   };
   const approachedDeps: ApproachedDeps = {
     queue: store,
     outcomes,
     approached,
-    boards: boardsSaying(boardId),
-    agendaBoardId: AGENDA,
+    servesItem: servesWhenOn(boardId),
   };
 
   return { kv, store, outcomes, approached, published, recalculate, approachedDeps };

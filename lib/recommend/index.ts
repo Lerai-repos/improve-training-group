@@ -25,6 +25,8 @@ export * from './service';
 export * from './event';
 export * from './signature';
 export * from './webhook';
+export * from './engine-boards';
+export * from './webhook-sync';
 export * from './authorize';
 export * from './deadline';
 export * from './trainer-groups';

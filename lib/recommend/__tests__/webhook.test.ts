@@ -36,10 +36,52 @@ function fakeQueue(behaviour: 'ok' | 'throw' | 'duplicate' = 'ok'): RunQueue & {
   };
 }
 
+/** Elk item staat op een bord met aanbevelingen, tenzij een test het anders zegt. */
+const serveAll = async (): Promise<boolean> => true;
+
 describe('handleParsedWebhook', () => {
+  /** Een bord dat even niet te lezen is: Monday moet het event opnieuw leveren. */
+  it('antwoordt 500 en zet niets in de wachtrij als het bord niet vast te stellen is', async () => {
+    const q = fakeQueue();
+    const parse = parseWebhook(
+      {
+        event: {
+          type: 'move_pulse_into_group',
+          pulseId: 1,
+          groupId: 'group_mkwtj07a',
+          triggerUuid: 'u-onleesbaar',
+        },
+      },
+      routing
+    );
+    const r = await handleParsedWebhook(q, parse, async () => {
+      throw new Error('bord niet vast te stellen');
+    });
+    expect(r.status).toBe(500);
+    expect(q.calls).toHaveLength(0);
+  });
+
+  it('laat een item op een bord zonder aanbevelingen los met 200', async () => {
+    const q = fakeQueue();
+    const parse = parseWebhook(
+      {
+        event: {
+          type: 'move_pulse_into_group',
+          pulseId: 1,
+          groupId: 'group_mkwtj07a',
+          triggerUuid: 'u-buiten',
+        },
+      },
+      routing
+    );
+    const r = await handleParsedWebhook(q, parse, async () => false);
+    expect(r.status).toBe(200);
+    expect(q.calls).toHaveLength(0);
+  });
+
   it('echoes the challenge handshake', async () => {
     const q = fakeQueue();
-    const r = await handleParsedWebhook(q, parseWebhook({ challenge: 'abc' }, routing));
+    const r = await handleParsedWebhook(q, parseWebhook({ challenge: 'abc' }, routing), serveAll);
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ challenge: 'abc' });
     expect(q.calls).toHaveLength(0);
@@ -58,7 +100,7 @@ describe('handleParsedWebhook', () => {
       },
       routing
     );
-    const r = await handleParsedWebhook(q, parse);
+    const r = await handleParsedWebhook(q, parse, serveAll);
     expect(r.status).toBe(200);
     expect(q.calls).toEqual([
       { triggerUuid: 'u1', triggerKind: 'group_move', mondayItemId: '5029726254' },
@@ -79,7 +121,7 @@ describe('handleParsedWebhook', () => {
       },
       routing
     );
-    await handleParsedWebhook(q, parse);
+    await handleParsedWebhook(q, parse, serveAll);
     expect(q.calls[0]).toMatchObject({ triggerKind: 'manual_button', mondayItemId: '7' });
   });
 
@@ -97,7 +139,7 @@ describe('handleParsedWebhook', () => {
       },
       routing
     );
-    const r = await handleParsedWebhook(q, parse);
+    const r = await handleParsedWebhook(q, parse, serveAll);
     expect(r.status).toBe(200);
     expect(q.calls).toHaveLength(0);
   });
@@ -115,7 +157,7 @@ describe('handleParsedWebhook', () => {
       },
       routing
     );
-    const r = await handleParsedWebhook(q, parse);
+    const r = await handleParsedWebhook(q, parse, serveAll);
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ duplicate: true });
   });
@@ -133,7 +175,7 @@ describe('handleParsedWebhook', () => {
       },
       routing
     );
-    const r = await handleParsedWebhook(q, parse);
+    const r = await handleParsedWebhook(q, parse, serveAll);
     expect(r.status).toBe(422);
     expect(q.calls).toHaveLength(0);
   });
@@ -151,7 +193,7 @@ describe('handleParsedWebhook', () => {
       },
       routing
     );
-    const r = await handleParsedWebhook(q, parse);
+    const r = await handleParsedWebhook(q, parse, serveAll);
     expect(r.status).toBe(500);
     expect(r.body.error).toMatch(/queue unavailable/);
   });

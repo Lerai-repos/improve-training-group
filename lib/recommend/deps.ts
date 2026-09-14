@@ -6,15 +6,15 @@ import { log } from '@lib/logger';
 import { parseAcknowledgements } from '@lib/monday';
 import {
   AGENDA_2026_COLUMNS,
-  agendaBoardId,
   ITEM_FIELDS,
   MONDAY_API_VERSION,
+  ourStatusColumnId,
   RECOMMENDATION_STATUS_COLUMN,
   RECOMMENDATION_STATUS_LABELS,
   triggerGroupIds,
 } from '@lib/monday/board-config';
-import { trainerRelationIds } from '@lib/monday/decode';
-import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
+import { createMondayGraphQLClient, type MondayGraphQLClient } from '@lib/monday/graphql-client';
+import { createMondayMutationClient } from '@lib/monday/mutate';
 import { createSettingsLoader, provenanceOf } from '@lib/settings';
 import type { SettingsProvenance } from '@lib/settings';
 import { isProductionEnvironment } from '@lib/constants';
@@ -23,7 +23,27 @@ import ackJson from '../../docs/m2a/acknowledgements.json';
 import { createAddressFormatter } from './address';
 import { assertAddressHashKey } from './address-key';
 import { createApproachedStore } from './approached';
-import { readAgendaScan } from './assignments';
+import {
+  buildAgendaScan,
+  readAgendaRows,
+  type AgendaScan,
+  type AssignmentRow,
+} from './assignments';
+import {
+  createEngineBoards,
+  requireReadable,
+  trainingColumnsFor,
+  type EngineBoardRules,
+  type EngineBoards,
+} from './engine-boards';
+import {
+  createSubscriptionStore,
+  MOVE_EVENT,
+  parseCreatedWebhookId,
+  parseWebhookRows,
+  webhookIdempotencyKey,
+  type WebhookSyncDeps,
+} from './webhook-sync';
 import { createCachedAssignments, type CachedAssignments } from './assignment-cache';
 import { capabilityPolicyFromEnv } from './capabilities';
 import { createItemBoardReader, type ItemBoardReader } from './item-board';
@@ -55,12 +75,15 @@ import { readQualObservations } from './qualifications';
 import { evalStatsEnabled, readEvalStats } from './eval-stats';
 
 import {
+  agendaBoardOverride,
   createOAuthGoogleAuth,
   createStatsStore,
   evaluationDocuments,
   googleSheetsSource,
+  loadAgendaBoards,
   oauthCredentialsFromEnv,
   readAgendaHistory,
+  trainerRelationColumns,
   type NightlyDeps,
 } from '@lib/evaluations';
 import type { ServiceDeps } from './service';
@@ -75,6 +98,101 @@ function requireEnv(name: string): string {
 }
 
 const ACK_VERSION_LENGTH = 16;
+
+/** Welke agendaborden de engine bedient: onze statuskolom en de triggergroepen. */
+export function engineRules(): EngineBoardRules {
+  return { statusColumnId: ourStatusColumnId(), triggerGroupIds: triggerGroupIds() };
+}
+
+function engineBoardsFrom(kv: KvStore, client: MondayGraphQLClient): EngineBoards {
+  return createEngineBoards({
+    kv,
+    client,
+    items: createItemBoardReader(client),
+    rules: engineRules(),
+    override: agendaBoardOverride(),
+  });
+}
+
+/**
+ * De bordkeuring, lui opgebouwd.
+ *
+ * `MONDAY_API_TOKEN` en de statuskolom worden pas bij het eerste gebruik gelezen. Zo laat een
+ * ontbrekende variabele alleen het verzoek mislukken dat hem nodig heeft, en niet een route
+ * die de bordkeuring nooit aanroept.
+ */
+export function buildEngineBoards(kv?: KvStore): EngineBoards {
+  let built: EngineBoards | null = null;
+  const get = (): EngineBoards => {
+    built ??= engineBoardsFrom(
+      kv ?? createUpstashKvStore(createRedisClient()),
+      createMondayGraphQLClient({
+        token: requireEnv('MONDAY_API_TOKEN'),
+        apiVersion: MONDAY_API_VERSION,
+        deadlineMs: currentDeadlineMs,
+      })
+    );
+    return built;
+  };
+  return {
+    check: (boardId) => get().check(boardId),
+    forItem: (itemId) => get().forItem(itemId),
+    list: () => get().list(),
+  };
+}
+
+/**
+ * De cachesleutel van de werklast.
+ *
+ * Geen bord-id meer: de index spant elk agendabord met aanbevelingen, zodat een trainer die op
+ * 2026 én op de 2027-kopie staat één werklast heeft en niet twee halve.
+ */
+const WORKLOAD_KEY = 'agendaborden';
+
+/**
+ * De werklast over élk agendabord met aanbevelingen, als één index.
+ *
+ * Geen enkel bord is een fout en geen lege index: die zou iedereen als vrij tonen, precies de
+ * geloofwaardige nul waar de werklast overal tegen beschermt.
+ */
+async function scanServedBoards(
+  client: MondayGraphQLClient,
+  boards: EngineBoards
+): Promise<AgendaScan> {
+  const { served } = await boards.list();
+  if (served.length === 0) {
+    throw new Error(
+      'Werklast: geen enkel agendabord krijgt aanbevelingen; een lege werklast zou iedereen als vrij tonen'
+    );
+  }
+  /**
+   * Tegelijk, niet na elkaar: de scan van één bord kost al tientallen seconden, en de cron
+   * heeft er zestig. Achter elkaar zou een tweede jaargang de werklast over die grens duwen,
+   * en dan blijven de kolommen leeg precies wanneer ITG twee jaren tegelijk plant.
+   */
+  const perBoard = await Promise.all(
+    served.map((board) =>
+      readAgendaRows(client, {
+        boardId: board.boardId,
+        dateColumnId: AGENDA_2026_COLUMNS.datum,
+        trainerColumnIds: trainerRelationColumns(board),
+        // Decoratie voor het dagbotsing-label: hoe laat die andere training is.
+        timesColumnId: AGENDA_2026_COLUMNS.tijd,
+        /**
+         * GEEN `clientColumnId` meer, en dat is geen vergissing.
+         *
+         * `Bedrijf` is een mirror, en gemeten op 14-Sep-2026 kost die kolom één pagina van 500
+         * items 78,5 seconden tegen 4,5 zonder. Daarmee haalde de scan zijn budget van zestig
+         * seconden niet meer. De klantnaam staat sinds 27-Aug niet meer in het label (ITG vond
+         * de regel te druk) en `resolveWorkload` haalt hem voor elke lezer uit het antwoord.
+         * Terugzetten is deze ene regel, maar dan eerst die meting opnieuw.
+         */
+      })
+    )
+  );
+  const rows: AssignmentRow[] = perBoard.flat();
+  return buildAgendaScan(rows);
+}
 
 /**
  * How long a workload scan may take before the view gives up on it and renders `—`.
@@ -128,44 +246,29 @@ function workloadCache(kv: KvStore, board: string, deadlineMs: number): CachedAs
        * timestamp is a deadline; a relative one is a renewal.
        */
       const deadline = Date.now() + deadlineMs;
-      return readAgendaScan(
-        createMondayGraphQLClient({
-          token: requireEnv('MONDAY_API_TOKEN'),
-          apiVersion: MONDAY_API_VERSION,
-          /**
-           * Its OWN deadline, not the worker's.
-           *
-           * `currentDeadlineMs` is null outside a run context, and the client then
-           * spends five 30-second attempts before giving up — so during a Monday
-           * outage the whole GET would time out long before `resolveWorkload` could
-           * degrade to dashes. Workload is the one part of a read that is allowed to
-           * be missing; it must fail fast enough for that to mean anything.
-           */
-          deadlineMs: () => deadline,
-        }),
-        {
-          boardId: board,
-          dateColumnId: AGENDA_2026_COLUMNS.datum,
-          trainerColumnIds: trainerRelationIds(AGENDA_2026_COLUMNS),
-          // Decoratie voor het dagbotsing-label: welke training, en hoe laat.
-          timesColumnId: AGENDA_2026_COLUMNS.tijd,
-          clientColumnId: AGENDA_2026_COLUMNS.companyMirror,
-        }
-      );
+      const client = createMondayGraphQLClient({
+        token: requireEnv('MONDAY_API_TOKEN'),
+        apiVersion: MONDAY_API_VERSION,
+        /**
+         * Its OWN deadline, not the worker's. Workload is the one part of a read that is
+         * allowed to be missing; it must fail fast enough for that to mean anything.
+         */
+        deadlineMs: () => deadline,
+      });
+      return scanServedBoards(client, engineBoardsFrom(kv, client));
     },
   });
 }
 
 /** Everything `GET /api/cron/refresh-workload` needs, and nothing else. */
 export function buildWorkloadRefreshDeps(): { assignments: CachedAssignments; boardId: string } {
-  const board = agendaBoardId();
   return {
     assignments: workloadCache(
       createUpstashKvStore(createRedisClient()),
-      board,
+      WORKLOAD_KEY,
       WORKLOAD_CRON_DEADLINE_MS
     ),
-    boardId: board,
+    boardId: WORKLOAD_KEY,
   };
 }
 
@@ -264,10 +367,16 @@ export function buildFailureCallbackDeps(): FailureCallbackDeps {
 
 /** The scoped Monday status writer. No network at construction — safe to build eagerly. */
 export function buildStatusWriter(): StatusWriter {
+  const boards = buildEngineBoards();
   return createMondayStatusWriter({
     token: requireEnv('MONDAY_API_TOKEN'),
     apiVersion: MONDAY_API_VERSION,
-    boardId: agendaBoardId(),
+    // Het bord van het item zelf: 2026 én de 2027-kopie krijgen hun label.
+    // Onleesbaar werpt, zodat het label opnieuw geprobeerd wordt in plaats van overgeslagen.
+    boardFor: async (itemId) => {
+      const served = requireReadable(await boards.forItem(itemId));
+      return served.kind === 'served' ? served.board.boardId : null;
+    },
   });
 }
 
@@ -296,7 +405,8 @@ export function buildEvalStatsDeps(): NightlyDeps {
       fetch,
       currentDeadlineMs
     ),
-    readHistory: () => readAgendaHistory(client),
+    // Elk agendabord, gearchiveerde jaargangen inbegrepen: een afgesloten jaar houdt zijn cijfers.
+    readHistory: async () => readAgendaHistory(client, (await loadAgendaBoards(client)).boards),
     readQualifications: () => readQualObservations(client),
     store: createStatsStore(createUpstashKvStore(createRedisClient())),
     now: () => new Date(),
@@ -311,10 +421,12 @@ export function buildEvalStatsDeps(): NightlyDeps {
  * the settings read is what failed, this throws and there is no provenance to record —
  * which is exactly why a `failed` outcome may carry none.
  */
-export async function buildWorkerDeps(): Promise<{
-  deps: EngineDeps;
-  settings: SettingsProvenance;
-}> {
+/** Wat een job nodig heeft, of waarom het bord van deze training geen aanbevelingen krijgt. */
+export type WorkerDeps =
+  | { kind: 'served'; deps: EngineDeps; settings: SettingsProvenance }
+  | { kind: 'not-served'; reden: string; settings: SettingsProvenance };
+
+export async function buildWorkerDeps(mondayItemId: string): Promise<WorkerDeps> {
   assertAddressHashKey(); // fail fast on a missing/short secret, not mid-run at the travel stage
   const token = requireEnv('MONDAY_API_TOKEN');
   // The live Monday reads run inside the worker's run deadline too — 5 × 30s attempts
@@ -346,10 +458,27 @@ export async function buildWorkerDeps(): Promise<{
     kv: createUpstashKvStore(createRedisClient()),
     isProduction: isProductionEnvironment,
   }).read();
+  /**
+   * Het bord van déze training, vóór de trainersbordlezing en de betaalde providers.
+   *
+   * Er is niet één agendabord: 2026 en de 2027-kopie lopen naast elkaar, en een oudere
+   * jaargang heeft andere relatie-ids. Het bord bepaalt dus welke kolommen gelezen worden en
+   * waar het label heen gaat. Bedient de engine het bord niet, dan valt er niets te rekenen.
+   */
+  // Onleesbaar werpt: de job blijft open en QStash probeert het opnieuw.
+  const served = requireReadable(
+    await engineBoardsFrom(createUpstashKvStore(createRedisClient()), client).forItem(mondayItemId)
+  );
+  if (served.kind === 'not-served') {
+    return { kind: 'not-served', reden: served.reden, settings: provenanceOf(settings) };
+  }
+  const board = served.board;
+
   return {
+    kind: 'served',
     settings: provenanceOf(settings),
     deps: {
-      reader: createMondayReader(client),
+      reader: createMondayReader(client, trainingColumnsFor(board)),
       roster: await readRoster(client, ITEM_FIELDS),
       evaluations,
       addressFormatter: createAddressFormatter(
@@ -370,10 +499,10 @@ export async function buildWorkerDeps(): Promise<{
       statusWriter: createMondayStatusWriter({
         token,
         apiVersion: MONDAY_API_VERSION,
-        boardId: agendaBoardId(),
+        boardFor: async () => board.boardId,
       }),
       ack: ACK,
-      config: buildEngineConfig({ settings, ackVersion: ACK_VERSION }),
+      config: buildEngineConfig({ settings, ackVersion: ACK_VERSION, boardId: board.boardId }),
       owner: newWorkerOwner(),
     },
   };
@@ -409,7 +538,9 @@ export function buildViewDeps(): {
   const store = createUpstashQueueStore(redis);
   const outcomes = createUpstashOutcomeStore(redis);
   const approached = createApproachedStore(kv);
-  const board = agendaBoardId();
+  const engineBoards = buildEngineBoards(kv);
+  const servesItem = async (itemId: string): Promise<boolean> =>
+    (await engineBoards.forItem(itemId)).kind === 'served';
 
   const boards = (): ItemBoardReader =>
     createItemBoardReader(
@@ -431,7 +562,7 @@ export function buildViewDeps(): {
        * touches Monday, and it degrades to `—` rather than failing the view. Building the
        * client eagerly would put a missing token back on the critical read path.
        */
-      assignments: workloadCache(kv, board, WORKLOAD_DEADLINE_MS),
+      assignments: workloadCache(kv, WORKLOAD_KEY, WORKLOAD_DEADLINE_MS),
       /**
        * The rejection has to be swallowed HERE, before `waitUntil` ever sees it.
        *
@@ -452,15 +583,13 @@ export function buildViewDeps(): {
     },
     recalculate: () => ({
       queue: createRunQueue(store, buildPublisher()),
-      boards: boards(),
-      agendaBoardId: board,
+      servesItem,
     }),
     approached: () => ({
       queue: store,
       outcomes,
       approached,
-      boards: boards(),
-      agendaBoardId: board,
+      servesItem,
     }),
     /**
      * Lazy for the same reason as the two above: this one needs `MONDAY_API_TOKEN`, and
@@ -478,7 +607,7 @@ export function buildViewDeps(): {
       cities: createCityStore(kv),
       boards: boards(),
       kv,
-      boardId: board,
+      servesBoard: async (boardId) => (await engineBoards.check(boardId)).kind === 'served',
     }),
   };
 }
@@ -494,5 +623,56 @@ export function webhookRouting(): WebhookRouting {
     // if we ever do subscribe to a column again.
     statusColumnId: RECOMMENDATION_STATUS_COLUMN,
     runLabel: RECOMMENDATION_STATUS_LABELS.run,
+  };
+}
+
+/**
+ * Wat `GET /api/cron/sync-webhooks` en `pnpm webhook:sync` nodig hebben.
+ *
+ * Het deployde app schrijft dus twee dingen naar Monday buiten de briefing: het statuslabel en
+ * een webhook-abonnement. Het tweede alleen aanmaken, nooit verwijderen; zie `webhook-sync.ts`.
+ */
+export function buildWebhookSyncDeps(options: { dryRun: boolean }): WebhookSyncDeps {
+  const token = requireEnv('MONDAY_API_TOKEN');
+  const kv = createUpstashKvStore(createRedisClient());
+  const client = createMondayGraphQLClient({
+    token,
+    apiVersion: MONDAY_API_VERSION,
+    deadlineMs: currentDeadlineMs,
+  });
+  const write = createMondayMutationClient({
+    token,
+    apiVersion: MONDAY_API_VERSION,
+    deadlineMs: currentDeadlineMs,
+  });
+  const boards = engineBoardsFrom(kv, client);
+  // Het gedeelde geheim reist mee in de URL; het authenticeert elke levering, ook de challenge.
+  const url =
+    `${publicBaseUrl()}/api/webhooks/monday/recommendations` +
+    `?token=${requireEnv('MONDAY_WEBHOOK_TOKEN')}`;
+
+  return {
+    boards: async () =>
+      (await boards.list()).served.map((b) => ({ boardId: b.boardId, naam: b.naam })),
+    triggerGroupIds: triggerGroupIds(),
+    listWebhooks: async (boardId) =>
+      parseWebhookRows(
+        await client.query<unknown>(
+          'query ($board: ID!) { webhooks(board_id: $board) { id event config } }',
+          { board: boardId }
+        )
+      ),
+    createWebhook: async (boardId, groupId, replaces) =>
+      parseCreatedWebhookId(
+        await write.mutate<unknown>(
+          `mutation ($board: ID!, $url: String!, $event: WebhookEventType!, $config: JSON) {
+             create_webhook(board_id: $board, url: $url, event: $event, config: $config) { id }
+           }`,
+          { board: boardId, url, event: MOVE_EVENT, config: JSON.stringify({ groupId }) },
+          { idempotencyKey: webhookIdempotencyKey(boardId, groupId, replaces) }
+        )
+      ),
+    store: createSubscriptionStore(kv),
+    dryRun: options.dryRun,
   };
 }

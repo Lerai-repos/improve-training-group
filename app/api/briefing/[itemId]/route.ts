@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { readBriefingTraining } from '@lib/briefing/read';
 
-import { guard } from './guard';
+import { guard, requireAgendaItem } from './guard';
 
 /**
  * De gegevens waar de tab zijn scherm mee opbouwt.
@@ -25,15 +25,24 @@ export async function GET(
     return guarded.response;
   }
 
-  try {
-    const { monday, checklists, boardId } = guarded.deps;
-    const training = await readBriefingTraining(monday, itemId, { boardId });
+  /**
+   * Eerst het bord van déze training bepalen en keuren.
+   *
+   * Er is geen vast agendabord meer: elke actieve jaargang telt. Dit is daarmee ook de
+   * toegangscontrole op de sleutel in KV, dezelfde als op het schrijfpad.
+   */
+  const scope = await requireAgendaItem(guarded.deps, itemId);
+  if (!scope.ok) {
+    return scope.response;
+  }
 
-    /**
-     * De lezer haalt de training van het ingestelde agendabord, dus een item dat daar niet op
-     * staat komt hier niet doorheen. Dat is ook de toegangscontrole op de sleutel in KV: zie
-     * `requireAgendaItem` voor het schrijfpad, waar die controle apart nodig is.
-     */
+  try {
+    const { monday, checklists } = guarded.deps;
+    const training = await readBriefingTraining(monday, itemId, {
+      boardId: scope.boardId,
+      relations: scope.relations,
+    });
+
     const snapshot = await checklists.read(itemId);
 
     return NextResponse.json({

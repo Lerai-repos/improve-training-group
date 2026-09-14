@@ -1,4 +1,13 @@
-import { labelFindings, mailFindings, themaFindings, trainerFindings } from './findings';
+import { liveAgendaBoards } from '@lib/evaluations';
+import { engineBoardProblem } from '@lib/recommend/engine-boards';
+
+import {
+  agendaBoardFindings,
+  labelFindings,
+  mailFindings,
+  themaFindings,
+  trainerFindings,
+} from './findings';
 import { withBoardLease } from './lease';
 import { groupMoves, staleClosedByMarkers } from './move';
 import { reconcile } from './reconcile';
@@ -6,6 +15,8 @@ import { failureKey, rowForFailure, rowForFinding } from './text';
 import { applyActions, dutchDate, SUMMARY_KEY } from './write';
 import { findingKey } from './types';
 
+import type { AgendaBoard, AgendaBoardSet } from '@lib/evaluations';
+import type { EngineBoardRules } from '@lib/recommend/engine-boards';
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { MailFailure } from '@lib/mail';
@@ -25,10 +36,20 @@ const LABEL_KINDS: readonly FindingKind[] = [
 const THEMA_KINDS: readonly FindingKind[] = ['thema-ontbreekt', 'thema-zonder-inhoud'];
 const TRAINER_KINDS: readonly FindingKind[] = ['trainer-ontbreekt'];
 const MAIL_KINDS: readonly FindingKind[] = ['mail-mislukt'];
+const AGENDABORD_KINDS: readonly FindingKind[] = [
+  'agendabord-nieuw',
+  'agendabord-onbruikbaar',
+  'aanbevelingen-niet-aangesloten',
+];
 
 export interface DailyCheckDeps {
   readonly readSignals: () => Promise<readonly ExistingSignal[]>;
-  readonly readAgendaUsage: () => Promise<AgendaUsage>;
+  /** Welke agendaborden er zijn. Per run ontdekt, zodat een nieuwe jaargang vanzelf meedoet. */
+  readonly readAgendaBoards: () => Promise<AgendaBoardSet>;
+  /** Het gebruik op de meegegeven (actieve) agendaborden. */
+  readonly readAgendaUsage: (boards: readonly AgendaBoard[]) => Promise<AgendaUsage>;
+  /** Wanneer een agendabord aanbevelingen krijgt: onze statuskolom en de triggergroepen. */
+  readonly engineRules: EngineBoardRules;
   readonly readLabels: () => Promise<ReadonlyMap<LabelCode, LabelRecord>>;
   readonly readThemas: () => Promise<ReadonlyMap<string, ThemaRecord>>;
   /** De ids van elk bestaand trainer-item, voor de verweesde-verwijzingcontrole. */
@@ -133,9 +154,11 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
    * de controles doordringt in plaats van tot één.
    */
   let usage: AgendaUsage | null = null;
+  let boards: AgendaBoardSet | null = null;
   let agendaFailure: CheckFailure | null = null;
   try {
-    usage = await deps.readAgendaUsage();
+    boards = await deps.readAgendaBoards();
+    usage = await deps.readAgendaUsage(liveAgendaBoards(boards));
   } catch (error) {
     agendaFailure = { check: 'agenda', error: message(error) };
   }
@@ -163,6 +186,21 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
    * te melden. Wél door dezelfde `attempt`, zodat een storing in KV net zo goed een
    * `controle-mislukt`-rij oplevert als elke andere.
    */
+  /**
+   * De agendaborden zelf, uit de ontdekking en niet uit de telling.
+   *
+   * Lukt het ontdekken en valt de telling daarna om, dan klopt wat er over de borden te melden
+   * valt nog steeds. Een nieuw bord hoort dan niet te wachten tot de telling weer werkt.
+   */
+  if (boards !== null) {
+    results.push({
+      check: 'agendaborden',
+      findings: agendaBoardFindings(boards, deps.engineRules),
+      checked: AGENDABORD_KINDS,
+      failure: null,
+    });
+  }
+
   results.push(
     await attempt('mails', MAIL_KINDS, async () => mailFindings(await deps.readMailFailures()))
   );
@@ -186,7 +224,16 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
   const attempted = ['agenda', ...results.map((r) => r.check)].map(failureKey);
   const rows = [...findings.map(rowForFinding), ...failures.map(rowForFailure)];
   const actions = reconcile({ rows, existing, checked: [...checked, ...attempted] });
-  const summary = summaryText({ now: deps.now(), usage, findings, existing, actions, failures });
+  const summary = summaryText({
+    now: deps.now(),
+    usage,
+    boards,
+    engineRules: deps.engineRules,
+    findings,
+    existing,
+    actions,
+    failures,
+  });
 
   if (deps.writer === null) {
     return {
@@ -316,6 +363,9 @@ async function writeSummary(
 interface SummaryInput {
   readonly now: Date;
   readonly usage: AgendaUsage | null;
+  /** Weglaatbaar voor een aanroeper die alleen de rest van de tekst wil controleren. */
+  readonly boards?: AgendaBoardSet | null;
+  readonly engineRules?: EngineBoardRules;
   readonly findings: readonly Finding[];
   readonly existing: readonly ExistingSignal[];
   /**
@@ -389,6 +439,9 @@ export function summaryText(input: SummaryInput): string {
       ? 'De agenda kon niet gelezen worden — er is deze run niets gecontroleerd.'
       : `${totalTrainingen(input.usage)} trainingen, ${input.usage.labels.size} labelwaarden, ` +
         `${input.usage.themas.size} thema's, ${input.usage.trainers.size} trainers in gebruik.`,
+    ...(input.boards === undefined || input.boards === null
+      ? []
+      : [agendaBoardLine(input.boards, input.engineRules)]),
     '',
     `Labels zonder (volledige) configuratie: ${labels.meldingen} ` +
       `(${labels.trainingen} trainingen).`,
@@ -411,6 +464,28 @@ export function summaryText(input: SummaryInput): string {
   }
 
   return regels.join('\n');
+}
+
+/**
+ * Op welke borden de jobs vandaag draaien.
+ *
+ * Elke ochtend op het bord waar ITG toch al kijkt. Dat vervangt een instellingenpagina: wie wil
+ * weten of 2027 meedoet, leest het hier.
+ */
+function agendaBoardLine(set: AgendaBoardSet, rules?: EngineBoardRules): string {
+  const namen = (lijst: readonly { naam: string }[]): string =>
+    lijst.length === 0 ? 'geen' : lijst.map((b) => b.naam).join(', ');
+  const archief = set.boards.filter((b) => b.gearchiveerd);
+  const aanbevelingen =
+    rules === undefined
+      ? null
+      : liveAgendaBoards(set).filter((b) => engineBoardProblem(b, rules) === null);
+  return [
+    `Agendaborden in gebruik: ${namen(liveAgendaBoards(set))}.`,
+    ...(archief.length === 0 ? [] : [`Alleen historie: ${namen(archief)}.`]),
+    ...(set.rejected.length === 0 ? [] : [`Doet niet mee: ${namen(set.rejected)}.`]),
+    ...(aanbevelingen === null ? [] : [`Aanbevelingen op: ${namen(aanbevelingen)}.`]),
+  ].join(' ');
 }
 
 export type ExclusiveOutcome =

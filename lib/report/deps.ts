@@ -2,8 +2,12 @@ import {
   createOAuthGoogleAuth,
   evaluationDocuments,
   googleSheetsSource,
+  liveAgendaBoards,
+  loadAgendaBoards,
   oauthCredentialsFromEnv,
   readAgendaHistory,
+  type AgendaBoardSet,
+  type BoardsQueryClient,
 } from '@lib/evaluations';
 import { labelsBoardId } from '@lib/labels';
 import {
@@ -15,14 +19,13 @@ import {
   isRedirected,
   mailRecipients,
 } from '@lib/mail';
-import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
+import { MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { readLabels } from '@lib/labels/read';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { createGraphClient, graphConfigFromEnv } from '@lib/sharepoint/graph';
 
-import { reportAgendaBoards } from './agenda-boards';
 import { readTrainingForReport } from './training';
 import { readTrainerEmails } from './trainer-emails';
 
@@ -126,7 +129,7 @@ export function buildDailyReportDeps(options: {
    * te nemen, en dat verdient geen impliciete keuze in een hulpfunctie.
    */
   mail: boolean;
-}): { deps: DailyDeps; boardId: string } {
+}): { deps: DailyDeps } {
   const { date, deadlineMs } = options;
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) {
@@ -135,20 +138,23 @@ export function buildDailyReportDeps(options: {
 
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION, deadlineMs });
   const write = createMondayMutationClient({ token, apiVersion: MONDAY_API_VERSION });
-  const boardId = agendaBoardId();
+  const boards = agendaBoardsOnce(client);
 
   return {
-    boardId,
     deps: {
       mail: options.mail ? buildMailDeps(client, deadlineMs) : undefined,
-      readAgenda: async () =>
-        (await readAgendaHistory(client, reportAgendaBoards())).trainings.map((t) => ({
+      readAgenda: async () => {
+        const set = await boards();
+        const live = new Set(liveAgendaBoards(set).map((b) => b.boardId));
+        return (await readAgendaHistory(client, set.boards)).trainings.map((t) => ({
           trainingItemId: t.entry.trainingItemId,
           datum: t.entry.datum,
           boardId: t.boardId,
+          live: live.has(t.boardId),
           ref: t.ref,
-        })),
-      readTraining: (id) => readTrainingForReport(client, id),
+        }));
+      },
+      readTraining: async (id) => readTrainingForReport(client, id, (await boards()).boards),
       readLabels: () => readLabels(client, labelsBoardId()),
       readResponses: async () =>
         (
@@ -159,7 +165,7 @@ export function buildDailyReportDeps(options: {
             deadlineMs
           ).readResponses()
         ).responses,
-      writeColumns: async (itemId, values) => {
+      writeColumns: async (itemId, boardId, values) => {
         await write.mutate(
           `mutation ($board: ID!, $item: ID!, $values: JSON!) {
              change_multiple_column_values(board_id: $board, item_id: $item,
@@ -187,6 +193,29 @@ export function buildDailyReportDeps(options: {
 }
 
 /**
+ * De agendaborden één keer per run ontdekken, en dan delen.
+ *
+ * De agendalezer en elke trainingslezer hebben ze nodig, en ontdekken kost een paar
+ * Monday-vragen: niet per training opnieuw. Een mislukte poging wordt niet bewaard, zodat de
+ * volgende aanroep het opnieuw probeert in plaats van dezelfde fout te herhalen.
+ */
+function agendaBoardsOnce(client: BoardsQueryClient): () => Promise<AgendaBoardSet> {
+  let pending: Promise<AgendaBoardSet> | null = null;
+  return () => {
+    if (pending === null) {
+      const attempt = loadAgendaBoards(client);
+      pending = attempt;
+      attempt.catch(() => {
+        if (pending === attempt) {
+          pending = null;
+        }
+      });
+    }
+    return pending;
+  };
+}
+
+/**
  * De aansluitingen voor ÉÉN rapport: de route en het script, uit dezelfde bron.
  *
  * Bestond eerder twee keer los, en dat is precies waar de bordoverride uit beeld raakte:
@@ -200,9 +229,10 @@ export function buildReportRunDeps(deadlineMs?: () => number | null): ReportRunD
     throw new Error('MONDAY_API_TOKEN is not configured');
   }
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION, deadlineMs });
+  const boards = agendaBoardsOnce(client);
 
   return {
-    readTraining: (id) => readTrainingForReport(client, id),
+    readTraining: async (id) => readTrainingForReport(client, id, (await boards()).boards),
     readLabel: async (code) => (await readLabels(client, labelsBoardId())).get(code) ?? null,
     readResponses: async () =>
       (
@@ -214,7 +244,7 @@ export function buildReportRunDeps(deadlineMs?: () => number | null): ReportRunD
         ).readResponses()
       ).responses,
     readTrainings: async () =>
-      (await readAgendaHistory(client, reportAgendaBoards())).trainings.map((t) => t.ref),
+      (await readAgendaHistory(client, (await boards()).boards)).trainings.map((t) => t.ref),
     renderer: createPdfRenderer(deadlineMs),
   };
 }

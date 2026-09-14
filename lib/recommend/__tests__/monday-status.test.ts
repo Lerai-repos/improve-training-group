@@ -31,7 +31,7 @@ function writer(columnId: string = OUR_COLUMN) {
   return createMondayStatusWriter({
     token: 't',
     apiVersion: '2026-07',
-    boardId: '5087396949',
+    boardFor: async () => '5087396949',
     columnId,
   });
 }

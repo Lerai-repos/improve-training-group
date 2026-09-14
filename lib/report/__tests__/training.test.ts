@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
+import { AGENDA_HISTORY_BOARDS } from '@lib/evaluations';
 import { readTrainingForReport } from '../training';
 
 const C = BRIEFING_AGENDA_COLUMNS;
+/** De gemeten borden, zoals de ontdekking ze oplevert. */
+const BOARDS = AGENDA_HISTORY_BOARDS;
 const AGENDA_2026 = '5087396949';
 const AGENDA_2025 = '1703587792';
 
@@ -67,7 +70,7 @@ const linked = (id: string, ...names: string[]): Cell => ({
 
 describe('readTrainingForReport', () => {
   it('leest de gewone velden', async () => {
-    const t = await readTrainingForReport(clientFor(item(AGENDA_2026, [])), 'i1');
+    const t = await readTrainingForReport(clientFor(item(AGENDA_2026, [])), 'i1', BOARDS);
     expect(t).toMatchObject({
       klanttitel: 'Onderhandelen',
       contactPersoon: 'Lisa de Vries',
@@ -78,7 +81,7 @@ describe('readTrainingForReport', () => {
 
   it('gebruikt de itemnaam als de klanttitelkolom leeg is', async () => {
     const raw = withCell(item(AGENDA_2026, [], 'WE Fashion'), C.klanttitel, '');
-    const t = await readTrainingForReport(clientFor(raw), 'i1');
+    const t = await readTrainingForReport(clientFor(raw), 'i1', BOARDS);
     // De titel loopt middenin een zin naar de klant; leeg laten is geen optie.
     expect(t?.klanttitel).toBe('WE Fashion');
   });
@@ -91,7 +94,8 @@ describe('readTrainingForReport', () => {
           linked(C.coTrainerRelation, 'Jeanet Mosselman'),
         ])
       ),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.trainerNamen).toEqual(['Kenneth Plat', 'Jeanet Mosselman']);
   });
@@ -104,7 +108,8 @@ describe('readTrainingForReport', () => {
   it('leest de trainer op het 2025-bord uit het andere kolom-id', async () => {
     const t = await readTrainingForReport(
       clientFor(item(AGENDA_2025, [linked(LEAD_2025, 'Mark de Vries')])),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.trainerNamen).toEqual(['Mark de Vries']);
   });
@@ -115,7 +120,8 @@ describe('readTrainingForReport', () => {
       clientFor(
         item(AGENDA_2025, [linked(LEAD_2025, 'Mark de Vries'), linked(LEAD_2026, 'Iemand Anders')])
       ),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.trainerNamen).toEqual(['Mark de Vries']);
   });
@@ -139,7 +145,8 @@ describe('readTrainingForReport', () => {
           },
         ])
       ),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.trainerNamen).toEqual(['Jan Bakker', 'Piet Jansen']);
   });
@@ -158,35 +165,36 @@ describe('readTrainingForReport', () => {
           },
         ])
       ),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.trainerNamen).toEqual(['Jan Bakker', 'Jan Bakker']);
   });
 
   it('werpt op een agendabord dat we niet kennen, in plaats van 2026 te gokken', async () => {
     await expect(
-      readTrainingForReport(clientFor(item('999999', [linked(LEAD_2026, 'Jan')])), 'i1')
+      readTrainingForReport(clientFor(item('999999', [linked(LEAD_2026, 'Jan')])), 'i1', BOARDS)
     ).rejects.toThrow('welke kolom de trainers draagt');
   });
 
   it('lost een labelalias op en meldt een onbekend label als null', async () => {
     const alias = withCell(item(AGENDA_2026, []), C.label, 'WorkJoy');
-    expect((await readTrainingForReport(clientFor(alias), 'i1'))?.labelCode).toBe('WJ');
+    expect((await readTrainingForReport(clientFor(alias), 'i1', BOARDS))?.labelCode).toBe('WJ');
 
     const onbekend = withCell(item(AGENDA_2026, []), C.label, 'TMT');
-    const t = await readTrainingForReport(clientFor(onbekend), 'i1');
+    const t = await readTrainingForReport(clientFor(onbekend), 'i1', BOARDS);
     expect(t?.labelCode).toBeNull();
     expect(t?.rawLabel).toBe('TMT');
   });
 
   it('geeft null als het item niet bestaat', async () => {
-    expect(await readTrainingForReport(clientFor(null), 'i1')).toBeNull();
+    expect(await readTrainingForReport(clientFor(null), 'i1', BOARDS)).toBeNull();
   });
 
   /** Eén projectie over beide jaargangen; een tweede bordbevraging is niet nodig. */
   it('vraagt alle bekende trainerrelaties in één query op', async () => {
     const client = clientFor(item(AGENDA_2026, []));
-    await readTrainingForReport(client, 'i1');
+    await readTrainingForReport(client, 'i1', BOARDS);
     const query = String(client.query.mock.calls[0]?.[0] ?? '');
     expect(query).toContain(LEAD_2026);
     expect(query).toContain(LEAD_2025);
@@ -207,7 +215,8 @@ describe('de themarelatie per jaargang', () => {
   it("leest de thema's van een 2026-item", async () => {
     const t = await readTrainingForReport(
       clientFor(item(AGENDA_2026, [linked(LEAD_2026, 'Jan'), linked(THEMA_2026, 'Onderhandelen')])),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.themaNamen).toEqual(['Onderhandelen']);
   });
@@ -215,7 +224,8 @@ describe('de themarelatie per jaargang', () => {
   it("leest de thema's van een 2025-item uit de ANDERE kolom", async () => {
     const t = await readTrainingForReport(
       clientFor(item(AGENDA_2025, [linked(LEAD_2025, 'Jan'), linked(THEMA_2025, 'Onderhandelen')])),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.themaNamen).toEqual(['Onderhandelen']);
   });
@@ -225,14 +235,15 @@ describe('de themarelatie per jaargang', () => {
     // gelezen te worden; anders zou de lezer op beide kolommen tegelijk gokken.
     const t = await readTrainingForReport(
       clientFor(item(AGENDA_2025, [linked(LEAD_2025, 'Jan'), linked(THEMA_2026, 'Fout thema')])),
-      'i1'
+      'i1',
+      BOARDS
     );
     expect(t?.themaNamen).toEqual([]);
   });
 
   it('vraagt beide themakolommen op in één projectie', async () => {
     const client = clientFor(item(AGENDA_2026, [linked(LEAD_2026, 'Jan')]));
-    await readTrainingForReport(client, 'i1');
+    await readTrainingForReport(client, 'i1', BOARDS);
     const [query] = client.query.mock.calls[0];
     expect(query).toContain(THEMA_2026);
     expect(query).toContain(THEMA_2025);

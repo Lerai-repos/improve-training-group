@@ -1,4 +1,5 @@
 import { BRIEFINGS_BOARD, BRIEFINGS_COLUMNS, BRIEFING_AGENDA_COLUMNS } from './columns';
+import { isNotDecided } from './open-issues';
 
 import type { RecipientRole } from './recipients';
 import type { MondayMutationClient } from '@lib/monday/mutate';
@@ -149,6 +150,14 @@ export function recordInputFor(input: {
   }[];
   /** Wat er écht in SharePoint staat. Bij een deelresultaat korter dan `documents`. */
   readonly written: readonly { file: { name: string; webUrl: string } }[];
+  /**
+   * De lege verplichte velden van de training (`training.missing`).
+   *
+   * Nodig omdat niet elk leeg veld een `«…»`-regel oplevert: een lege Locatie staat gewoon
+   * leeg in de gegevenstabel. Zonder dit kwam zo'n briefing op `Staat klaar` terwijl de tab
+   * hem als onvolledig toonde.
+   */
+  readonly ontbrekend: readonly string[];
   readonly vandaag: string;
 }): RecordInput {
   const deels = input.written.length < input.documents.length;
@@ -166,7 +175,18 @@ export function recordInputFor(input: {
      * dezelfde noemer: `Staat klaar` boven een training waarvan de helft van de briefings
      * ontbreekt is domweg onwaar.
      */
-    incompleet: deels || input.documents.some((doc) => doc.open.length > 0),
+    /**
+     * Alleen wat de adviseur kan oplossen telt, dezelfde regel als het Compleet-label in de tab.
+     *
+     * Een `nog niet aangesloten`-regel blijft zichtbaar in het document, maar maakt de
+     * briefing niet onaf. Bij genereren zijn dat alleen nog bronnen die niet bestaan: de
+     * inventarisatie en de rolteksten die ITG nog moet leveren. Elke briefing bevat er minstens
+     * één, dus meetellen maakte `Staat klaar` voor élke training onbereikbaar.
+     */
+    incompleet:
+      deels ||
+      input.ontbrekend.length > 0 ||
+      input.documents.some((doc) => doc.open.some(isNotDecided)),
     vandaag: input.vandaag,
   };
 }

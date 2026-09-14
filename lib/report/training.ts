@@ -8,6 +8,7 @@ import {
 import { IE_STATUS_COLUMN } from './record';
 import { resolveLabelCode } from '@lib/labels';
 
+import type { AgendaHistoryColumns } from '@lib/evaluations';
 import type { LabelCode } from '@lib/labels';
 import type { ReportTraining } from './types';
 
@@ -101,7 +102,7 @@ const textOf = (item: AgendaItem, id: string): string => (cell(item, id)?.text ?
  *
  * **De trainerrelatie verschilt PER JAARGANG** — 2026 gebruikt `board_relation_mkz4y7tb`,
  * 2025 `board_relation_mkz4w78`, en 2025 heeft helemaal geen co-trainerkolom. Die ids komen
- * uit `AGENDA_HISTORY_BOARDS` via `./agenda-boards`, niet uit een eigen tabel. Er wordt naar
+ * uit de ontdekte agendaborden (`loadAgendaBoards`), niet uit een eigen tabel. Er wordt naar
  * álle bekende relatie-ids gevraagd en pas ná het lezen van `board { id }` gekozen welke
  * ervan tellen. Eén projectie, geen tweede bordbevraging.
  *
@@ -111,9 +112,10 @@ const textOf = (item: AgendaItem, id: string): string => (cell(item, id)?.text ?
  */
 export async function readTrainingForReport(
   client: AgendaReader,
-  itemId: string
+  itemId: string,
+  boards: readonly AgendaHistoryColumns[]
 ): Promise<TrainingForReport | null> {
-  const ids = [...FIELDS, ...allTrainerRelationColumns(), ...allThemaRelationColumns()]
+  const ids = [...FIELDS, ...allTrainerRelationColumns(boards), ...allThemaRelationColumns(boards)]
     .map((id) => `"${id}"`)
     .join(', ');
   const data = await client.query(
@@ -129,12 +131,12 @@ export async function readTrainingForReport(
   }
 
   const boardId = item.board?.id ?? '';
-  const relations = agendaTrainerRelations(boardId);
+  const relations = agendaTrainerRelations(boards, boardId);
   if (relations === null) {
     throw new Error(
       `Agenda-item ${itemId} staat op bord ${boardId || '(onbekend)'}, en van dat bord weten ` +
         'we niet welke kolom de trainers draagt. Zonder dat zou het rapport "onze trainer" ' +
-        'zonder naam schrijven. Vul de jaargang aan in `agendaTrainerRelations`.'
+        'zonder naam schrijven. Is dit bord wel een bruikbaar agendabord?'
     );
   }
 
@@ -172,7 +174,7 @@ export async function readTrainingForReport(
    * hier zijn is dit bord bekend en levert dit een id op. De controle staat er toch, omdat
    * een `null` die stil doorloopt precies het lege thema oplevert waar dit voor bestaat.
    */
-  const themaRelation = agendaThemaRelation(boardId);
+  const themaRelation = agendaThemaRelation(boards, boardId);
   if (themaRelation === null) {
     throw new Error(
       `Agenda-item ${itemId} staat op bord ${boardId || '(onbekend)'}, en van dat bord weten ` +

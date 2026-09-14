@@ -134,6 +134,7 @@ describe('recordInputFor', () => {
       trainingItemId: '900',
       documents: documenten,
       written: [bestand('a.docx'), bestand('b.docx')],
+      ontbrekend: [],
       vandaag: '2026-08-26',
     });
 
@@ -152,11 +153,44 @@ describe('recordInputFor', () => {
    * 500 waarbij níets werd vastgelegd, en dus precies de wees die het deelresultaat hoort te
    * voorkomen.
    */
+  /**
+   * Dezelfde regel als het Compleet-label in de tab. Elke briefing bevat de inventarisatieregel,
+   * dus als die meetelde kon `Staat klaar` voor geen enkele training ooit voorkomen.
+   */
+  it('telt alleen wat de adviseur kan oplossen als onaf', () => {
+    const met = (open: readonly string[]) =>
+      recordInputFor({
+        trainingItemId: '900',
+        documents: [{ trainerNaam: 'Frank Paats', role: 'lead', open }],
+        written: [bestand('a.docx')],
+        ontbrekend: [],
+        vandaag: '2026-08-26',
+      }).incompleet;
+
+    expect(met(['« nog niet aangesloten: inventarisatie klant — bron: Google Form »'])).toBe(false);
+    expect(met(['« nog niet bepaald: evaluatie deelnemers — de QR-kolom staat op "X" »'])).toBe(
+      true
+    );
+  });
+
+  /** Een lege Locatie geeft geen «…»-regel, maar de briefing is niet af. */
+  it('telt een leeg verplicht veld als onaf, ook zonder regel in het document', () => {
+    const uit = recordInputFor({
+      trainingItemId: '900',
+      documents: [{ trainerNaam: 'Frank Paats', role: 'lead', open: [] }],
+      written: [bestand('a.docx')],
+      ontbrekend: ['Locatie'],
+      vandaag: '2026-08-26',
+    });
+    expect(uit.incompleet).toBe(true);
+  });
+
   it('legt bij een halve generatie vast wat er wél staat', () => {
     const uit = recordInputFor({
       trainingItemId: '900',
       documents: documenten,
       written: [bestand('a.docx')],
+      ontbrekend: [],
       vandaag: '2026-08-26',
     });
 
@@ -170,6 +204,7 @@ describe('recordInputFor', () => {
       trainingItemId: '900',
       documents: documenten,
       written: [bestand('a.docx')],
+      ontbrekend: [],
       vandaag: '2026-08-26',
     });
 
@@ -179,8 +214,15 @@ describe('recordInputFor', () => {
   it('noemt een volledige generatie met lege velden ook onvolledig', () => {
     const uit = recordInputFor({
       trainingItemId: '900',
-      documents: [{ ...documenten[0], open: ['Achtergrondinformatie'] }],
+      // Zoals `generate` ze aanlevert: de hele documentregel, niet alleen de veldnaam.
+      documents: [
+        {
+          ...documenten[0],
+          open: ['« nog niet bepaald: achtergrondinformatie — de kolom is leeg »'],
+        },
+      ],
       written: [bestand('a.docx')],
+      ontbrekend: [],
       vandaag: '2026-08-26',
     });
 

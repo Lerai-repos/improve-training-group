@@ -105,6 +105,8 @@ describe('withBoardLease', () => {
 describe('runDailyCheckExclusive', () => {
   const baseDeps = (writer: DailyCheckDeps['writer']): DailyCheckDeps => ({
     readSignals: async () => [],
+    readAgendaBoards: async () => ({ boards: [], rejected: [] }),
+    engineRules: { statusColumnId: 'color_ours', triggerGroupIds: [] },
     readAgendaUsage: async () => usage({ labels: new Map(), themas: new Map() }),
     readLabels: async () => new Map(),
     readThemas: async () => new Map(),

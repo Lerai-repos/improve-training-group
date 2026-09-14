@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import type { ApproachedStore } from './approached';
-import type { ItemBoardReader } from './item-board';
 import type { OutcomeStore } from './outcome';
 import type { QueueStore } from './queue-store';
 import type { RunQueue } from './webhook';
@@ -47,26 +46,23 @@ export const approachedBodySchema = z.object({
  * `GET` is account-wide and historical by design; mutations are not.
  *
  * A `view` holder may open any item that ever produced an artifact. Spending money on a
- * recomputation, or writing shared planning state, is confined to the Agenda board the
- * engine is configured for — otherwise any item id in the account would be a lever on
- * our provider budget.
+ * recomputation, or writing shared planning state, is confined to the agenda boards the
+ * engine serves — otherwise any item id in the account would be a lever on our provider
+ * budget.
+ *
+ * **Every served board, not one configured board.** ITG runs 2026 and its 2027 copy side
+ * by side; `EngineBoards.forItem` decides, the same check the webhook and the status writer
+ * use.
  *
  * A non-existent item and an item on another board both answer 403. The distinction is
  * logged, not returned: an authenticated caller should not be handed an oracle for which
  * ids exist.
  */
-async function onAgendaBoard(
-  boards: ItemBoardReader,
-  agendaBoardId: string,
-  mondayItemId: string
-): Promise<boolean> {
-  return (await boards.readBoardId(mondayItemId)) === agendaBoardId;
-}
+export type ServesItem = (mondayItemId: string) => Promise<boolean>;
 
 export interface RecalculateDeps {
   queue: RunQueue;
-  boards: ItemBoardReader;
-  agendaBoardId: string;
+  servesItem: ServesItem;
 }
 
 export async function handleRecalculate(
@@ -78,7 +74,7 @@ export async function handleRecalculate(
     return fail(400, parsed.error.issues[0]?.message ?? 'invalid body');
   }
 
-  if (!(await onAgendaBoard(deps.boards, deps.agendaBoardId, input.mondayItemId))) {
+  if (!(await deps.servesItem(input.mondayItemId))) {
     return fail(403, 'forbidden');
   }
 
@@ -102,8 +98,7 @@ export interface ApproachedDeps {
   queue: Pick<QueueStore, 'readGeneration'>;
   outcomes: Pick<OutcomeStore, 'readDetail' | 'readRowsTtl'>;
   approached: ApproachedStore;
-  boards: ItemBoardReader;
-  agendaBoardId: string;
+  servesItem: ServesItem;
 }
 
 export async function handleApproached(
@@ -116,7 +111,7 @@ export async function handleApproached(
   }
   const { generation, trainerItemId, approached } = parsed.data;
 
-  if (!(await onAgendaBoard(deps.boards, deps.agendaBoardId, input.mondayItemId))) {
+  if (!(await deps.servesItem(input.mondayItemId))) {
     return fail(403, 'forbidden');
   }
 

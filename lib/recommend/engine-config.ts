@@ -109,10 +109,12 @@ export function buildEngineConfig(opts: {
   settings: SettingsSnapshot;
   gitSha?: string | null;
   ackVersion?: string | null;
+  /** The board of the training being computed. Scripts that compute nothing omit it. */
+  boardId?: string;
 }): EngineConfig {
   const cfg = opts.settings.app;
   return {
-    boardId: agendaBoardId(),
+    boardId: opts.boardId ?? agendaBoardId(),
     hqAddress: cfg.hqAddress,
     recommendableGroups: cfg.recommendableTrainerGroups,
     rateCards: [...opts.settings.rateCards],

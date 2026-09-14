@@ -5,6 +5,7 @@ import {
   buildStatusWriter,
   buildWorkerDeps,
   jobPayloadSchema,
+  notServedResult,
   parseJsonOrNull,
   runJob,
   runRecommendation,
@@ -64,8 +65,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         // all. Building it eagerly also put that read OUTSIDE the deadline, where a
         // roster outage could block delivery of an answer we already had.
         runRecommendation: async (mondayItemId) => {
-          const { deps, settings } = await buildWorkerDeps();
-          return { result: await runRecommendation(deps, mondayItemId), settings };
+          const worker = await buildWorkerDeps(mondayItemId);
+          // Het bord krijgt geen aanbevelingen (meer): vastleggen en stoppen, niet rekenen.
+          if (worker.kind === 'not-served') {
+            return { result: notServedResult(worker.reden), settings: worker.settings };
+          }
+          return {
+            result: await runRecommendation(worker.deps, mondayItemId),
+            settings: worker.settings,
+          };
         },
       },
       parsed.data

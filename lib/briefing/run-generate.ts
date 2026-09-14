@@ -289,6 +289,7 @@ export async function runGenerate(
       trainingItemId: input.itemId,
       documents: gemaakt.documents,
       written: geschreven.written,
+      ontbrekend: training.missing.map((veld) => veld.label),
       vandaag: deps.today(),
     })
   );

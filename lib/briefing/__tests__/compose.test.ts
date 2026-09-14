@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isNotDecided } from '../open-issues';
 
 import {
   EMPTY_CHECKLIST,
@@ -625,5 +626,16 @@ describe('templatePath', () => {
   it('weigert een onbekend label in plaats van terug te vallen', () => {
     expect(() => templatePath('')).toThrow(/onbekend label/);
     expect(() => templatePath('../../etc/passwd')).toThrow(/onbekend label/);
+  });
+});
+
+describe('km en reistijd bij genereren', () => {
+  /**
+   * Bij genereren is de routebron er altijd. Ontbreekt de route toch, dan is dat een gat in de
+   * gegevens (Locatie of adres), en telt de briefing niet als klaar.
+   */
+  it('telt een ontbrekende route als iets wat nog opgelost moet worden', () => {
+    const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
+    expect(isNotDecided(data.reis)).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { THEMAS_BOARD, TRAINERS_BOARD } from '@lib/monday/board-config';
-import { agendaTrainerRelations, reportAgendaBoards } from '@lib/report/agenda-boards';
+import { AGENDA_HISTORY_BOARDS, trainerRelationColumns } from '@lib/evaluations';
 
 import { SIGNAL_COLUMNS } from '../columns';
 import { LABEL_CODES } from '@lib/labels';
@@ -19,7 +19,7 @@ const col = (id: string, type: string, settings: string | null = null): Col => (
   settings_str: settings,
 });
 
-const agenda = reportAgendaBoards();
+const agenda = AGENDA_HISTORY_BOARDS;
 const themaRelation = agenda[0]?.themaRelation ?? '';
 
 /** Wat elk bord moet hebben om door de keuring te komen. */
@@ -27,19 +27,14 @@ const healthy = (boardId: string): Col[] => {
   if (boardId === THEMAS_BOARD) {
     return [col('itg_conceptinhoud', 'long_text')];
   }
-  const relatie = agenda.find((b) => b.boardId === boardId)?.themaRelation;
-  if (relatie !== undefined) {
-    const trainers = agendaTrainerRelations(boardId);
-    const trainerCols =
-      trainers === null
-        ? []
-        : trainers.co === null
-          ? [trainers.lead]
-          : [trainers.lead, trainers.co];
+  const board = agenda.find((b) => b.boardId === boardId);
+  if (board !== undefined) {
     return [
       col('status23', 'status'),
-      col(relatie, 'board_relation', `{"boardIds":[${THEMAS_BOARD}]}`),
-      ...trainerCols.map((id) => col(id, 'board_relation', `{"boardIds":[${TRAINERS_BOARD}]}`)),
+      col(board.themaRelation, 'board_relation', `{"boardIds":[${THEMAS_BOARD}]}`),
+      ...trainerRelationColumns(board).map((id) =>
+        col(id, 'board_relation', `{"boardIds":[${TRAINERS_BOARD}]}`)
+      ),
     ];
   }
   return [
@@ -114,9 +109,9 @@ describe('readAgendaUsage — keuring van de agenda', () => {
    * de controle "geslaagd" heet.
    */
   it('weigert als de labelkolom weg is', async () => {
-    await expect(readAgendaUsage(fakeClient({ columnsFor: without('status23') }))).rejects.toThrow(
-      /schema drift.*status23/s
-    );
+    await expect(
+      readAgendaUsage(fakeClient({ columnsFor: without('status23') }), agenda)
+    ).rejects.toThrow(/schema drift.*status23/s);
   });
 
   it('weigert als de themarelatie naar een ander bord is omgehangen', async () => {
@@ -126,13 +121,13 @@ describe('readAgendaUsage — keuring van de agenda', () => {
       healthy(boardId).map((c) =>
         c.type === 'board_relation' ? col(c.id, 'board_relation', '{"boardIds":[999]}') : c
       );
-    await expect(readAgendaUsage(fakeClient({ columnsFor }))).rejects.toThrow(
+    await expect(readAgendaUsage(fakeClient({ columnsFor }), agenda)).rejects.toThrow(
       /repointed|re-sourced/
     );
   });
 
   it('leest een gezonde agenda gewoon', async () => {
-    const usage = await readAgendaUsage(fakeClient());
+    const usage = await readAgendaUsage(fakeClient(), agenda);
     expect(usage.labels.size).toBe(0);
     expect(themaRelation).not.toBe('');
   });

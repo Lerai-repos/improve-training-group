@@ -32,3 +32,26 @@ export function notDecided(wat: string, reden: string): string {
 export function isOpenIssue(tekst: string): boolean {
   return tekst.trimStart().startsWith(OPEN_ISSUE_MARK);
 }
+
+const NOT_DECIDED_PREFIX = `${OPEN_ISSUE_MARK} nog niet bepaald: `;
+
+/**
+ * Is dit iets wat de adviseur kan oplossen?
+ *
+ * Alleen `nog niet bepaald` telt. `nog niet aangesloten` is ónze achterstand — de
+ * inventarisatiebron bijvoorbeeld bestaat nog niet — en daar kan niemand bij ITG iets aan
+ * doen. Telt die mee, dan is een briefing nooit compleet en zegt `Staat klaar` niets meer.
+ */
+export function isNotDecided(tekst: string): boolean {
+  return tekst.trimStart().startsWith(NOT_DECIDED_PREFIX);
+}
+
+/** `« nog niet bepaald: evaluatie deelnemers — reden »` → `Evaluatie deelnemers: reden`. */
+export function describeOpenIssue(tekst: string): string {
+  const kern = tekst
+    .trim()
+    .replace(/^«\s*nog niet (bepaald|aangesloten):\s*/, '')
+    .replace(/\s*»$/, '')
+    .replace(' — ', ': ');
+  return kern.charAt(0).toUpperCase() + kern.slice(1);
+}

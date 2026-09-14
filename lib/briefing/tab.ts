@@ -11,7 +11,15 @@
  */
 
 import { BRIEFING_AGENDA_COLUMNS } from './columns';
-import { countLinkedActors } from './compose';
+import {
+  ACHTERGROND_LEEG,
+  REIS_ONBEKEND,
+  composeBriefing,
+  countLinkedActors,
+  openIssues,
+  sessionFacts,
+} from './compose';
+import { describeOpenIssue, isNotDecided } from './open-issues';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
 import { conceptLines, resolveConceptInhoud } from './concept';
 import { formatDutchDate } from './deadline';
@@ -52,9 +60,26 @@ export interface TabIssue {
     | 'acteur_onbeantwoord'
     | 'acteur_niet_gekoppeld'
     | 'interne_trainer'
-    | 'veld_leeg';
+    | 'veld_leeg'
+    | 'onbepaald';
   readonly tekst: string;
   readonly blokkeert: boolean;
+}
+
+/**
+ * Het overzicht bovenaan de tab: wat er nog mist, en of de briefing compleet is.
+ *
+ * **Telt alleen wat de adviseur zelf kan oplossen.** Een bron die Lerai nog niet heeft gebouwd,
+ * zoals de inventarisatie, staat wel als zichtbare regel in het document maar niet in deze
+ * lijst. Anders is geen enkele briefing ooit compleet. `recordInputFor` hanteert dezelfde
+ * regel voor `Staat klaar`, zodat het label en de status hetzelfde zeggen.
+ */
+export interface TabGereedheid {
+  readonly compleet: boolean;
+  /** Wat genereren tegenhoudt. */
+  readonly blokkeert: readonly TabIssue[];
+  /** Wat genereren niet tegenhoudt, maar als zichtbare regel in het document komt. */
+  readonly ontbreekt: readonly TabIssue[];
 }
 
 export interface TabView {
@@ -101,6 +126,7 @@ export interface TabView {
   readonly conceptResultaat: readonly string[];
   readonly documenten: readonly TabDocument[];
   readonly issues: readonly TabIssue[];
+  readonly gereedheid: TabGereedheid;
   readonly kanGenereren: boolean;
 }
 
@@ -133,6 +159,32 @@ function legeVelden(training: BriefingTraining, onderdrukt: ReadonlySet<string>)
       tekst: `${veld.label} is leeg; dat wordt een zichtbare regel in het document`,
       blokkeert: false,
     }));
+}
+
+/**
+ * De `nog niet bepaald`-regels die het document zou krijgen.
+ *
+ * Samengesteld zoals genereren het doet, maar zonder de gegevens die pas dan gelezen worden
+ * (historie, updates, reistijd). Die ontbreken hier als `nog niet aangesloten` en vallen door
+ * het filter weg. Wat overblijft is precies wat de adviseur nog kan oplossen, zoals een
+ * QR-kolom op `0. NOTK` of een thema zonder bullets.
+ */
+function onbepaald(
+  training: BriefingTraining,
+  checklist: BriefingChecklist,
+  actorItemIds: readonly string[]
+): TabIssue[] {
+  const data = composeBriefing(training, checklist, {
+    roles: sessionFacts(training, checklist, { actorItemIds }),
+  });
+  const regels = openIssues(data).filter(
+    (t) => isNotDecided(t) && t !== ACHTERGROND_LEEG && t !== REIS_ONBEKEND
+  );
+  return [...new Set(regels)].map((t) => ({
+    kind: 'onbepaald' as const,
+    tekst: describeOpenIssue(t),
+    blokkeert: false,
+  }));
 }
 
 /**
@@ -268,6 +320,7 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
     });
   }
   issues.push(...legeVelden(training, onderdrukt));
+  issues.push(...onbepaald(training, checklist, antwoorden.actorItemIds));
 
   const documenten: TabDocument[] =
     rollen.kind === 'resolved'
@@ -307,6 +360,11 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
       }) ?? [],
     documenten,
     issues,
+    gereedheid: {
+      compleet: issues.length === 0,
+      blokkeert: issues.filter((i) => i.blokkeert),
+      ontbreekt: issues.filter((i) => !i.blokkeert),
+    },
     kanGenereren: !issues.some((i) => i.blokkeert),
   };
 }

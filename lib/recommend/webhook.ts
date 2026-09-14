@@ -50,7 +50,16 @@ export interface WebhookResult {
  */
 export async function handleParsedWebhook(
   queue: RunQueue,
-  parse: WebhookParse
+  parse: WebhookParse,
+  /**
+   * Is this item on an agenda board the engine serves?
+   *
+   * Every served board has its own subscription, so an event from anywhere else is an
+   * orphaned webhook — a board that was archived, or lost its status column. Enqueuing it
+   * would spend a computation whose label can never be written. A lookup that fails throws,
+   * and the 500 below makes Monday retry.
+   */
+  servesItem: (mondayItemId: string) => Promise<boolean>
 ): Promise<WebhookResult> {
   if (parse.kind === 'challenge') {
     return { status: 200, body: { challenge: parse.challenge } };
@@ -69,6 +78,13 @@ export async function handleParsedWebhook(
     return { status: 200, body: { ignored: parse.reason } };
   }
   try {
+    if (!(await servesItem(parse.mondayItemId))) {
+      // 200, not an error: retrying cannot put the item on a served board.
+      log.warn('monday webhook: item is not on a served agenda board', {
+        mondayItemId: parse.mondayItemId,
+      });
+      return { status: 200, body: { ignored: 'item is not on a served agenda board' } };
+    }
     const result = await queue.enqueue({
       triggerUuid: parse.triggerUuid,
       triggerKind: parse.triggerKind,

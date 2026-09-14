@@ -20,6 +20,8 @@ import type { CityStore } from '../city-store';
 import type { KvStore } from '../kv';
 
 const BOARD = '5087396949';
+/** Het enige bord dat in deze tests aanbevelingen krijgt. */
+const servesOnly = async (boardId: string): Promise<boolean> => boardId === BOARD;
 const ITEM = '3141071021';
 const COLUMNS = whatsappColumnsFor(BOARD);
 const id = (field: string): string => {
@@ -64,7 +66,7 @@ function deps(over: Partial<WhatsappDeps> = {}): WhatsappDeps {
     cities: createNullCityStore(),
     boards: { readBoardId: () => Promise.resolve(BOARD) },
     kv,
-    boardId: BOARD,
+    servesBoard: servesOnly,
     ...over,
   };
 }
@@ -302,30 +304,30 @@ describe('authorizeItemBoard', () => {
   it('looks the board up when nothing is memoised', async () => {
     const readBoardId = vi.fn(() => Promise.resolve(BOARD));
 
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
-      true
-    );
+    expect(
+      await authorizeItemBoard({ boards: { readBoardId }, kv, servesBoard: servesOnly }, ITEM)
+    ).toBe(true);
     expect(readBoardId).toHaveBeenCalledOnce();
   });
 
   it('refuses an item on another board', async () => {
     const readBoardId = () => Promise.resolve('999');
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
-      false
-    );
+    expect(
+      await authorizeItemBoard({ boards: { readBoardId }, kv, servesBoard: servesOnly }, ITEM)
+    ).toBe(false);
   });
 
   /** A nonexistent id resolves to no board, and nothing is writable without one. */
   it('refuses an item that does not exist', async () => {
     const readBoardId = () => Promise.resolve(null);
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
-      false
-    );
+    expect(
+      await authorizeItemBoard({ boards: { readBoardId }, kv, servesBoard: servesOnly }, ITEM)
+    ).toBe(false);
   });
 
   it('does not memoise a refusal it could not verify', async () => {
     const readBoardId = vi.fn(() => Promise.resolve(null));
-    const config = { boards: { readBoardId }, kv, boardId: BOARD };
+    const config = { boards: { readBoardId }, kv, servesBoard: servesOnly };
 
     await authorizeItemBoard(config, ITEM);
     await authorizeItemBoard(config, ITEM);
@@ -335,7 +337,7 @@ describe('authorizeItemBoard', () => {
 
   it('uses the memo on the second call', async () => {
     const readBoardId = vi.fn(() => Promise.resolve(BOARD));
-    const config = { boards: { readBoardId }, kv, boardId: BOARD };
+    const config = { boards: { readBoardId }, kv, servesBoard: servesOnly };
 
     await authorizeItemBoard(config, ITEM);
     await authorizeItemBoard(config, ITEM);
@@ -348,7 +350,7 @@ describe('authorizeItemBoard', () => {
     let clock = 0;
     const timed = createMemoryKvStore(() => clock);
     const readBoardId = vi.fn(() => Promise.resolve(BOARD));
-    const config = { boards: { readBoardId }, kv: timed, boardId: BOARD };
+    const config = { boards: { readBoardId }, kv: timed, servesBoard: servesOnly };
 
     await authorizeItemBoard(config, ITEM);
     clock = BOARD_MEMO_TTL_MS + 1;
@@ -361,9 +363,9 @@ describe('authorizeItemBoard', () => {
     await kv.set(`board-of:${ITEM}`, '999');
     const readBoardId = vi.fn(() => Promise.resolve(BOARD));
 
-    expect(await authorizeItemBoard({ boards: { readBoardId }, kv, boardId: BOARD }, ITEM)).toBe(
-      false
-    );
+    expect(
+      await authorizeItemBoard({ boards: { readBoardId }, kv, servesBoard: servesOnly }, ITEM)
+    ).toBe(false);
     expect(readBoardId).not.toHaveBeenCalled();
   });
 });

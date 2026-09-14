@@ -70,6 +70,8 @@ const agendaItem = (
   trainingItemId: id,
   datum,
   boardId,
+  // In deze tests staat 2025 voor een gearchiveerd jaar.
+  live: boardId === AGENDA_2026,
   ref: { trainingItemId: id, rawIeCode: code, clientKey: 'WE', themaKey: 'Onderh' },
 });
 
@@ -82,7 +84,7 @@ const deps = (over: Partial<DailyDeps> = {}): DailyDeps => ({
   ...over,
 });
 
-const options = { date: '2026-09-01', boardId: AGENDA_2026, dryRun: false };
+const options = { date: '2026-09-01', dryRun: false };
 
 describe('previousDay', () => {
   it('gaat een dag terug', () => {
@@ -237,7 +239,7 @@ describe('runDailyReports', () => {
     expect(report.considered).toBe(1);
     expect(report.written).toBe(1);
     expect(report.totals.ok).toBe(1);
-    expect(writeColumns).toHaveBeenCalledWith('i1', {
+    expect(writeColumns).toHaveBeenCalledWith('i1', AGENDA_2026, {
       [EVAL_COLUMNS.respondenten]: 1,
       [EVAL_COLUMNS.eindcijfer]: 8,
     });
@@ -251,13 +253,28 @@ describe('runDailyReports', () => {
     expect(report.considered).toBe(0);
   });
 
-  /** Een oude jaargang met dezelfde datum is historie; die status hoort niet te bewegen. */
-  it('slaat een training van een ander agendabord over', async () => {
+  /** Een gearchiveerd jaar met dezelfde datum is historie; die status hoort niet te bewegen. */
+  it('slaat een training van een gearchiveerd agendabord over', async () => {
     const report = await runDailyReports(
       deps({ readAgenda: async () => [agendaItem('i1', '2026-09-01', AGENDA_2025)] }),
       options
     );
     expect(report.considered).toBe(0);
+  });
+
+  /**
+   * Een gedupliceerde nieuwe jaargang doet vanzelf mee, en wordt op zijn EIGEN bord
+   * bijgewerkt. Met het vaste bord-id van 2026 zou die schrijfactie mislukken.
+   */
+  it('verwerkt een training op een nieuw actief bord en schrijft naar dat bord', async () => {
+    const writeColumns = vi.fn(async () => undefined);
+    const nieuw: DailyAgendaTraining = { ...agendaItem('i1', '2026-09-01'), boardId: '6000000001' };
+    const report = await runDailyReports(
+      deps({ readAgenda: async () => [nieuw], writeColumns }),
+      options
+    );
+    expect(report.considered).toBe(1);
+    expect(writeColumns).toHaveBeenCalledWith('i1', '6000000001', expect.any(Object));
   });
 
   it('leest de sheets niet als er die dag niets was', async () => {
@@ -278,7 +295,7 @@ describe('runDailyReports', () => {
   it('zet Onvindbaar op een training zonder reacties', async () => {
     const writeColumns = vi.fn(async () => undefined);
     await runDailyReports(deps({ readResponses: async () => [], writeColumns }), options);
-    expect(writeColumns).toHaveBeenCalledWith('i1', {
+    expect(writeColumns).toHaveBeenCalledWith('i1', AGENDA_2026, {
       [IE_STATUS_COLUMN]: { label: 'Onvindbaar' },
       [EVAL_COLUMNS.respondenten]: 0,
       [EVAL_COLUMNS.eindcijfer]: '',

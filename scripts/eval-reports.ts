@@ -39,13 +39,13 @@ async function main(): Promise<void> {
   }
   const date = requested ?? previousDay(amsterdamToday(new Date()));
 
-  const { deps, boardId } = buildDailyReportDeps({ date, mail: apply && !geenMail });
+  const { deps } = buildDailyReportDeps({ date, mail: apply && !geenMail });
   const mailStand = !apply ? 'geen mail (droogloop)' : geenMail ? 'geen mail' : 'mail AAN';
   console.log(
-    `\nDagverwerking ${date} — bord ${boardId} — ${apply ? 'APPLY' : 'droogloop'} — ${mailStand}\n`
+    `\nDagverwerking ${date} — alle actieve agendaborden — ${apply ? 'APPLY' : 'droogloop'} — ${mailStand}\n`
   );
 
-  const report = await runDailyReports(deps, { date, boardId, dryRun: !apply });
+  const report = await runDailyReports(deps, { date, dryRun: !apply });
 
   if (report.delivery !== null) {
     const waar = `${report.delivery.klant} / ${report.delivery.trainer}`;

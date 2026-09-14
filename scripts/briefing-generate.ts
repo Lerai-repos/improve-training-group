@@ -9,10 +9,7 @@ loadEnv({ path: '.env.local' });
 
 import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
-import {
-  prefillTrainingActor,
-  type BriefingChecklist,
-} from '@lib/briefing/blocks';
+import { prefillTrainingActor, type BriefingChecklist } from '@lib/briefing/blocks';
 import {
   composeBriefing,
   countLinkedActors,
@@ -21,6 +18,7 @@ import {
 } from '@lib/briefing/compose';
 import { resolveRecipientRoles } from '@lib/briefing/recipients';
 import { readHistorie } from '@lib/briefing/historie';
+import { loadAgendaBoards } from '@lib/evaluations';
 import { readBriefingTraining } from '@lib/briefing/read';
 import { readExtraInfo } from '@lib/briefing/updates';
 import { readTrainerAddresses, resolveBriefingTravel } from '@lib/briefing/reis';
@@ -225,7 +223,9 @@ async function resolveReis(
   const adressen = await readTrainerAddresses(client, itemIds);
   const travel = await resolveBriefingTravel(
     {
-      formatter: createAddressFormatter(createOpenRouterCompletion(process.env.OPENROUTER_API_KEY ?? '')),
+      formatter: createAddressFormatter(
+        createOpenRouterCompletion(process.env.OPENROUTER_API_KEY ?? '')
+      ),
       cache: createTravelCache(store),
       provider: createRoutesProvider(
         createGoogleRoutesTransport(process.env.GOOGLE_MAPS_API_KEY ?? '')
@@ -354,13 +354,19 @@ async function main(): Promise<void> {
    * kunnen zien dát er eerdere sessies zijn voordat hij het vinkje zet, anders moet hij dat
    * zelf in de agenda opzoeken — precies het werk dat dit blok hoort weg te nemen.
    */
-  const historie = await readHistorie(client, {
-    bedrijf: training.opdrachtgever,
-    excludeItemId: training.itemId,
-    limit: readHistorieLimit(argv),
-  });
+  const historie = await readHistorie(
+    client,
+    {
+      bedrijf: training.opdrachtgever,
+      excludeItemId: training.itemId,
+      limit: readHistorieLimit(argv),
+    },
+    (await loadAgendaBoards(client)).boards
+  );
   if (historie.length > 0) {
-    console.log(`  Historie: ${historie.length} eerdere/komende sessie(s) bij ${training.opdrachtgever}`);
+    console.log(
+      `  Historie: ${historie.length} eerdere/komende sessie(s) bij ${training.opdrachtgever}`
+    );
   }
   const reis = await resolveReis(
     client,
@@ -410,7 +416,9 @@ async function main(): Promise<void> {
     console.log(`    ${label.padEnd(24)} ${value === '' ? '—' : value}`);
   }
 
-  console.log(`\n  Extra informatie trainer ${data.extraInfo.length === 0 ? '— (geen gemarkeerde updates)' : ''}`);
+  console.log(
+    `\n  Extra informatie trainer ${data.extraInfo.length === 0 ? '— (geen gemarkeerde updates)' : ''}`
+  );
   for (const line of data.extraInfo) {
     console.log(`    ${line.length > 96 ? `${line.slice(0, 96)}…` : line}`);
   }
@@ -419,7 +427,9 @@ async function main(): Promise<void> {
   }
 
   if (training.missing.length > 0) {
-    console.log(`\n  ${training.missing.length} verplicht veld(en) leeg → Brie zou op "${BRIE.onvolledig}" komen:`);
+    console.log(
+      `\n  ${training.missing.length} verplicht veld(en) leeg → Brie zou op "${BRIE.onvolledig}" komen:`
+    );
     for (const field of training.missing) {
       console.log(`    - ${field.label} (${field.column})`);
     }
@@ -442,7 +452,9 @@ async function main(): Promise<void> {
     });
 
     console.log(`\n  ── ${ontvanger.trainer.naam} — ${rol[ontvanger.role]}`);
-    console.log(`     Klantcontactmoment  ${eigen.klantcontactmoment === '' ? '—' : eigen.klantcontactmoment}`);
+    console.log(
+      `     Klantcontactmoment  ${eigen.klantcontactmoment === '' ? '—' : eigen.klantcontactmoment}`
+    );
     console.log(`     Km. / Reistijd      ${eigen.reis}`);
     // Rolblokken én de rest: ze staan in het document op verschillende plaatsen (boven en
     // onder Concept inhoud), maar hier gaat het om wát erin staat.

@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { whatsappColumnsFor, type WhatsappColumn } from '@lib/monday/board-config';
+import {
+  AGENDA_2026_PRODUCTION_BOARD,
+  whatsappColumnsFor,
+  type WhatsappColumn,
+} from '@lib/monday/board-config';
 
 import { ADDRESS_PROMPT_VERSION } from './address';
 import {
@@ -141,7 +145,10 @@ export function createWhatsappTrainingReader(client: QueryClient): WhatsappTrain
           }
         }
       }`;
-      return parseWhatsappRead(await client.query<unknown>(doc, { ids: [mondayItemId] }), mondayItemId);
+      return parseWhatsappRead(
+        await client.query<unknown>(doc, { ids: [mondayItemId] }),
+        mondayItemId
+      );
     },
   };
 }
@@ -152,8 +159,14 @@ export interface WhatsappDeps {
   cities: CityStore;
   boards: ItemBoardReader;
   kv: KvStore;
-  /** The one Agenda board this feature serves. */
-  boardId: string;
+  /**
+   * Does the recommendation engine serve this board?
+   *
+   * Not one configured board: 2026 and its 2027 copy run side by side, and the panel belongs
+   * to the recommendations, so it follows the same rule as the rest of them. Throws when it
+   * cannot tell.
+   */
+  servesBoard: (boardId: string) => Promise<boolean>;
 }
 
 export interface WhatsappPayload {
@@ -199,15 +212,15 @@ const boardMemoKey = (mondayItemId: string): string => `board-of:${mondayItemId}
  * it a `plan` holder could write records against arbitrary item ids.
  *
  * The memo is a note of a verified fact, not a capability grant: it caches the item's
- * board, and the comparison against `deps.boardId` is redone on every call.
+ * board, and whether that board is served is asked again on every call.
  */
 export async function authorizeItemBoard(
-  deps: Pick<WhatsappDeps, 'boards' | 'kv' | 'boardId'>,
+  deps: Pick<WhatsappDeps, 'boards' | 'kv' | 'servesBoard'>,
   mondayItemId: string
 ): Promise<boolean> {
   const memo = await deps.kv.get(boardMemoKey(mondayItemId)).catch(() => null);
   if (memo !== null) {
-    return memo === deps.boardId;
+    return deps.servesBoard(memo);
   }
   const boardId = await deps.boards.readBoardId(mondayItemId);
   if (boardId === null) {
@@ -215,7 +228,7 @@ export async function authorizeItemBoard(
     return false;
   }
   await rememberBoard(deps.kv, mondayItemId, boardId);
-  return boardId === deps.boardId;
+  return deps.servesBoard(boardId);
 }
 
 export async function rememberBoard(
@@ -224,7 +237,9 @@ export async function rememberBoard(
   boardId: string
 ): Promise<void> {
   // Best-effort: a memo that fails to write costs a Monday call, never correctness.
-  await kv.set(boardMemoKey(mondayItemId), boardId, { ttlMs: BOARD_MEMO_TTL_MS }).catch(() => undefined);
+  await kv
+    .set(boardMemoKey(mondayItemId), boardId, { ttlMs: BOARD_MEMO_TTL_MS })
+    .catch(() => undefined);
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -268,16 +283,26 @@ export async function handleWhatsappGet(
   deps: WhatsappDeps,
   mondayItemId: string
 ): Promise<WhatsappResult> {
-  const columns = whatsappColumnsFor(deps.boardId);
-  const read = await deps.reader.read(mondayItemId, columns);
-  if (read === null) {
+  /**
+   * Read with the columns of Agenda 2026 first, which every duplicated board keeps, and learn
+   * the board from the same query. Only a board with other ids (an older year) needs a second
+   * read — and those are not served, so in practice that read never happens.
+   */
+  const standaard = whatsappColumnsFor(AGENDA_2026_PRODUCTION_BOARD);
+  const first = await deps.reader.read(mondayItemId, standaard);
+  if (first === null) {
     return { status: 404, body: { success: false, error: 'training not found' } };
   }
-  if (read.boardId !== deps.boardId) {
+  if (first.boardId === null || !(await deps.servesBoard(first.boardId))) {
     return { status: 403, body: { success: false, error: 'item is not on the agenda board' } };
   }
+  const columns = whatsappColumnsFor(first.boardId);
+  const read = columns === standaard ? first : await deps.reader.read(mondayItemId, columns);
+  if (read === null || read.boardId !== first.boardId) {
+    return { status: 404, body: { success: false, error: 'training not found' } };
+  }
   // Learned for free here, so the autosaves that follow need no Monday call of their own.
-  await rememberBoard(deps.kv, mondayItemId, read.boardId);
+  await rememberBoard(deps.kv, mondayItemId, first.boardId);
 
   const diagnostics = checkWhatsappColumns(read.present, read.boardColumns, columns);
 
@@ -288,7 +313,8 @@ export async function handleWhatsappGet(
    */
   const locatieId = columns.find((column) => column.field === 'locatie')?.id;
   const locatieDrifted = diagnostics.some((diagnostic) => diagnostic.field === 'locatie');
-  const rawLocation = locatieId === undefined || locatieDrifted ? null : (read.values.get(locatieId) ?? null);
+  const rawLocation =
+    locatieId === undefined || locatieDrifted ? null : (read.values.get(locatieId) ?? null);
   const city =
     rawLocation === null || rawLocation.trim() === ''
       ? null
@@ -398,11 +424,12 @@ export async function handleWhatsappDiscard(
   return writeResult(await deps.store.discard(mondayItemId, parsed.data.token));
 }
 
-function writeResult(
-  result: Awaited<ReturnType<WhatsappStore['save']>>
-): WhatsappResult {
+function writeResult(result: Awaited<ReturnType<WhatsappStore['save']>>): WhatsappResult {
   if (result.kind === 'ok') {
-    return { status: 200, body: { success: true, data: { saved: result.saved, token: result.token } } };
+    return {
+      status: 200,
+      body: { success: true, data: { saved: result.saved, token: result.token } },
+    };
   }
   // The current record travels with the 409 so the panel can show what is really there
   // without a second round trip — and never has to discard the planner's draft to find out.

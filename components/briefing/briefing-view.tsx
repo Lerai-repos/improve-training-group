@@ -10,6 +10,7 @@ import { ChecklistPanel } from './checklist-panel';
 import { GeneratePanel, type GenerateState } from './generate-panel';
 import { ConceptPanel } from './concept-panel';
 import { DocumentsPanel } from './documents-panel';
+import { ReadinessPanel } from './readiness-panel';
 
 import type { UseBriefingView } from './use-briefing-view';
 
@@ -180,7 +181,9 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
         </div>
       )}
 
-      <DocumentsPanel documenten={tab.documenten} issues={tab.issues} />
+      <ReadinessPanel gereedheid={tab.gereedheid} />
+
+      <DocumentsPanel documenten={tab.documenten} />
 
       {/*
         Ook op slot terwijl er gegenereerd wordt.

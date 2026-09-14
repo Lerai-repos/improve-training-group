@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { runDailyCheck } from '../run';
 import { SUMMARY_KEY } from '../write';
 
+import { AGENDA_2026_HISTORY } from '@lib/evaluations';
+
+import type { AgendaBoard, AgendaBoardSet } from '@lib/evaluations';
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { AgendaUsage, ThemaRecord } from '../findings';
@@ -86,6 +89,8 @@ function spyWriter(): SignalWriter & {
 function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
   return {
     readSignals: async () => [],
+    readAgendaBoards: async (): Promise<AgendaBoardSet> => ({ boards: [], rejected: [] }),
+    engineRules: { statusColumnId: 'color_ours', triggerGroupIds: ['group_inplannen'] },
     readAgendaUsage: async (): Promise<AgendaUsage> =>
       usage({ labels: new Map([['TMT', 7]]), themas: new Map([['12', 3]]) }),
     readLabels: async (): Promise<ReadonlyMap<LabelCode, LabelRecord>> =>
@@ -100,6 +105,99 @@ function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
     ...over,
   };
 }
+
+/** Een agendabord in de vorm die de ontdekking oplevert; de kolommen doen hier niet ter zake. */
+const bord = (boardId: string, naam: string, gearchiveerd = false): AgendaBoard => ({
+  ...AGENDA_2026_HISTORY,
+  boardId,
+  naam,
+  gearchiveerd,
+  groupIds: [],
+  columnTypes: {},
+});
+
+/**
+ * De agendaborden worden per run ontdekt. Zonder melding merkt niemand dat er een bij is
+ * gekomen, ook niet als het een testkopie is die er niet hoort.
+ */
+describe('agendaborden', () => {
+  const SET: AgendaBoardSet = {
+    boards: [
+      bord('5087396949', 'Agenda 2026'),
+      bord('1703587792', 'Agenda 2025', true),
+      bord('6000000001', 'Agenda 2027'),
+    ],
+    rejected: [{ boardId: '77', naam: 'Agenda kopie', reden: 'de kolommen kloppen niet' }],
+  };
+
+  it('meldt een nieuwe jaargang, maar niet de borden die altijd al meededen', async () => {
+    const report = await runDailyCheck(deps({ readAgendaBoards: async () => SET }));
+    const nieuw = report.findings.flatMap((f) =>
+      f.kind === 'agendabord-nieuw' ? [f.boardId] : []
+    );
+    expect(nieuw).toEqual(['6000000001']);
+  });
+
+  it('meldt een bord dat op een agenda lijkt maar niet te gebruiken is', async () => {
+    const report = await runDailyCheck(deps({ readAgendaBoards: async () => SET }));
+    expect(report.findings.some((f) => f.kind === 'agendabord-onbruikbaar')).toBe(true);
+  });
+
+  it('telt alleen op de actieve borden', async () => {
+    const readAgendaUsage = vi.fn(async (_boards: readonly AgendaBoard[]) => usage());
+    await runDailyCheck(deps({ readAgendaBoards: async () => SET, readAgendaUsage }));
+    expect(readAgendaUsage.mock.calls[0]?.[0].map((b) => b.naam)).toEqual([
+      'Agenda 2026',
+      'Agenda 2027',
+    ]);
+  });
+
+  /** De plek waar ITG elke ochtend ziet waar de jobs op draaien; er is geen instellingenpagina. */
+  it('noemt de borden in de samenvatting', async () => {
+    const report = await runDailyCheck(deps({ readAgendaBoards: async () => SET }));
+    expect(report.summary).toContain(
+      'Agendaborden in gebruik: Agenda 2026, Agenda 2027. Alleen historie: Agenda 2025. ' +
+        'Doet niet mee: Agenda kopie.'
+    );
+  });
+
+  /** Anders sleept iemand een training naar Inplannen en gebeurt er niets. */
+  it('meldt een actief agendabord waar de aanbevelingen niet werken', async () => {
+    const report = await runDailyCheck(deps({ readAgendaBoards: async () => SET }));
+    const zonder = report.findings.flatMap((f) =>
+      f.kind === 'aanbevelingen-niet-aangesloten' ? [f.naam] : []
+    );
+    // Geen enkel testbord heeft de statuskolom; het gearchiveerde 2025 hoort er niet bij.
+    expect(zonder).toEqual(['Agenda 2026', 'Agenda 2027']);
+  });
+
+  it('noemt in de samenvatting op welke borden de aanbevelingen werken', async () => {
+    const aangesloten: AgendaBoardSet = {
+      boards: [
+        {
+          ...bord('5087396949', 'Agenda 2026'),
+          groupIds: ['group_inplannen'],
+          columnTypes: { color_ours: 'status' },
+        },
+      ],
+      rejected: [],
+    };
+    const report = await runDailyCheck(deps({ readAgendaBoards: async () => aangesloten }));
+    expect(report.summary).toContain('Aanbevelingen op: Agenda 2026.');
+    expect(report.findings.some((f) => f.kind === 'aanbevelingen-niet-aangesloten')).toBe(false);
+  });
+
+  it('meldt een mislukte ontdekking als agendastoring, zonder iets op te ruimen', async () => {
+    const report = await runDailyCheck(
+      deps({
+        readAgendaBoards: async () => {
+          throw new Error('Monday down');
+        },
+      })
+    );
+    expect(report.failures.map((f) => f.check)).toContain('agenda');
+  });
+});
 
 /**
  * Een niet-verstuurde evaluatiemail is de enige melding die niet over ITG's gegevens gaat maar

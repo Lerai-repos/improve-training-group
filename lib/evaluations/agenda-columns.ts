@@ -30,7 +30,8 @@ const KLANTEN_BOARD = '1279052045';
 
 export interface AgendaHistoryColumns {
   readonly boardId: string;
-  readonly jaargang: '2026' | '2025';
+  /** Voor logregels en tellingen: het jaartal uit de bordnaam, of het bord-id als dat er niet in staat. */
+  readonly jaargang: string;
   /** De **leadtrainer**-relatie; sinds 21-Aug-2026 betekent deze kolom alleen de lead. */
   readonly trainerRelation: string;
   /**
@@ -91,7 +92,12 @@ export const AGENDA_2025_HISTORY: AgendaHistoryColumns = {
 };
 
 /**
- * Every jaargang the statistics are built from.
+ * The agenda boards we have MEASURED, with their item floors.
+ *
+ * No longer the list the jobs read: that is discovered on every run
+ * (`agenda-discovery.ts`), so a duplicated 2027 board takes part without a code change.
+ * These two stay because discovery treats them specially — they must always be found, and
+ * they keep the floor that protects the statistics against a half-empty read.
  *
  * Agenda 2024 has no Monday board, so its evaluations can never attach to anything —
  * that is a documented, accepted loss, not an omission to fix here.
@@ -108,9 +114,7 @@ export const AGENDA_HISTORY_BOARDS: readonly AgendaHistoryColumns[] = [
  * de co-trainerkolom niet op, dan meldt Monday niets en leest de decodeerstap hem als
  * "geen co-trainers".
  */
-export function trainerRelationColumns(
-  columns: AgendaHistoryColumns
-): readonly string[] {
+export function trainerRelationColumns(columns: AgendaHistoryColumns): readonly string[] {
   return columns.coTrainerRelation === undefined
     ? [columns.trainerRelation]
     : [columns.trainerRelation, columns.coTrainerRelation];

@@ -20,11 +20,7 @@ import { assertColumns } from '@lib/monday/schema-check';
 
 import { unionLinkedIds } from '@lib/monday/decode';
 
-import {
-  AGENDA_HISTORY_BOARDS,
-  agendaHistoryExpectedColumns,
-  trainerRelationColumns,
-} from './agenda-columns';
+import { agendaHistoryExpectedColumns, trainerRelationColumns } from './agenda-columns';
 
 import type { BoardMeta } from '@lib/monday/graphql-client';
 import type { AgendaHistoryColumns } from './agenda-columns';
@@ -142,7 +138,8 @@ function readPage(
       boardId: columns.boardId,
       entry: {
         trainingItemId,
-        datum: datum.text === undefined || datum.text === null || datum.text === '' ? null : datum.text,
+        datum:
+          datum.text === undefined || datum.text === null || datum.text === '' ? null : datum.text,
         /**
          * Lead én co-trainers. Alleen de leadkolom lezen zou een co-trainer stil uit zijn
          * eigen evaluatiecijfers laten verdwijnen zodra ITG hem verplaatst — de sessie
@@ -182,7 +179,9 @@ async function readBoard(
 ): Promise<{ trainings: AgendaTraining[]; pages: number }> {
   const fields =
     `id column_values(ids:["${columns.datum}","${columns.ieCode}",` +
-    `${trainerRelationColumns(columns).map((id) => `"${id}"`).join(',')},` +
+    `${trainerRelationColumns(columns)
+      .map((id) => `"${id}"`)
+      .join(',')},` +
     `"${columns.themaRelation}","${columns.klantRelation}"])` +
     `{ id text ... on BoardRelationValue { linked_item_ids } }`;
 
@@ -247,14 +246,14 @@ async function readBoard(
 }
 
 /**
- * Read every wired jaargang, or throw.
+ * Read every given agenda board, or throw. The boards come from `loadAgendaBoards`.
  *
  * All-or-nothing by construction: there is no per-board `try`, because a partial history
  * is exactly the input that turns into mass blanking downstream.
  */
 export async function readAgendaHistory(
   client: AgendaHistoryClient,
-  boards: readonly AgendaHistoryColumns[] = AGENDA_HISTORY_BOARDS
+  boards: readonly AgendaHistoryColumns[]
 ): Promise<AgendaHistory> {
   // One schema call for every board, then per-board drift checks.
   const metas = await client.getSchema(boards.map((b) => b.boardId));
@@ -270,7 +269,11 @@ export async function readAgendaHistory(
   const trainings: AgendaTraining[] = [];
   const perBoard: Array<{ boardId: string; jaargang: string; items: number; pages: number }> = [];
   for (const columns of boards) {
-    const result = await readBoard(client, columns, metaById.get(columns.boardId)?.items_count ?? null);
+    const result = await readBoard(
+      client,
+      columns,
+      metaById.get(columns.boardId)?.items_count ?? null
+    );
     trainings.push(...result.trainings);
     perBoard.push({
       boardId: columns.boardId,

@@ -32,6 +32,37 @@ export type Finding =
       readonly trainingen: number;
     }
   /**
+   * Een agendabord dat voor het eerst meedoet, zoals een gedupliceerde nieuwe jaargang.
+   *
+   * Geen fout maar een seintje: ontdekken gebeurt vanzelf, en zonder deze melding merkt niemand
+   * dat er een bord bij is gekomen, ook niet als het een testkopie is die er niet hoort.
+   */
+  | {
+      readonly kind: 'agendabord-nieuw';
+      readonly boardId: string;
+      readonly naam: string;
+      readonly gearchiveerd: boolean;
+    }
+  /**
+   * Een actief agendabord waar de aanbevelingen niet werken.
+   *
+   * Zonder deze melding sleept iemand een training naar Inplannen en gebeurt er niets. Meestal
+   * ontbreekt onze statuskolom; op Agenda 2025 is dat bewust zo.
+   */
+  | {
+      readonly kind: 'aanbevelingen-niet-aangesloten';
+      readonly boardId: string;
+      readonly naam: string;
+      readonly reden: string;
+    }
+  /** Een bord dat op een agenda lijkt, maar niet te gebruiken is, en dus nergens aan meedoet. */
+  | {
+      readonly kind: 'agendabord-onbruikbaar';
+      readonly boardId: string;
+      readonly naam: string;
+      readonly reden: string;
+    }
+  /**
    * Een evaluatiemail die de deur niet uit is gekomen.
    *
    * De enige variant die NIET over ITG's gegevens gaat maar over een storing bij ons, en de
@@ -98,6 +129,13 @@ export function findingKey(finding: Finding): string {
      */
     case 'mail-mislukt':
       return `mail-mislukt:${finding.itemId}:${finding.variant}`;
+    // Op bord-id: een hernoemd bord is hetzelfde bord.
+    case 'agendabord-nieuw':
+      return `agendabord-nieuw:${finding.boardId}`;
+    case 'agendabord-onbruikbaar':
+      return `agendabord-onbruikbaar:${finding.boardId}`;
+    case 'aanbevelingen-niet-aangesloten':
+      return `aanbevelingen-niet-aangesloten:${finding.boardId}`;
   }
 }
 

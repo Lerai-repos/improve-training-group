@@ -1,8 +1,11 @@
+import { KNOWN_AGENDA_BOARD_IDS, liveAgendaBoards } from '@lib/evaluations';
+import { engineBoardProblem, type EngineBoardRules } from '@lib/recommend/engine-boards';
 import { LABEL_CODES, resolveLabelCode } from '@lib/labels';
 import { normaliseHex } from '@lib/labels/validate';
 
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
+import type { AgendaBoard, AgendaBoardSet, RejectedAgendaBoard } from '@lib/evaluations';
 import type { MailFailure } from '@lib/mail';
 import type { Finding, LabelFieldIssue } from './types';
 
@@ -224,4 +227,40 @@ export function mailFindings(failures: readonly MailFailure[]): readonly Finding
     datum: f.datum,
     reden: f.reden,
   }));
+}
+
+/**
+ * Wat de ontdekking van de agendaborden oplevert.
+ *
+ * De twee gemeten borden (2025 en 2026) krijgen geen "doet mee"-melding: die deden altijd al
+ * mee, en een seintje over iets wat al jaren zo is wordt meteen weggevinkt en zegt niets meer.
+ */
+export function agendaBoardFindings(
+  set: AgendaBoardSet,
+  rules: EngineBoardRules
+): readonly Finding[] {
+  const nieuw = (b: AgendaBoard): Finding => ({
+    kind: 'agendabord-nieuw',
+    boardId: b.boardId,
+    naam: b.naam,
+    gearchiveerd: b.gearchiveerd,
+  });
+  const onbruikbaar = (r: RejectedAgendaBoard): Finding => ({
+    kind: 'agendabord-onbruikbaar',
+    boardId: r.boardId,
+    naam: r.naam,
+    reden: r.reden,
+  });
+  // Alleen actieve borden: een gearchiveerd jaar hoort geen aanbevelingen meer te krijgen.
+  const zonderAanbevelingen = liveAgendaBoards(set).flatMap((b): Finding[] => {
+    const reden = engineBoardProblem(b, rules);
+    return reden === null
+      ? []
+      : [{ kind: 'aanbevelingen-niet-aangesloten', boardId: b.boardId, naam: b.naam, reden }];
+  });
+  return [
+    ...set.boards.filter((b) => !KNOWN_AGENDA_BOARD_IDS.has(b.boardId)).map(nieuw),
+    ...set.rejected.map(onbruikbaar),
+    ...zonderAanbevelingen,
+  ];
 }

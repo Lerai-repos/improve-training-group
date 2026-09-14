@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
+import { loadAgendaBoards } from '@lib/evaluations';
 import { labelsBoardId } from '@lib/labels';
 import { createFailureStore } from '@lib/mail';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
-import { MONDAY_API_VERSION } from '@lib/monday/board-config';
+import { MONDAY_API_VERSION, ourStatusColumnId, triggerGroupIds } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
 
@@ -78,7 +79,9 @@ export function buildDailyCheckDeps(options: {
     boardId,
     deps: {
       readSignals: () => readSignals(client, boardId),
-      readAgendaUsage: () => readAgendaUsage(client),
+      readAgendaBoards: () => loadAgendaBoards(client),
+      readAgendaUsage: (boards) => readAgendaUsage(client, boards),
+      engineRules: { statusColumnId: ourStatusColumnId(), triggerGroupIds: triggerGroupIds() },
       // De DIAGNOSTISCHE lezer, met opzet niet `readLabels` — zie `readLabelsForCheck`.
       readLabels: () => readLabelsForCheck(client, labelsBoardId()),
       readThemas: () => readThemas(client),

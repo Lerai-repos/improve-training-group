@@ -10,13 +10,19 @@ import {
   triggerGroupIds,
 } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
+import { buildWebhookSyncDeps, syncWebhooks } from '@lib/recommend';
 
 /**
  * Register / list / delete the two Monday webhooks that trigger a recommendation run.
  *
  *   pnpm webhook:list
+ *   pnpm webhook:sync [--apply]
  *   pnpm webhook:register
  *   pnpm webhook:delete <id> [<id> …]
+ *
+ * `sync` is what production runs every hour (`/api/cron/sync-webhooks`): every agenda board
+ * that gets recommendations is subscribed to both trigger groups, and nothing is ever deleted.
+ * Without `--apply` it only reports. `register` and `delete` remain for manual repairs.
  *
  * The ONLY mutation this project makes to Monday besides the status write, so it is a
  * separate deliberate command rather than something a deploy does implicitly.
@@ -191,6 +197,27 @@ async function remove(ids: string[]): Promise<void> {
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   const c = client();
+
+  if (command === 'sync') {
+    const apply = rest.includes('--apply');
+    const report = await syncWebhooks(buildWebhookSyncDeps({ dryRun: !apply }));
+    console.log(`\nWebhooks synchroniseren — ${apply ? 'APPLY' : 'droogloop'}\n`);
+    for (const s of report.present) {
+      console.log(`  ✓ ${s.naam} (${s.boardId}) ${s.groupId}: ${s.webhookId ?? ''}`);
+    }
+    for (const s of report.created) {
+      console.log(
+        `  + ${s.naam} (${s.boardId}) ${s.groupId}: ${apply ? `aangemaakt ${s.webhookId ?? ''}` : 'zou aangemaakt worden'}`
+      );
+    }
+    for (const s of report.failed) {
+      console.log(`  ✗ ${s.naam} (${s.boardId}) ${s.groupId}: ${s.error}`);
+    }
+    if (report.failed.length > 0) {
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   if (command === 'register') {
     await register(c);

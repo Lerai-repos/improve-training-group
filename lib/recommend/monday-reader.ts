@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { Qualification } from '@lib/calc';
 import { AGENDA_2026_COLUMNS, THEMA_QUAL_COLOURS } from '@lib/monday/board-config';
+import type { TrainingColumnMap } from '@lib/monday/decode';
 
 import type { LiveMondayReader, LiveTraining } from './service';
 import type { QualObservation } from './types';
@@ -181,8 +182,19 @@ export function parseTrainingRead(raw: unknown, cols: TrainingColumns): LiveTrai
   };
 }
 
-export function createMondayReader(client: QueryClient): LiveMondayReader {
-  const { themaRelation, datum, duur, locatie } = AGENDA_2026_COLUMNS;
+/**
+ * `columns` defaults to Agenda 2026, which every duplicated board keeps. The engine passes
+ * the item's own board, because the thema relation has a different id on older years; a
+ * wrong id is not an error at Monday but a missing column, which `parseTrainingRead` refuses.
+ */
+export function createMondayReader(
+  client: QueryClient,
+  columns: Pick<
+    TrainingColumnMap,
+    'themaRelation' | 'datum' | 'duur' | 'locatie'
+  > = AGENDA_2026_COLUMNS
+): LiveMondayReader {
+  const { themaRelation, datum, duur, locatie } = columns;
 
   return {
     async readTraining(itemId: string): Promise<LiveTraining | null> {

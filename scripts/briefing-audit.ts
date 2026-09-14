@@ -10,6 +10,7 @@ import { readAgendaScan } from '@lib/recommend/assignments';
 import { readBriefingTraining } from '@lib/briefing/read';
 import { generateBriefings } from '@lib/briefing/generate';
 import { readHistorie } from '@lib/briefing/historie';
+import { loadAgendaBoards, type AgendaBoard } from '@lib/evaluations';
 import { readExtraInfo } from '@lib/briefing/updates';
 import { buildTabView } from '@lib/briefing/tab';
 import { prefillTrainingActor, EMPTY_CHECKLIST } from '@lib/briefing/blocks';
@@ -54,6 +55,13 @@ interface Uitslag {
 
 type Client = ReturnType<typeof createMondayGraphQLClient>;
 
+/** Eén keer per audit ontdekken: het zijn voor elke training dezelfde borden. */
+let agendaBoards: Promise<readonly AgendaBoard[]> | null = null;
+const agendaBoardsFor = (client: Client): Promise<readonly AgendaBoard[]> => {
+  agendaBoards ??= loadAgendaBoards(client).then((set) => set.boards);
+  return agendaBoards;
+};
+
 /**
  * Pass 2: het document ECHT bouwen, zonder reis.
  *
@@ -69,10 +77,11 @@ async function render(
 ): Promise<{ fout?: string; openPerRol: { rol: string; velden: readonly string[] }[] }> {
   try {
     const extraInfo = await readExtraInfo(client, [training.itemId, training.opportunityItemId]);
-    const historie = await readHistorie(client, {
-      bedrijf: training.opdrachtgever,
-      excludeItemId: training.itemId,
-    });
+    const historie = await readHistorie(
+      client,
+      { bedrijf: training.opdrachtgever, excludeItemId: training.itemId },
+      await agendaBoardsFor(client)
+    );
     const uit = await generateBriefings(training, view.checklist, {
       historie,
       extraInfo: extraInfo.lines,

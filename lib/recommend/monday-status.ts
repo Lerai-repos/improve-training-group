@@ -1,3 +1,4 @@
+import { log } from '@lib/logger';
 import { ourStatusColumnId, RECOMMENDATION_STATUS_COLUMN } from '@lib/monday/board-config';
 
 import type { StatusLabel, StatusWriter } from './delivery';
@@ -27,7 +28,16 @@ const WRITE_TIMEOUT_MS = 12000;
 export interface MondayStatusWriterOptions {
   token: string;
   apiVersion: string;
-  boardId: string;
+  /**
+   * The board this item lives on, or `null` when the engine does not serve that board.
+   *
+   * Per item and not one configured board: ITG runs several agenda boards at once (2026
+   * and its 2027 copy), and `change_column_value` needs the item's own board. Resolved at
+   * write time rather than carried through the queue, so the job payload, the Redis record
+   * and every recovery path (sweep, repair, failure callback) stay exactly as they were.
+   * A lookup that fails must THROW, so the write is retried.
+   */
+  boardFor: (itemId: string) => Promise<string | null>;
   columnId?: string;
 }
 
@@ -42,6 +52,20 @@ export function createMondayStatusWriter(opts: MondayStatusWriterOptions): Statu
       }
       if (!ALLOWED_LABELS.has(label)) {
         throw new Error(`status writer: refusing to write label ${label}`);
+      }
+      const boardId = await opts.boardFor(itemId);
+      if (boardId === null) {
+        /**
+         * Skipped, not thrown. The item is no longer on a board we serve: archived, moved,
+         * or the board lost its status column. Retrying cannot change that, and a throw would
+         * send an answer nobody can see through every retry into the dead-letter queue. The
+         * outcome itself is recorded, so the item view still shows it.
+         */
+        log.warn('status writer: item is not on a served agenda board, label not written', {
+          itemId,
+          label,
+        });
+        return;
       }
       const mutation =
         'mutation ($board: ID!, $item: ID!, $col: String!, $val: JSON!) { change_column_value(board_id: $board, item_id: $item, column_id: $col, value: $val) { id } }';
@@ -64,7 +88,7 @@ export function createMondayStatusWriter(opts: MondayStatusWriterOptions): Statu
           body: JSON.stringify({
             query: mutation,
             variables: {
-              board: opts.boardId,
+              board: boardId,
               item: itemId,
               col: columnId,
               val: JSON.stringify({ label }),

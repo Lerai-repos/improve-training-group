@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { clientKey, isRealClient, readHistorie } from '../historie';
+import { AGENDA_HISTORY_BOARDS } from '@lib/evaluations';
+
+import { clientKey, isRealClient, readHistorie as readHistorieVan } from '../historie';
 
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
+import type { HistorieInput } from '../historie';
+import type { HistoryRow } from '../blocks';
+
+/** De twee gemeten agendaborden; welke borden er zijn wordt in productie per run ontdekt. */
+const readHistorie = (client: MondayGraphQLClient, input: HistorieInput): Promise<HistoryRow[]> =>
+  readHistorieVan(client, input, AGENDA_HISTORY_BOARDS);
 
 /**
  * De historie-tabel leest twee agendaborden en matcht op de `Bedrijf`-mirror. Elk van die

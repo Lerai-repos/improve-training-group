@@ -16,7 +16,7 @@
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
 import { assertColumns } from '@lib/monday/schema-check';
 
-import { agendaBoardId, THEMAS_BOARD } from '@lib/monday/board-config';
+import { agendaBoardId, THEMAS_BOARD, TRAINERS_BOARD } from '@lib/monday/board-config';
 
 import { formatTrainingCode } from './mc-codes';
 
@@ -30,6 +30,7 @@ import {
   TRAINER_ACTEURS_GROUP,
 } from './columns';
 
+import type { AgendaHistoryColumns } from '@lib/evaluations';
 import type { ExpectedColumn } from '@lib/monday/board-config';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 import type { BriefingTraining, BriefingTrainer, MissingField, BriefingThema } from './types';
@@ -135,11 +136,27 @@ interface RawItem {
 
 const AGENDA_IDS = Object.values(C);
 
-const ITEM_FIELDS = `
+/**
+ * De projectie van één training, mét de relaties van het bord van die training.
+ *
+ * Monday geeft alleen de kolommen terug die gevraagd zijn. Stonden hier alleen de ids van 2026,
+ * dan kwam op een oudere jaargang de themarelatie niet terug en wierp `linkedIds`, terwijl de
+ * schemacontrole met de juiste ids al geslaagd was.
+ */
+export function briefingItemFields(relations: BriefingRelations): string {
+  const ids = [
+    ...new Set([
+      ...AGENDA_IDS,
+      relations.thema,
+      relations.trainer,
+      ...(relations.coTrainer === undefined ? [] : [relations.coTrainer]),
+    ]),
+  ];
+  return `
   id
   name
   board { id }
-  column_values(ids: ${JSON.stringify(AGENDA_IDS)}) {
+  column_values(ids: ${JSON.stringify(ids)}) {
     id
     text
     ... on BoardRelationValue { linked_item_ids }
@@ -148,6 +165,7 @@ const ITEM_FIELDS = `
     ... on DateValue { date }
   }
 `;
+}
 
 /**
  * De cel opzoeken, en weigeren als Monday hem niet teruggaf.
@@ -540,11 +558,56 @@ async function readContact(
   };
 }
 
+/**
+ * De drie relaties die per jaargang een ander id hebben.
+ *
+ * Gemeten 14-Sep-2026: op Agenda 2025 kloppen alle kolommen van de briefing, behalve deze drie
+ * (en een co-trainerkolom bestaat daar niet). Een kopie van 2026 houdt ze. Ze komen dus van het
+ * bord van de training, zoals `loadAgendaBoards` het heeft gekeurd.
+ */
+export interface BriefingRelations {
+  readonly trainer: string;
+  /** Afwezig op een jaargang zonder co-trainerkolom; dan zijn er geen co-trainers. */
+  readonly coTrainer?: string;
+  readonly thema: string;
+}
+
+export const AGENDA_2026_RELATIONS: BriefingRelations = {
+  trainer: C.trainerRelation,
+  coTrainer: C.coTrainerRelation,
+  thema: C.themaRelation,
+};
+
+export function briefingRelationsFor(board: AgendaHistoryColumns): BriefingRelations {
+  return {
+    trainer: board.trainerRelation,
+    ...(board.coTrainerRelation === undefined ? {} : { coTrainer: board.coTrainerRelation }),
+    thema: board.themaRelation,
+  };
+}
+
+/** `BRIEFING_EXPECTED_COLUMNS`, met de relaties van dit bord in plaats van die van 2026. */
+export function briefingExpectedColumns(relations: BriefingRelations): ExpectedColumn[] {
+  const relatieIds = new Set<string>([C.themaRelation, C.trainerRelation, C.coTrainerRelation]);
+  const relatie = (id: string, board: string): ExpectedColumn => ({
+    id,
+    type: 'board_relation',
+    settingsIncludes: [`"boardIds":[${board}]`],
+  });
+  return [
+    relatie(relations.thema, THEMAS_BOARD),
+    relatie(relations.trainer, TRAINERS_BOARD),
+    ...(relations.coTrainer === undefined ? [] : [relatie(relations.coTrainer, TRAINERS_BOARD)]),
+    ...BRIEFING_EXPECTED_COLUMNS.filter((column) => !relatieIds.has(column.id)),
+  ];
+}
+
 export async function readBriefingTraining(
   client: MondayGraphQLClient,
   itemId: string,
-  options: { boardId?: string } = {}
+  options: { boardId?: string; relations?: BriefingRelations } = {}
 ): Promise<BriefingTraining> {
+  const R = options.relations ?? AGENDA_2026_RELATIONS;
   /**
    * Eerst het bord controleren, dan pas de gegevens vertrouwen.
    *
@@ -557,10 +620,10 @@ export async function readBriefingTraining(
   if (meta === undefined) {
     throw new Error(`Briefing: agendabord ${boardId} niet gevonden of niet toegankelijk`);
   }
-  assertColumns(meta, BRIEFING_EXPECTED_COLUMNS);
+  assertColumns(meta, briefingExpectedColumns(R));
 
   const data = await client.query<{ items: RawItem[] }>(
-    `query ($ids: [ID!]) { items(ids: $ids) { ${ITEM_FIELDS} } }`,
+    `query ($ids: [ID!]) { items(ids: $ids) { ${briefingItemFields(R)} } }`,
     { ids: [itemId] }
   );
   const item = (data.items ?? [])[0];
@@ -582,7 +645,7 @@ export async function readBriefingTraining(
     );
   }
 
-  const themaIds = linkedIds(item, C.themaRelation);
+  const themaIds = linkedIds(item, R.thema);
   /**
    * Beide trainerkolommen, lead eerst.
    *
@@ -590,8 +653,10 @@ export async function readBriefingTraining(
    * leadkolom komt eerst en `Set` houdt de eerste. Twee keer in de lijst zou twee
    * briefings voor dezelfde persoon opleveren.
    */
-  const leadIds = linkedIds(item, C.trainerRelation);
-  const coIds = linkedIds(item, C.coTrainerRelation).filter((id) => !leadIds.includes(id));
+  const leadIds = linkedIds(item, R.trainer);
+  const coIds = (R.coTrainer === undefined ? [] : linkedIds(item, R.coTrainer)).filter(
+    (id) => !leadIds.includes(id)
+  );
   const trainerIds = [...leadIds, ...coIds];
   const coSet = new Set(coIds);
   const oppIds = linkedIds(item, C.opportunity);
