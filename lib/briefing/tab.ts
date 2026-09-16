@@ -10,7 +10,8 @@
  * wie, en met welke rol — zodat het scherm dat kan tonen vóórdat er iets gemaakt wordt.
  */
 
-import { BRIEFING_AGENDA_COLUMNS } from './columns';
+import { BRIEFING_AGENDA_COLUMNS, OPPORTUNITY_COLUMNS } from './columns';
+import { BRIEFING_REQUIRED_FIELDS } from './required';
 import {
   ACHTERGROND_LEEG,
   REIS_ONBEKEND,
@@ -19,7 +20,7 @@ import {
   openIssues,
   sessionFacts,
 } from './compose';
-import { describeOpenIssue, isNotDecided } from './open-issues';
+import { describeOpenIssue, isNotDecided, splitOpenIssue } from './open-issues';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
 import { conceptLines, resolveConceptInhoud } from './concept';
 import { formatDutchDate } from './deadline';
@@ -76,10 +77,23 @@ export interface TabIssue {
  */
 export interface TabGereedheid {
   readonly compleet: boolean;
-  /** Wat genereren tegenhoudt. */
-  readonly blokkeert: readonly TabIssue[];
-  /** Wat genereren niet tegenhoudt, maar als zichtbare regel in het document komt. */
-  readonly ontbreekt: readonly TabIssue[];
+  /** Eén regel per controle, problemen eerst. */
+  readonly controles: readonly TabControle[];
+}
+
+/**
+ * Eén regel van de checklist bovenaan de tab.
+ *
+ * `label` is een paar woorden, zodat de lijst in één oogopslag te lezen is; de uitleg klapt
+ * open bij een klik. Bij een goede regel is de uitleg de waarde zelf, zodat de adviseur kan
+ * zien dát het klopt en niet alleen dat er iets staat.
+ */
+export interface TabControle {
+  readonly key: string;
+  readonly label: string;
+  /** `blokkeert` houdt genereren tegen; `ontbreekt` wordt een zichtbare regel in het document. */
+  readonly status: 'ok' | 'ontbreekt' | 'blokkeert';
+  readonly uitleg: string;
 }
 
 export interface TabView {
@@ -169,23 +183,203 @@ function legeVelden(training: BriefingTraining, onderdrukt: ReadonlySet<string>)
  * het filter weg. Wat overblijft is precies wat de adviseur nog kan oplossen, zoals een
  * QR-kolom op `0. NOTK` of een thema zonder bullets.
  */
-function onbepaald(
+function onbepaaldeRegels(
   training: BriefingTraining,
   checklist: BriefingChecklist,
   actorItemIds: readonly string[]
-): TabIssue[] {
+): string[] {
   const data = composeBriefing(training, checklist, {
     roles: sessionFacts(training, checklist, { actorItemIds }),
   });
   const regels = openIssues(data).filter(
     (t) => isNotDecided(t) && t !== ACHTERGROND_LEEG && t !== REIS_ONBEKEND
   );
-  return [...new Set(regels)].map((t) => ({
-    kind: 'onbepaald' as const,
-    tekst: describeOpenIssue(t),
-    blokkeert: false,
-  }));
+  return [...new Set(regels)];
 }
+
+/** Korte namen voor de `nog niet bepaald`-regels; de rest krijgt zijn eigen omschrijving. */
+function korteNaam(wat: string): string {
+  const w = wat.toLowerCase();
+  if (w === 'evaluatie deelnemers') {
+    return 'Evaluatie (QR)';
+  }
+  if (w === 'de organisatienaam in de concept-inhoud') {
+    return 'Organisatienaam';
+  }
+  if (w === 'wie de trainingsacteur is') {
+    return 'Acteur aanwijzen';
+  }
+  if (w.startsWith('de rol van')) {
+    return 'Rolverdeling';
+  }
+  if (w.startsWith('verwijzing naar het kopje')) {
+    return 'Huiswerkverwijzing';
+  }
+  return wat;
+}
+
+const VOLGORDE: Record<TabControle['status'], number> = { blokkeert: 0, ontbreekt: 1, ok: 2 };
+
+/**
+ * De checklist: wat klopt, wat ontbreekt, en wat genereren tegenhoudt.
+ *
+ * Gebouwd uit dezelfde feiten als `issues` en `training.missing`, zodat het label, de knop en
+ * `Staat klaar` niet van de lijst kunnen afwijken. Alleen wat de adviseur kan oplossen staat
+ * erin; de inventarisatie (nog niet gebouwd) niet.
+ */
+function controlesVoor(input: {
+  readonly training: BriefingTraining;
+  readonly issues: readonly TabIssue[];
+  readonly regels: readonly string[];
+  readonly documenten: readonly TabDocument[];
+  readonly conceptResultaat: readonly string[];
+  readonly soloTrainer: boolean;
+  readonly acteurBeantwoord: boolean;
+  readonly trainingActor: boolean;
+}): TabControle[] {
+  const { training, issues } = input;
+  const C = BRIEFING_AGENDA_COLUMNS;
+  const lijst: TabControle[] = [];
+  const issue = (kind: TabIssue['kind']): TabIssue | undefined =>
+    issues.find((i) => i.kind === kind);
+  const mist = (column: string) => training.missing.find((m) => m.column === column);
+
+  const lead = issue('geen_lead');
+  if (lead !== undefined) {
+    lijst.push({ key: 'lead', label: 'Leadtrainer', status: 'blokkeert', uitleg: lead.tekst });
+  } else if (mist(C.trainerRelation) !== undefined) {
+    lijst.push({
+      key: 'lead',
+      label: 'Leadtrainer',
+      status: 'ontbreekt',
+      uitleg:
+        'Er hangt alleen een acteur aan deze training. Zet een trainer in de kolom Trainers ' +
+        'contactgegevens op het agendabord.',
+    });
+  } else {
+    lijst.push({
+      key: 'lead',
+      label: 'Trainers',
+      status: 'ok',
+      uitleg: input.documenten.map((d) => `${d.naam} (${ROL[d.role]})`).join(', '),
+    });
+  }
+
+  const nietGekoppeld = issue('acteur_niet_gekoppeld');
+  const onbekend = issue('acteur_onbekend');
+  const onbeantwoord = issue('acteur_onbeantwoord');
+  if (nietGekoppeld !== undefined) {
+    lijst.push({
+      key: 'acteur',
+      label: 'Acteur koppelen',
+      status: 'blokkeert',
+      uitleg: nietGekoppeld.tekst,
+    });
+  } else if (onbeantwoord !== undefined) {
+    lijst.push({
+      key: 'acteur',
+      label: 'Acteurvraag',
+      status: 'blokkeert',
+      uitleg: onbeantwoord.tekst,
+    });
+  } else if (onbekend !== undefined) {
+    lijst.push({
+      key: 'acteur',
+      label: 'Acteur aanwijzen',
+      status: 'blokkeert',
+      uitleg: onbekend.tekst,
+    });
+  } else if (!input.soloTrainer) {
+    lijst.push({
+      key: 'acteur',
+      label: 'Acteurvraag',
+      status: 'ok',
+      uitleg: input.trainingActor ? 'Er werkt een trainingsacteur mee.' : 'Geen trainingsacteur.',
+    });
+  }
+
+  const intern = issue('interne_trainer');
+  if (intern !== undefined) {
+    lijst.push({
+      key: 'intern',
+      label: 'Interne trainer',
+      status: 'blokkeert',
+      uitleg: intern.tekst,
+    });
+  }
+
+  const veld = (key: string, label: string, column: string, waarde: string): void => {
+    const leeg = mist(column);
+    lijst.push(
+      leeg === undefined
+        ? { key, label, status: 'ok', uitleg: waarde }
+        : {
+            key,
+            label,
+            status: 'ontbreekt',
+            uitleg:
+              leeg.label === label
+                ? `De kolom ${label} is leeg. In het document komt op die plek een zichtbare regel; vul hem in Monday in.`
+                : `${leeg.label}. Kies in Monday een label waarvoor een sjabloon bestaat.`,
+          }
+    );
+  };
+  for (const r of BRIEFING_REQUIRED_FIELDS) {
+    veld(
+      r.of,
+      r.label,
+      r.column,
+      r.of === 'datum' ? formatDutchDate(training.datum) : training[r.of]
+    );
+  }
+  veld('themas', "Thema's", C.themaRelation, training.themas.join(', '));
+  veld('accountmanager', 'Accountmanager', C.accountmanager, training.accountmanager?.naam ?? '');
+  veld(
+    'achtergrond',
+    'Achtergrondinformatie',
+    OPPORTUNITY_COLUMNS.achtergrond,
+    'Ingevuld op de gekoppelde Opportunity.'
+  );
+
+  const regels = input.regels.map(splitOpenIssue);
+  const concept = regels.find((r) => r.wat.toLowerCase() === 'concept-inhoud');
+  lijst.push(
+    concept === undefined
+      ? {
+          key: 'concept',
+          label: 'Concept inhoud',
+          status: 'ok',
+          uitleg: `${input.conceptResultaat.length} regel${input.conceptResultaat.length === 1 ? '' : 's'} in het document.`,
+        }
+      : {
+          key: 'concept',
+          label: 'Concept inhoud',
+          status: 'ontbreekt',
+          uitleg: `${concept.reden.charAt(0).toUpperCase()}${concept.reden.slice(1)}. Typ het programma bij Concept inhoud.`,
+        }
+  );
+  regels
+    .filter((r) => r !== concept)
+    .forEach((r, index) => {
+      lijst.push({
+        key: `regel-${index}`,
+        label: korteNaam(r.wat),
+        status: 'ontbreekt',
+        uitleg: `${r.reden.charAt(0).toUpperCase()}${r.reden.slice(1)}.`,
+      });
+    });
+
+  return lijst
+    .map((controle, index) => ({ controle, index }))
+    .sort((a, b) => VOLGORDE[a.controle.status] - VOLGORDE[b.controle.status] || a.index - b.index)
+    .map(({ controle }) => controle);
+}
+
+const ROL: Record<RecipientRole, string> = {
+  lead: 'lead',
+  co: 'co-trainer',
+  acteur: 'acteur',
+};
 
 /**
  * Alles wat de tab toont voor één training.
@@ -313,14 +507,20 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
     issues.push({
       kind: 'acteur_onbeantwoord',
       tekst:
-        `Beantwoord eerst of er een trainingsacteur meewerkt. Monday stelt ` +
-        `${voorstel ? 'ja' : 'nee'} voor op basis van Acteuraantal en de groep Acteurs, maar ` +
-        'die twee samen missen soms een acteur.',
+        'Kies bij Keuzes of er een trainingsacteur meewerkt. Monday weet het niet zeker: ' +
+        'Acteuraantal en de groep Acteurs missen samen soms een acteur.',
       blokkeert: true,
     });
   }
   issues.push(...legeVelden(training, onderdrukt));
-  issues.push(...onbepaald(training, checklist, antwoorden.actorItemIds));
+  const regels = onbepaaldeRegels(training, checklist, antwoorden.actorItemIds);
+  issues.push(
+    ...regels.map((t) => ({
+      kind: 'onbepaald' as const,
+      tekst: describeOpenIssue(t),
+      blokkeert: false,
+    }))
+  );
 
   const documenten: TabDocument[] =
     rollen.kind === 'resolved'
@@ -332,6 +532,12 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
       : [];
 
   const eigen = checklist.conceptInhoud ?? null;
+  const conceptResultaat =
+    resolveConceptInhoud({
+      themaTekst: training.themaInhoud,
+      adviseurTekst: eigen ?? undefined,
+      organisatie: training.opdrachtgever,
+    }) ?? [];
   return {
     training: {
       itemId: training.itemId,
@@ -352,18 +558,21 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
     personen: personen(training, antwoorden.actorItemIds),
     conceptSkelet: conceptLines(training.themaInhoud),
     conceptEigen: eigen,
-    conceptResultaat:
-      resolveConceptInhoud({
-        themaTekst: training.themaInhoud,
-        adviseurTekst: eigen ?? undefined,
-        organisatie: training.opdrachtgever,
-      }) ?? [],
+    conceptResultaat,
     documenten,
     issues,
     gereedheid: {
       compleet: issues.length === 0,
-      blokkeert: issues.filter((i) => i.blokkeert),
-      ontbreekt: issues.filter((i) => !i.blokkeert),
+      controles: controlesVoor({
+        training,
+        issues,
+        regels,
+        documenten,
+        conceptResultaat,
+        soloTrainer,
+        acteurBeantwoord: beantwoord,
+        trainingActor: checklist.trainingActor,
+      }),
     },
     kanGenereren: !issues.some((i) => i.blokkeert),
   };

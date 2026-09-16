@@ -389,10 +389,23 @@ describe('buildTabView', () => {
   describe('gereedheid', () => {
     /** Een QR-waarde die de opmaak kent; `Nee` uit de basisfixture is dat niet. */
     const KLAAR: BriefingTraining = { ...TRAINING, evaluatie: 'Verzonden' };
+    const controle = (uit: ReturnType<typeof buildTabView>, label: string) =>
+      uit.gereedheid.controles.find((c) => c.label === label);
 
-    it('is compleet als er niets te melden is', () => {
+    it('is compleet en zet overal een vinkje als er niets te melden is', () => {
       const uit = buildTabView(KLAAR, opgeslagen());
-      expect(uit.gereedheid).toEqual({ compleet: true, blokkeert: [], ontbreekt: [] });
+      expect(uit.gereedheid.compleet).toBe(true);
+      expect(uit.gereedheid.controles.every((c) => c.status === 'ok')).toBe(true);
+      expect(uit.gereedheid.controles.map((c) => c.label)).toEqual(
+        expect.arrayContaining(['Trainers', 'Datum', 'Locatie', 'Concept inhoud'])
+      );
+    });
+
+    /** Bij een goede regel is de uitleg de waarde zelf. */
+    it('laat bij een goede regel de waarde zien', () => {
+      expect(controle(buildTabView(KLAAR, opgeslagen()), 'Locatie')?.uitleg).toBe(
+        'Raadhuisplein 6, Ermelo'
+      );
     });
 
     /**
@@ -401,26 +414,25 @@ describe('buildTabView', () => {
      */
     it('telt een bron die Lerai nog niet heeft gebouwd niet mee', () => {
       const uit = buildTabView(KLAAR, opgeslagen());
-      expect(uit.issues.some((i) => i.tekst.toLowerCase().includes('inventarisatie'))).toBe(false);
+      expect(
+        uit.gereedheid.controles.some((c) => c.label.toLowerCase().includes('inventarisatie'))
+      ).toBe(false);
     });
 
-    it('meldt een QR-kolom zonder bruikbare waarde als iets wat de adviseur kan oplossen', () => {
+    it('meldt een QR-kolom zonder bruikbare waarde, zonder te blokkeren', () => {
       const uit = buildTabView({ ...KLAAR, evaluatie: '0. NOTK' }, opgeslagen());
       expect(uit.gereedheid.compleet).toBe(false);
-      expect(uit.gereedheid.ontbreekt.map((i) => i.tekst)).toEqual([
-        'Evaluatie deelnemers: de QR-kolom staat op "0. NOTK"',
-      ]);
+      expect(controle(uit, 'Evaluatie (QR)')).toMatchObject({ status: 'ontbreekt' });
+      expect(controle(uit, 'Evaluatie (QR)')?.uitleg).toContain('0. NOTK');
       expect(uit.kanGenereren).toBe(true);
     });
 
     it('meldt een thema zonder bullets als er ook niets eigens is ingevuld', () => {
       const uit = buildTabView({ ...KLAAR, themaInhoud: '' }, opgeslagen());
-      expect(uit.gereedheid.ontbreekt.map((i) => i.tekst)).toEqual([
-        expect.stringMatching(/^Concept-inhoud: /),
-      ]);
+      expect(controle(uit, 'Concept inhoud')?.status).toBe('ontbreekt');
     });
 
-    /** "Achtergrondinformatie is leeg" staat er al als leeg veld; niet nog eens als regel. */
+    /** "Achtergrondinformatie is leeg" is één feit; niet ook nog als losse regel. */
     it('meldt een lege achtergrond één keer', () => {
       const uit = buildTabView(
         {
@@ -430,16 +442,38 @@ describe('buildTabView', () => {
         },
         opgeslagen()
       );
-      expect(uit.gereedheid.ontbreekt).toHaveLength(1);
+      const achtergrond = uit.gereedheid.controles.filter((c) =>
+        c.label.toLowerCase().startsWith('achtergrond')
+      );
+      expect(achtergrond.map((c) => c.status)).toEqual(['ontbreekt']);
     });
 
-    it('zet blokkades apart van wat alleen ontbreekt', () => {
+    it('meldt een leeg veld met die naam', () => {
+      const uit = buildTabView(
+        {
+          ...KLAAR,
+          datum: '',
+          missing: [{ column: BRIEFING_AGENDA_COLUMNS.datum, label: 'Datum' }],
+        },
+        opgeslagen()
+      );
+      expect(controle(uit, 'Datum')?.status).toBe('ontbreekt');
+    });
+
+    it('zet blokkades bovenaan, dan wat ontbreekt, dan wat klopt', () => {
       const uit = buildTabView(
         { ...KLAAR, brie: 'Interne trainer', evaluatie: '0. NOTK' },
         opgeslagen()
       );
-      expect(uit.gereedheid.blokkeert.map((i) => i.kind)).toEqual(['interne_trainer']);
-      expect(uit.gereedheid.ontbreekt.map((i) => i.kind)).toEqual(['onbepaald']);
+      const statussen = uit.gereedheid.controles.map((c) => c.status);
+      expect(statussen[0]).toBe('blokkeert');
+      expect(uit.gereedheid.controles[0].label).toBe('Interne trainer');
+      expect(statussen.indexOf('ok')).toBeGreaterThan(statussen.lastIndexOf('ontbreekt'));
+    });
+
+    it('laat een onbeantwoorde acteurvraag genereren tegenhouden', () => {
+      const uit = buildTabView(KLAAR, opgeslagen({ actorAnswered: false }));
+      expect(controle(uit, 'Acteurvraag')?.status).toBe('blokkeert');
     });
   });
 

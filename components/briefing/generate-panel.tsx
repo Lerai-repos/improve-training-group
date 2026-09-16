@@ -101,7 +101,7 @@ export const GeneratePanel = ({
 
       {!kanGenereren && state.kind === 'idle' && (
         <p className="text-xs text-muted-foreground">
-          Los eerst op wat hierboven rood staat; dan kan de briefing gemaakt worden.
+          Los eerst de rode punten in de checklist op; dan kan de briefing gemaakt worden.
         </p>
       )}
 

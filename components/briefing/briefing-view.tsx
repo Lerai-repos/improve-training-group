@@ -181,9 +181,28 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
         </div>
       )}
 
-      <ReadinessPanel gereedheid={tab.gereedheid} />
-
-      <DocumentsPanel documenten={tab.documenten} />
+      {/*
+        Twee rijen van twee blokken in plaats van alles onder elkaar: de tab staat in Monday's
+        brede itemvenster, en zo staan de checklist en de knop die hij vrijgeeft naast elkaar.
+        Op een smal scherm vallen ze gewoon onder elkaar.
+      */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <ReadinessPanel gereedheid={tab.gereedheid} />
+        <div className="grid gap-4">
+          <DocumentsPanel documenten={tab.documenten} />
+          {/*
+            Buiten de `fieldset` hieronder: ook met een onleesbaar record moet zichtbaar zijn wat
+            er zou gebeuren. `kanGenereren` is dan hoe dan ook false, dus de knop doet niets.
+          */}
+          <GeneratePanel
+            state={generate.state}
+            kanGenereren={tab.kanGenereren && !view.locked}
+            onGenerate={generate.generate}
+            onConfirm={generate.confirm}
+            onCancel={generate.cancel}
+          />
+        </div>
+      </div>
 
       {/*
         Ook op slot terwijl er gegenereerd wordt.
@@ -198,7 +217,7 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
         disabled={view.locked || generate.state.kind === 'bezig'}
         className={cn((view.locked || generate.state.kind === 'bezig') && 'opacity-60')}
       >
-        <div className="flex flex-col gap-4">
+        <div className="grid items-start gap-4 lg:grid-cols-2">
           <ChecklistPanel
             /**
              * De uitgerekende checklist, niet de rauwe antwoorden.
@@ -209,7 +228,6 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
              */
             checklist={tab.checklist}
             acteurBeantwoord={tab.acteurBeantwoord}
-            acteurVoorstel={tab.acteurVoorstel}
             personen={tab.personen}
             actorItemIds={view.answers.actorItemIds}
             soloTrainer={tab.soloTrainer}
@@ -227,19 +245,6 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
           />
         </div>
       </fieldset>
-
-      {/*
-        Buiten de `fieldset`: ook met een onleesbaar record moet zichtbaar zijn wat er zou
-        gebeuren. `kanGenereren` is dan hoe dan ook false, dus de knop doet niets — hij legt
-        alleen uit waarom.
-      */}
-      <GeneratePanel
-        state={generate.state}
-        kanGenereren={tab.kanGenereren && !view.locked}
-        onGenerate={generate.generate}
-        onConfirm={generate.confirm}
-        onCancel={generate.cancel}
-      />
     </div>
   );
 };

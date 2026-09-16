@@ -22,7 +22,8 @@ export interface SegmentedOption<T extends string> {
 interface SegmentedProps<T extends string> {
   /** Uniek binnen het formulier: bindt de radioknoppen aan elkaar. */
   readonly name: string;
-  readonly value: T;
+  /** `null` is "nog niets gekozen": geen enkele knop staat aan. */
+  readonly value: T | null;
   readonly options: ReadonlyArray<SegmentedOption<T>>;
   onChange(next: T): void;
 }

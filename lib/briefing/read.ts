@@ -13,6 +13,7 @@
  * leeg — 0 van 815 — dus die omweg is niet optioneel.
  */
 
+import { BRIEFING_REQUIRED_FIELDS } from './required';
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
 import { assertColumns } from '@lib/monday/schema-check';
 
@@ -77,21 +78,7 @@ export const BRIEFING_EXPECTED_COLUMNS: ExpectedColumn[] = [
 ];
 
 /** Zonder deze velden is de briefing zichtbaar kapot, niet alleen karig. */
-const REQUIRED: ReadonlyArray<{ column: string; label: string; of: keyof BriefingTraining }> = [
-  { column: C.datum, label: 'Datum', of: 'datum' },
-  { column: C.duurTekst, label: 'Duur', of: 'duur' },
-  { column: C.locatie, label: 'Locatie', of: 'locatie' },
-  { column: C.opdrachtgever, label: 'Opdrachtgever', of: 'opdrachtgever' },
-  /**
-   * Het label kiest het sjabloon. Zonder label is er niets om te genereren, dus dit is
-   * geen schoonheidsfoutje maar een harde voorwaarde.
-   */
-  { column: C.label, label: 'Label', of: 'label' },
-  /** Zonder Tijden geen datum-en-tijdregel én geen materialen-deadline. */
-  { column: C.tijden, label: 'Tijden', of: 'tijden' },
-  /** Zonder Taal staat er een lege Voertaal-rij in het document. */
-  { column: C.taal, label: 'Voertaal', of: 'voertaal' },
-];
+const REQUIRED = BRIEFING_REQUIRED_FIELDS;
 
 /** De negen labels waarvoor een sjabloon bestaat. Een ander label kan niet gegenereerd worden. */
 export const SUPPORTED_LABELS: readonly string[] = [

@@ -103,7 +103,6 @@ const GroepKeuze = ({ checklist, onChange }: GroepKeuzeProps) => {
 interface ActeurVraagProps {
   readonly checklist: BriefingChecklist;
   readonly beantwoord: boolean;
-  readonly voorstel: boolean;
   readonly personen: readonly TabPerson[];
   readonly actorItemIds: readonly string[];
   onActors(next: readonly string[]): void;
@@ -113,15 +112,14 @@ interface ActeurVraagProps {
 /**
  * De acteurvraag, en wie de acteur dan is.
  *
- * Monday doet een voorstel op basis van `Acteuraantal` en de groep `Acteurs`, maar beide
- * signalen zijn gemeten onvolledig: samen missen ze soms een acteur, en dan verdwijnt het
- * acteurblok uit élk document zonder dat iemand een vraag oversloeg. Daarom staat het voorstel
- * er zichtbaar bij, en beantwoordt de adviseur hem zelf.
+ * **Geen voorgezet antwoord.** `Acteuraantal` en de groep `Acteurs` zijn gemeten onvolledig,
+ * en een knop die al aan staat leest als "dit is al beantwoord". Tim, 16-Sep-2026: de keuze
+ * hoort te volgen uit wat de adviseur kiest. Tot die tijd staat er niets aan, en houdt de
+ * checklist genereren tegen.
  */
 const ActeurVraag = ({
   checklist,
   beantwoord,
-  voorstel,
   personen,
   actorItemIds,
   onActors,
@@ -150,27 +148,15 @@ const ActeurVraag = ({
 
   return (
     <KeuzeVraag label="Werkt er een trainingsacteur mee?">
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmented
-          name="acteur"
-          value={checklist.trainingActor ? 'ja' : 'nee'}
-          onChange={zet}
-          options={[
-            { value: 'ja', label: 'Ja' },
-            { value: 'nee', label: 'Nee' },
-          ]}
-        />
-        {/*
-          Een eigen chip in plaats van kale rode tekst: `text-destructive` op Monday's donkere
-          ondergrond is donkerrood op donkerblauw en nauwelijks te lezen — precies de regel die
-          de adviseur juist moet zien.
-        */}
-        {!beantwoord && (
-          <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-foreground">
-            Monday stelt {voorstel ? 'ja' : 'nee'} voor — bevestig of wijzig het
-          </span>
-        )}
-      </div>
+      <Segmented
+        name="acteur"
+        value={beantwoord ? (checklist.trainingActor ? 'ja' : 'nee') : null}
+        onChange={zet}
+        options={[
+          { value: 'ja', label: 'Ja' },
+          { value: 'nee', label: 'Nee' },
+        ]}
+      />
 
       {/*
         Ja aanvinken terwijl er niemand aan de training hangt deed zichtbaar niets: de kiezer
@@ -178,14 +164,14 @@ const ActeurVraag = ({
         antwoord dat geen reactie oplevert leest als een kapotte knop, dus staat er nu wat er
         aan de hand is — en waar het opgelost wordt, want dat is op het bord en niet hier.
       */}
-      {checklist.trainingActor && personen.length === 0 && (
+      {beantwoord && checklist.trainingActor && personen.length === 0 && (
         <p className="mt-1 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
           Er hangt nog niemand aan deze training, dus er is niemand om als acteur aan te wijzen.
           Koppel eerst de trainers op het agendabord.
         </p>
       )}
 
-      {checklist.trainingActor && personen.length > 0 && (
+      {beantwoord && checklist.trainingActor && personen.length > 0 && (
         <div className="mt-1 grid gap-1 rounded-md border border-border bg-muted/40 p-3">
           <p className="text-xs text-muted-foreground">
             Wie is de acteur? De groep <span className="font-medium">Acteurs</span> zegt wat iemand
@@ -214,7 +200,6 @@ const ActeurVraag = ({
 export interface ChecklistPanelProps {
   readonly checklist: BriefingChecklist;
   readonly acteurBeantwoord: boolean;
-  readonly acteurVoorstel: boolean;
   readonly personen: readonly TabPerson[];
   readonly actorItemIds: readonly string[];
   /**
@@ -234,7 +219,6 @@ export interface ChecklistPanelProps {
 export const ChecklistPanel = ({
   checklist,
   acteurBeantwoord,
-  acteurVoorstel,
   personen,
   actorItemIds,
   soloTrainer,
@@ -255,7 +239,7 @@ export const ChecklistPanel = ({
 
   return (
     <section className="grid gap-5 rounded-md border border-border bg-card p-4">
-      <h2 className="text-sm font-semibold">Checklist</h2>
+      <h2 className="text-sm font-semibold">Keuzes</h2>
 
       {/*
         Met één gekoppeld persoon kan deze vraag niet op "ja" uitkomen — dan is er óf een
@@ -266,7 +250,6 @@ export const ChecklistPanel = ({
         <ActeurVraag
           checklist={checklist}
           beantwoord={acteurBeantwoord}
-          voorstel={acteurVoorstel}
           personen={personen}
           actorItemIds={actorItemIds}
           onActors={onActors}

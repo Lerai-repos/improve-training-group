@@ -55,3 +55,12 @@ export function describeOpenIssue(tekst: string): string {
     .replace(' — ', ': ');
   return kern.charAt(0).toUpperCase() + kern.slice(1);
 }
+
+/** `« nog niet bepaald: evaluatie deelnemers — reden »` → `{ wat: 'Evaluatie deelnemers', reden }`. */
+export function splitOpenIssue(tekst: string): { readonly wat: string; readonly reden: string } {
+  const kern = describeOpenIssue(tekst);
+  const scheiding = kern.indexOf(': ');
+  return scheiding < 0
+    ? { wat: kern, reden: '' }
+    : { wat: kern.slice(0, scheiding), reden: kern.slice(scheiding + 2) };
+}

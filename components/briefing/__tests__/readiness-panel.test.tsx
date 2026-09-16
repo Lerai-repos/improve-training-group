@@ -1,47 +1,63 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ReadinessPanel } from '../readiness-panel';
 
-import type { TabIssue } from '@lib/briefing/tab';
+import type { TabControle } from '@lib/briefing/tab';
 
 afterEach(cleanup);
 
 /**
- * Het overzicht bovenaan de tab. Eén label moet in een oogopslag zeggen waar de briefing
- * staat, en de lijst eronder precies wat eraan te doen is.
+ * De checklist bovenaan de tab: korte regels met een vinkje, de uitleg pas bij een klik.
  */
 
-const blokkade: TabIssue = {
-  kind: 'geen_lead',
-  tekst: 'Er staat niemand in de kolom Trainers contactgegevens',
-  blokkeert: true,
+const blokkade: TabControle = {
+  key: 'lead',
+  label: 'Leadtrainer',
+  status: 'blokkeert',
+  uitleg: 'Zet er één trainer in.',
 };
-const leeg: TabIssue = {
-  kind: 'veld_leeg',
-  tekst: 'Locatie is leeg; dat wordt een zichtbare regel in het document',
-  blokkeert: false,
+const leeg: TabControle = {
+  key: 'datum',
+  label: 'Datum',
+  status: 'ontbreekt',
+  uitleg: 'De kolom Datum is leeg.',
 };
+const goed: TabControle = { key: 'locatie', label: 'Locatie', status: 'ok', uitleg: 'Utrecht' };
 
 describe('ReadinessPanel', () => {
-  it('toont Compleet en geen lijst als er niets mist', () => {
-    render(<ReadinessPanel gereedheid={{ compleet: true, blokkeert: [], ontbreekt: [] }} />);
+  it('toont Compleet als alles klopt, en nog steeds de regels met een vinkje', () => {
+    render(<ReadinessPanel gereedheid={{ compleet: true, controles: [goed] }} />);
     expect(screen.getByText('Compleet')).toBeTruthy();
-    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Locatie' })).toBeTruthy();
   });
 
-  it('zegt dat genereren niet kan zolang er iets blokkeert, en zet de blokkade bovenaan', () => {
-    render(
-      <ReadinessPanel gereedheid={{ compleet: false, blokkeert: [blokkade], ontbreekt: [leeg] }} />
-    );
+  it('zegt dat genereren niet kan zolang er iets blokkeert', () => {
+    render(<ReadinessPanel gereedheid={{ compleet: false, controles: [blokkade, leeg, goed] }} />);
     expect(screen.getByText('Kan niet genereren')).toBeTruthy();
-    const regels = screen.getAllByRole('listitem').map((li) => li.textContent);
-    expect(regels).toEqual([blokkade.tekst, leeg.tekst]);
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Leadtrainer',
+      'Datum',
+      'Locatie',
+    ]);
   });
 
-  it('noemt alleen ontbrekende velden "nog niet compleet", niet blokkerend', () => {
-    render(<ReadinessPanel gereedheid={{ compleet: false, blokkeert: [], ontbreekt: [leeg] }} />);
+  it('noemt alleen ontbrekende punten "nog niet compleet"', () => {
+    render(<ReadinessPanel gereedheid={{ compleet: false, controles: [leeg, goed] }} />);
     expect(screen.getByText('Nog niet compleet')).toBeTruthy();
-    expect(screen.queryByText('Kan niet genereren')).toBeNull();
+  });
+
+  it('klapt de uitleg open en weer dicht bij een klik', async () => {
+    const user = userEvent.setup();
+    render(<ReadinessPanel gereedheid={{ compleet: false, controles: [leeg] }} />);
+    const regel = screen.getByRole('button', { name: 'Datum' });
+
+    expect(regel.getAttribute('aria-expanded')).toBe('false');
+    await user.click(regel);
+    expect(regel.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('De kolom Datum is leeg.')).toBeTruthy();
+    await user.click(regel);
+    expect(regel.getAttribute('aria-expanded')).toBe('false');
   });
 });
