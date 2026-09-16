@@ -43,6 +43,12 @@ describe('ReadinessPanel', () => {
     ]);
   });
 
+  it('verdeelt de regels over twee losse lijsten, zodat openklappen de buurkolom niet verschuift', () => {
+    render(<ReadinessPanel gereedheid={{ compleet: false, controles: [blokkade, leeg, goed] }} />);
+    const lijsten = screen.getAllByRole('list');
+    expect(lijsten.map((lijst) => lijst.querySelectorAll('button').length)).toEqual([2, 1]);
+  });
+
   it('noemt alleen ontbrekende punten "nog niet compleet"', () => {
     render(<ReadinessPanel gereedheid={{ compleet: false, controles: [leeg, goed] }} />);
     expect(screen.getByText('Nog niet compleet')).toBeTruthy();

@@ -133,6 +133,7 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
   }
 
   const { view: tab } = view.status;
+  const bewerkenOpSlot = view.locked || generate.state.kind === 'bezig';
 
   return (
     <div className={surface} data-testid="briefing-view">
@@ -182,17 +183,61 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
       )}
 
       {/*
-        Twee rijen van twee blokken in plaats van alles onder elkaar: de tab staat in Monday's
-        brede itemvenster, en zo staan de checklist en de knop die hij vrijgeeft naast elkaar.
-        Op een smal scherm vallen ze gewoon onder elkaar.
+        Twee kolommen die elk los stapelen, in plaats van rijen: in een rij bepaalt het hoogste
+        blok de hoogte en valt er naast een kort blok een gat. Links wat er nog mist en de
+        inhoud, rechts de keuzes en onderaan de knop die dat alles vrijgeeft. Op een smal
+        scherm vallen ze gewoon onder elkaar.
+
+        Het slot hieronder zit daarom op twee `fieldset`s — één per kolom — met dezelfde
+        voorwaarde.
+
+        Ook op slot terwijl er gegenereerd wordt: `useGenerate` legt het concept eerst vast en
+        rendert daarna — samen seconden. Een vinkje dat in dat gat wordt gezet start een nieuwe
+        uitgestelde opslag, en die kan te laat zijn voor de laatste controle van de server: dan
+        gaat het document de deur uit met de óude antwoorden terwijl de nieuwe er vlak daarna
+        overheen worden bewaard, en het scherm toont iets anders dan wat de trainer krijgt.
       */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <ReadinessPanel gereedheid={tab.gereedheid} />
-        <div className="grid gap-4">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
+          <ReadinessPanel gereedheid={tab.gereedheid} />
+          <fieldset
+            disabled={bewerkenOpSlot}
+            className={cn('min-w-0', bewerkenOpSlot && 'opacity-60')}
+          >
+            <ConceptPanel
+              skelet={tab.conceptSkelet}
+              eigen={tab.checklist.conceptInhoud ?? null}
+              resultaat={tab.conceptResultaat}
+              onChange={handleConcept}
+            />
+          </fieldset>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <fieldset
+            disabled={bewerkenOpSlot}
+            className={cn('min-w-0', bewerkenOpSlot && 'opacity-60')}
+          >
+            <ChecklistPanel
+              /**
+               * De uitgerekende checklist, niet de rauwe antwoorden: de radioknop en de
+               * acteurkiezer moeten hetzelfde laten zien als het voorbeeld dat eruit volgt.
+               */
+              checklist={tab.checklist}
+              acteurBeantwoord={tab.acteurBeantwoord}
+              personen={tab.personen}
+              actorItemIds={view.answers.actorItemIds}
+              soloTrainer={tab.soloTrainer}
+              groepskeuzeNvt={tab.groepskeuzeNvt}
+              onChecklist={view.setChecklist}
+              onActors={view.setActorItemIds}
+              onAnswerActor={view.answerActor}
+            />
+          </fieldset>
           <DocumentsPanel documenten={tab.documenten} />
           {/*
-            Buiten de `fieldset` hieronder: ook met een onleesbaar record moet zichtbaar zijn wat
-            er zou gebeuren. `kanGenereren` is dan hoe dan ook false, dus de knop doet niets.
+            Buiten de `fieldset`: ook met een onleesbaar record moet zichtbaar zijn wat er zou
+            gebeuren. `kanGenereren` is dan hoe dan ook false, dus de knop doet niets.
           */}
           <GeneratePanel
             state={generate.state}
@@ -203,48 +248,6 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
           />
         </div>
       </div>
-
-      {/*
-        Ook op slot terwijl er gegenereerd wordt.
-
-        `useGenerate` legt het concept eerst vast en rendert daarna — samen seconden. Een
-        vinkje dat in dat gat wordt gezet start een nieuwe uitgestelde opslag, en die kan te
-        laat zijn voor de laatste controle van de server: dan gaat het document de deur uit
-        met de óude antwoorden terwijl de nieuwe er vlak daarna overheen worden bewaard, en
-        het scherm toont iets anders dan wat de trainer krijgt.
-      */}
-      <fieldset
-        disabled={view.locked || generate.state.kind === 'bezig'}
-        className={cn((view.locked || generate.state.kind === 'bezig') && 'opacity-60')}
-      >
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          <ChecklistPanel
-            /**
-             * De uitgerekende checklist, niet de rauwe antwoorden.
-             *
-             * Zolang de acteurvraag onbeantwoord is past `buildTabView` Monday's voorstel toe.
-             * De rauwe antwoorden doorgeven liet de radioknop dan `Nee` tonen — en de
-             * acteurkiezer verbergen — terwijl het voorbeeld eronder wél van een acteur uitging.
-             */
-            checklist={tab.checklist}
-            acteurBeantwoord={tab.acteurBeantwoord}
-            personen={tab.personen}
-            actorItemIds={view.answers.actorItemIds}
-            soloTrainer={tab.soloTrainer}
-            groepskeuzeNvt={tab.groepskeuzeNvt}
-            onChecklist={view.setChecklist}
-            onActors={view.setActorItemIds}
-            onAnswerActor={view.answerActor}
-          />
-
-          <ConceptPanel
-            skelet={tab.conceptSkelet}
-            eigen={tab.checklist.conceptInhoud ?? null}
-            resultaat={tab.conceptResultaat}
-            onChange={handleConcept}
-          />
-        </div>
-      </fieldset>
     </div>
   );
 };

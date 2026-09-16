@@ -105,6 +105,12 @@ const Regel = ({ controle }: { readonly controle: TabControle }) => {
   );
 };
 
+/** De eerste helft links (bij een oneven aantal de langste), de rest rechts. */
+function kolommen(controles: readonly TabControle[]): readonly (readonly TabControle[])[] {
+  const links = Math.ceil(controles.length / 2);
+  return [controles.slice(0, links), controles.slice(links)];
+}
+
 export interface ReadinessPanelProps {
   readonly gereedheid: TabGereedheid;
 }
@@ -136,11 +142,20 @@ export const ReadinessPanel = ({ gereedheid }: ReadinessPanelProps) => {
 
       <p className="text-xs text-muted-foreground">{samenvatting(gereedheid.controles)}</p>
 
-      <ul className="grid items-start gap-x-4 sm:grid-cols-2">
-        {gereedheid.controles.map((controle) => (
-          <Regel key={controle.key} controle={controle} />
+      {/*
+        Twee losse lijsten in plaats van één grid met twee kolommen: in een grid wordt de hele
+        rij hoger als één regel openklapt, en schuift de buurkolom mee. Zo zakt alleen de kolom
+        waarin geklikt is. De lijst loopt eerst de linkerkolom af, dan de rechter.
+      */}
+      <div className="grid items-start gap-x-4 sm:grid-cols-2">
+        {kolommen(gereedheid.controles).map((kolom, index) => (
+          <ul key={index} className="grid">
+            {kolom.map((controle) => (
+              <Regel key={controle.key} controle={controle} />
+            ))}
+          </ul>
         ))}
-      </ul>
+      </div>
     </section>
   );
 };
