@@ -59,3 +59,30 @@ describe('ChecklistPanel — de acteurvraag', () => {
     expect(screen.getByText(/Wie is de acteur/)).toBeTruthy();
   });
 });
+
+describe('ChecklistPanel — wat er niet meer staat', () => {
+  /** Die drie komen van het agendabord; twee plekken voor één antwoord lopen uiteen. */
+  it('vraagt niet meer naar cyclus, huiswerk of voorbereidende opdracht', () => {
+    toon(true, false);
+    expect(screen.queryByText('Trainingscyclus')).toBeNull();
+    expect(screen.queryByText('Huiswerkopdracht')).toBeNull();
+    expect(screen.queryByText('Voorbereidende opdracht')).toBeNull();
+  });
+
+  it('zegt dat er niets te kiezen is bij één trainer', () => {
+    render(
+      <ChecklistPanel
+        checklist={EMPTY_CHECKLIST}
+        acteurBeantwoord={true}
+        personen={PERSONEN.slice(0, 1)}
+        actorItemIds={[]}
+        soloTrainer={true}
+        groepskeuzeNvt={true}
+        onChecklist={vi.fn()}
+        onActors={vi.fn()}
+        onAnswerActor={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Voor deze training zijn er geen keuzes.')).toBeTruthy();
+  });
+});

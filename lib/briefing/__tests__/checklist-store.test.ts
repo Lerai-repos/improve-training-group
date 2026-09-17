@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { EMPTY_CHECKLIST } from '../blocks';
+import { EMPTY_SAVED } from '../answers';
 import { validateChecklist, type SavedChecklist } from '../answers';
 import { createMemoryChecklistStore } from '../checklist-store';
 
@@ -13,7 +13,7 @@ import { createMemoryChecklistStore } from '../checklist-store';
  */
 
 const ANTWOORD: SavedChecklist = {
-  checklist: { ...EMPTY_CHECKLIST, trainingActor: true, homework: true },
+  checklist: { ...EMPTY_SAVED.checklist, trainingActor: true, ownGroup: true },
   actorItemIds: ['2'],
   actorAnswered: true,
 };
@@ -52,7 +52,7 @@ describe('checklist-store', () => {
     await store.save('1', { ...ANTWOORD, token: leeg.token });
 
     const uit = await store.save('1', {
-      checklist: { ...EMPTY_CHECKLIST, trainingCycle: true },
+      checklist: { ...EMPTY_SAVED.checklist, sameGroup: true },
       actorItemIds: [],
       actorAnswered: true,
       token: leeg.token,
@@ -98,7 +98,7 @@ describe('checklist-store', () => {
     const eerste = await store.save('1', { ...ANTWOORD, token: leeg.token });
 
     const tweede = await store.save('1', {
-      checklist: { ...EMPTY_CHECKLIST, trainingCycle: true },
+      checklist: { ...EMPTY_SAVED.checklist, sameGroup: true },
       actorItemIds: [],
       actorAnswered: true,
       token: eerste.token,
@@ -110,7 +110,7 @@ describe('checklist-store', () => {
     const store = createMemoryChecklistStore();
     const leeg = await store.read('1');
     const eigen = {
-      checklist: { ...EMPTY_CHECKLIST, conceptInhoud: 'Eigen opening.\nEigen afsluiting.' },
+      checklist: { ...EMPTY_SAVED.checklist, conceptInhoud: 'Eigen opening.\nEigen afsluiting.' },
       actorItemIds: [],
       actorAnswered: true,
     };
@@ -130,7 +130,7 @@ describe('validateChecklist', () => {
   it('weigert de twee antwoorden op dezelfde vraag samen', () => {
     expect(
       validateChecklist({
-        checklist: { ...EMPTY_CHECKLIST, ownGroup: true, sameGroup: true },
+        checklist: { ...EMPTY_SAVED.checklist, ownGroup: true, sameGroup: true },
         actorItemIds: [],
         actorAnswered: true,
       })
@@ -140,7 +140,7 @@ describe('validateChecklist', () => {
   it('weigert een aangewezen acteur terwijl de acteurvraag op nee staat', () => {
     expect(
       validateChecklist({
-        checklist: { ...EMPTY_CHECKLIST, trainingActor: false },
+        checklist: { ...EMPTY_SAVED.checklist, trainingActor: false },
         actorItemIds: ['2'],
         actorAnswered: true,
       })
@@ -150,7 +150,7 @@ describe('validateChecklist', () => {
   it('weigert een concept-inhoud die niet in Redis hoort', () => {
     expect(
       validateChecklist({
-        checklist: { ...EMPTY_CHECKLIST, conceptInhoud: 'x'.repeat(20_001) },
+        checklist: { ...EMPTY_SAVED.checklist, conceptInhoud: 'x'.repeat(20_001) },
         actorItemIds: [],
         actorAnswered: true,
       })

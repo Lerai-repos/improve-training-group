@@ -7,10 +7,10 @@
  * > gestuurd worden, LET OP gaat over 72 uur op werkdagen. zaterdag en zondag tellen dus
  * > niet mee in deze 72 uur.
  *
- * 72 uur waarin een weekenddag niets bijdraagt is precies **drie werkdagen terug op
- * hetzelfde tijdstip**. Geverifieerd tegen het enige uitgewerkte voorbeeld dat we hebben:
- * de training van dinsdag 24 maart 2026 09:30 levert donderdag 19 maart 09:30 op, en dat
- * is wat er in haar document staat.
+ * 72 uur waarin een weekenddag niets bijdraagt is precies **drie werkdagen terug**, en
+ * sinds 17-Sep-2026 altijd om **09:00**. Eerst hield de deadline de begintijd van de
+ * training aan; Dirkje vroeg om een vast tijdstip. Haar eigen agendakolom rekent met
+ * `WORKDAY({datum}, -3)`, dezelfde dag als hier.
  *
  * **Feestdagen tellen wél mee.** Dat is een keuze, geen omissie: ITG heeft geen
  * feestdagenlijst in Monday, en er een verzinnen zou de deadline stilletjes verschuiven
@@ -20,6 +20,9 @@
 /** Zaterdag en zondag in `Date#getUTCDay`. */
 const SATURDAY = 6;
 const SUNDAY = 0;
+
+/** Het vaste tijdstip van de deadline (Dirkje, 17-Sep-2026). */
+const DEADLINE_TIME = '09:00';
 
 /** 72 uur, uitgedrukt in werkdagen van 24 uur. */
 export const WORKING_DAYS_BEFORE = 3;
@@ -94,30 +97,6 @@ const MONTHS = [
 ];
 
 /**
- * De starttijd uit Monday's `Tijden`-kolom, die vrije tekst is.
- *
- * Reële waarden zijn `09:30 - 12:30`, `9:30-12:30` en `09:30`. We nemen het eerste
- * tijdstip dat we herkennen en normaliseren naar `HH:MM`. Herkennen we niets, dan is het
- * antwoord `null` en niet een verzonnen middernacht — een deadline op 00:00 leest als een
- * echte afspraak terwijl niemand hem heeft gezet.
- */
-export function parseStartTime(tijden: string | null | undefined): string | null {
-  if (typeof tijden !== 'string') {
-    return null;
-  }
-  const match = /(\d{1,2})[:.](\d{2})/.exec(tijden);
-  if (match === null) {
-    return null;
-  }
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) {
-    return null;
-  }
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
-/**
  * De deadline, of `null` wanneer de training geen bruikbare datum heeft.
  *
  * Null is een echt antwoord: de rij valt dan uit de briefing in plaats van er een
@@ -125,7 +104,6 @@ export function parseStartTime(tijden: string | null | undefined): string | null
  */
 export function materialsDeadline(input: {
   datum: string | null | undefined;
-  tijden: string | null | undefined;
 }): MaterialsDeadline | null {
   const start = parseIsoDate(input.datum);
   if (start === null) {
@@ -134,7 +112,7 @@ export function materialsDeadline(input: {
   const deadline = workingDaysBefore(start, WORKING_DAYS_BEFORE);
   return {
     date: deadline.toISOString().slice(0, 10),
-    time: parseStartTime(input.tijden) ?? '',
+    time: DEADLINE_TIME,
   };
 }
 

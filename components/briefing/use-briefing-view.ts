@@ -12,7 +12,7 @@ import type {
   MondayBridge,
   MondayContext,
 } from '@components/recommendations/monday-client';
-import type { BriefingChecklist } from '@lib/briefing/blocks';
+import type { BriefingAnswers } from '@lib/briefing/blocks';
 
 /**
  * De toestand van de app-tab: laden, bewerken, opslaan.
@@ -67,7 +67,7 @@ export interface UseBriefingView {
    * bevestigt dat het overschreven mag worden.
    */
   readonly locked: boolean;
-  setChecklist(next: Partial<BriefingChecklist>): void;
+  setChecklist(next: Partial<BriefingAnswers>): void;
   setActorItemIds(next: readonly string[]): void;
   /** De acteurvraag beantwoorden. Zet ook `actorAnswered`, ook bij hetzelfde antwoord. */
   answerActor(werktMee: boolean): void;
@@ -395,7 +395,7 @@ export function useBriefingView(
   );
 
   const setChecklist = useCallback(
-    (next: Partial<BriefingChecklist>) => {
+    (next: Partial<BriefingAnswers>) => {
       wijzig((huidig) => ({ ...huidig, checklist: { ...huidig.checklist, ...next } }));
     },
     [wijzig]

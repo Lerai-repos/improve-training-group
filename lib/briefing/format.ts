@@ -249,13 +249,14 @@ export interface TravelInput {
 /**
  * `Totaal: 126 km. / Totaal: 100 min. (10 min. factureren)`.
  *
- * Het deel tussen haakjes is het aantal minuten bóven de drempel; blijft de reis eronder,
- * dan valt het weg in plaats van `(0 min. factureren)` af te drukken.
+ * Het deel tussen haakjes is het aantal minuten bóven de drempel. Blijft de reis eronder,
+ * dan staat er `(0 min. factureren)`: Dirkje, 17-Sep-2026, want een lege plek liet de
+ * trainer raden of hij iets mocht factureren.
  */
 export function formatTravel(reis: TravelInput): string {
   const km = Math.round(reis.roundTripKm);
   const minutes = Math.round(reis.roundTripMinutes);
   const over = Math.max(0, minutes - reis.thresholdMinutes);
   const base = `Totaal: ${km} km. / Totaal: ${minutes} min.`;
-  return over === 0 ? base : `${base} (${over} min. factureren)`;
+  return `${base} (${over} min. factureren)`;
 }

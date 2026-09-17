@@ -1,47 +1,17 @@
 'use client';
 
-import { Checkbox } from '@components/ui/checkbox';
-import { Label } from '@components/ui/label';
-import { cn } from '@lib/utils';
-
 import { Segmented } from './segmented';
 
-import type { BriefingChecklist } from '@lib/briefing/blocks';
+import type { BriefingAnswers, BriefingChecklist } from '@lib/briefing/blocks';
 import type { TabPerson } from '@lib/briefing/tab';
 
 /**
- * De vragen die bepalen welke blokken in de briefing komen.
+ * De vragen die de adviseur zelf beantwoordt: de acteur en de groepsverdeling.
  *
- * Elk vinkje zet een stuk tekst van ITG aan of uit. Daarom staat er bij elke vraag wat het
- * dóét en niet alleen hoe hij heet: "cyclus" zegt een adviseur niets, "voegt het blok over de
- * trainingscyclus toe, met het schema" wel.
+ * Cyclus, huiswerk en voorbereidende opdracht stonden hier tot 17-Sep-2026 als vinkjes. Die
+ * komen nu van het agendabord en staan als regels in de checklist bovenaan, zodat er niet
+ * twee plekken zijn waar hetzelfde antwoord kan staan.
  */
-
-interface VraagProps {
-  readonly id: string;
-  readonly label: string;
-  readonly uitleg: string;
-  readonly checked: boolean;
-  readonly disabled?: boolean;
-  onChange(next: boolean): void;
-}
-
-const Vraag = ({ id, label, uitleg, checked, disabled, onChange }: VraagProps) => {
-  const handle = (next: boolean | 'indeterminate') => {
-    onChange(next === true);
-  };
-  return (
-    <div className="flex items-start gap-3">
-      <Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={handle} />
-      <div className="grid gap-0.5 leading-tight">
-        <Label htmlFor={id} className={cn('font-medium', disabled && 'opacity-60')}>
-          {label}
-        </Label>
-        <p className="text-xs text-muted-foreground">{uitleg}</p>
-      </div>
-    </div>
-  );
-};
 
 interface KeuzeVraagProps {
   readonly label: string;
@@ -66,7 +36,7 @@ const KeuzeVraag = ({ label, uitleg, children }: KeuzeVraagProps) => (
 
 interface GroepKeuzeProps {
   readonly checklist: BriefingChecklist;
-  onChange(next: Partial<BriefingChecklist>): void;
+  onChange(next: Partial<BriefingAnswers>): void;
 }
 
 /**
@@ -211,7 +181,7 @@ export interface ChecklistPanelProps {
   readonly soloTrainer: boolean;
   /** Hooguit één gekoppeld persoon: er valt geen groep te verdelen. */
   readonly groepskeuzeNvt: boolean;
-  onChecklist(next: Partial<BriefingChecklist>): void;
+  onChecklist(next: Partial<BriefingAnswers>): void;
   onActors(next: readonly string[]): void;
   onAnswerActor(werktMee: boolean): void;
 }
@@ -227,16 +197,6 @@ export const ChecklistPanel = ({
   onActors,
   onAnswerActor,
 }: ChecklistPanelProps) => {
-  const zetCyclus = (next: boolean) => {
-    onChecklist({ trainingCycle: next });
-  };
-  const zetHuiswerk = (next: boolean) => {
-    onChecklist({ homework: next });
-  };
-  const zetVoorbereidend = (next: boolean) => {
-    onChecklist({ preparatoryAssignment: next });
-  };
-
   return (
     <section className="grid gap-5 rounded-md border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">Keuzes</h2>
@@ -259,29 +219,9 @@ export const ChecklistPanel = ({
 
       {!groepskeuzeNvt && <GroepKeuze checklist={checklist} onChange={onChecklist} />}
 
-      <div className="grid gap-3">
-        <Vraag
-          id="cyclus"
-          label="Trainingscyclus"
-          uitleg="Meerdere sessies die op elkaar voortbouwen; voegt het cyclusblok met het schema toe."
-          checked={checklist.trainingCycle}
-          onChange={zetCyclus}
-        />
-        <Vraag
-          id="huiswerk"
-          label="Huiswerkopdracht"
-          uitleg="De trainer geeft deelnemers een opdracht mee; voegt de afspraken daarover toe."
-          checked={checklist.homework}
-          onChange={zetHuiswerk}
-        />
-        <Vraag
-          id="voorbereidend"
-          label="Voorbereidende opdracht"
-          uitleg="Deelnemers krijgen vooraf een reflectieopdracht."
-          checked={checklist.preparatoryAssignment}
-          onChange={zetVoorbereidend}
-        />
-      </div>
+      {soloTrainer && groepskeuzeNvt && (
+        <p className="text-sm text-muted-foreground">Voor deze training zijn er geen keuzes.</p>
+      )}
     </section>
   );
 };

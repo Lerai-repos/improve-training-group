@@ -22,11 +22,9 @@ const bodySchema = z.object({
   checklist: z.object({
     ownGroup: z.boolean(),
     sameGroup: z.boolean(),
-    trainingCycle: z.boolean(),
-    homework: z.boolean(),
-    preparatoryAssignment: z.boolean(),
-    trainingActor: z.boolean(),
+          trainingActor: z.boolean(),
     conceptInhoud: z.string().max(CONCEPT_MAX_LENGTH).optional(),
+    achtergrondInhoud: z.string().max(CONCEPT_MAX_LENGTH).optional(),
   }),
   actorItemIds: z.array(z.string().min(1)).max(50),
   actorAnswered: z.boolean(),

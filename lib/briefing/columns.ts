@@ -86,7 +86,42 @@ export const BRIEFING_AGENDA_COLUMNS = {
   acteuraantal: 'numeric_mm0nhbn7',
   /** Naar het Opportunitybord (1279052045), voor de contactpersoon en zijn nummer. */
   opportunity: 'board_relation',
+  /** `Voorb. opdr.`, van ITG zelf. Gelezen op labelindex; zie `VOORBEREIDEND_WEL`. */
+  voorbereidend: 'color_mkvn7733',
+  /**
+   * `Huisw. opdr.`, door ons aangemaakt met `pnpm agenda:huiswerk`: dezelfde labels als
+   * `Voorb. opdr.`, maar met andere indexen; zie `HUISWERK_WEL`.
+   */
+  huiswerk: 'itg_huiswerk',
+  /** `DuurcategorieAG`; het label `trainingscyclus (2x4/2x7)` maakt de training een cyclus. */
+  duurcategorie: 'dropdown_mkmvzp85',
 } as const;
+
+/**
+ * De labelindexen die "de opdracht hoort erbij" betekenen, per kolom.
+ *
+ * `Voorb. opdr.` (van ITG, gemeten 17-Sep-2026):
+ *
+ * | index | label | |
+ * |---|---|---|
+ * | 0 | Wel voorbereidende opdracht | ja |
+ * | 1 | Staat klaar | ja |
+ * | 3 | Verzonden | ja |
+ * | 2 | Geen voorbereidende opdracht (deze sessie) | nee |
+ * | 5 | Voorb. opdr.? (grijs) | nee |
+ *
+ * `Huisw. opdr.` heeft dezelfde labels maar **andere indexen**: via de API is een label-id
+ * altijd het kleurnummer, dus Wel = 9 (geel), Staat klaar = 19 (donkeroranje), Geen = 6
+ * (grasgroen), Verzonden = 1 (groen). Geen grijs standaardlabel; een lege cel is nee.
+ *
+ * Op index en niet op naam, zodat ITG de labels mag hernoemen. Grijs en leeg zijn eigenlijk
+ * "nog niet ingevuld", maar tellen op Tims besluit als nee.
+ */
+export const VOORBEREIDEND_WEL: readonly number[] = [0, 1, 3];
+export const HUISWERK_WEL: readonly number[] = [9, 19, 1];
+
+/** Label-id van `trainingscyclus (2x4/2x7)` in `DuurcategorieAG`. */
+export const DUURCATEGORIE_CYCLUS = 6;
 
 /** Het Opportunitybord waar de agenda naartoe koppelt. */
 export const OPPORTUNITY_BOARD = '1279052045';

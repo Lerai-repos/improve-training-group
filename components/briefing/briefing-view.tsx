@@ -6,6 +6,7 @@ import { Button } from '@components/ui/button';
 import { Skeleton } from '@components/ui/skeleton';
 import { cn } from '@lib/utils';
 
+import { AchtergrondPanel } from './achtergrond-panel';
 import { ChecklistPanel } from './checklist-panel';
 import { GeneratePanel, type GenerateState } from './generate-panel';
 import { ConceptPanel } from './concept-panel';
@@ -66,6 +67,9 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
   };
   const handleConcept = (next: string | undefined) => {
     view.setChecklist({ conceptInhoud: next });
+  };
+  const handleAchtergrond = (next: string | undefined) => {
+    view.setChecklist({ achtergrondInhoud: next });
   };
 
   /**
@@ -202,8 +206,13 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
           <ReadinessPanel gereedheid={tab.gereedheid} />
           <fieldset
             disabled={bewerkenOpSlot}
-            className={cn('min-w-0', bewerkenOpSlot && 'opacity-60')}
+            className={cn('grid min-w-0 gap-4', bewerkenOpSlot && 'opacity-60')}
           >
+            <AchtergrondPanel
+              bron={tab.achtergrondBron}
+              eigen={tab.achtergrondEigen}
+              onChange={handleAchtergrond}
+            />
             <ConceptPanel
               skelet={tab.conceptSkelet}
               eigen={tab.checklist.conceptInhoud ?? null}

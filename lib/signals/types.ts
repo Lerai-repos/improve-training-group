@@ -8,6 +8,18 @@ import type { LabelCode } from '@lib/labels';
  * dus het getal is ook het bewijs dat de melding ergens over gaat. Een label dat op nul
  * trainingen staat breekt niets en hoort niemand wakker te maken.
  */
+/** Een kolom van ons die op een agendabord ontbreekt of van type is veranderd. */
+export interface OntbrekendeKolom {
+  readonly id: string;
+  readonly titel: string;
+  /** Wat er zonder deze kolom niet werkt, als zinsdeel: "de briefing". */
+  readonly voor: string;
+  /** De opdracht die hem op DIT bord aanmaakt, met dezelfde kolom-id en `--board`. */
+  readonly script: string;
+  /** `ontbreekt`, of het type dat er wél staat. */
+  readonly probleem: string;
+}
+
 export type Finding =
   /** Een labelwaarde op de agenda die door geen enkele code of alias wordt herkend. */
   | { readonly kind: 'onbekend-label'; readonly label: string; readonly trainingen: number }
@@ -54,6 +66,20 @@ export type Finding =
       readonly boardId: string;
       readonly naam: string;
       readonly reden: string;
+    }
+  /**
+   * Een actief agendabord zonder een of meer kolommen die wíj hebben aangemaakt.
+   *
+   * Die staan alleen op de borden waar we ze op hebben gezet. Een jaargang die als kopie is
+   * gemaakt vóór zo'n kolom bestond, of die later met ons gedeeld wordt, mist ze — en dan
+   * faalt de briefing of het wegschrijven van de evaluatie op dat bord.
+   */
+  | {
+      readonly kind: 'kolommen-ontbreken';
+      readonly boardId: string;
+      readonly naam: string;
+      /** Per ontbrekende kolom: welke kolom, wat erdoor stuk gaat, en hoe hij erop komt. */
+      readonly kolommen: readonly OntbrekendeKolom[];
     }
   /** Een bord dat op een agenda lijkt, maar niet te gebruiken is, en dus nergens aan meedoet. */
   | {
@@ -136,6 +162,8 @@ export function findingKey(finding: Finding): string {
       return `agendabord-onbruikbaar:${finding.boardId}`;
     case 'aanbevelingen-niet-aangesloten':
       return `aanbevelingen-niet-aangesloten:${finding.boardId}`;
+    case 'kolommen-ontbreken':
+      return `kolommen-ontbreken:${finding.boardId}`;
   }
 }
 

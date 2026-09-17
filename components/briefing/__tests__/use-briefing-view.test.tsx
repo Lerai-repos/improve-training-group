@@ -49,6 +49,7 @@ const trainingVoor = (itemId: string, over: Partial<BriefingTraining> = {}): Bri
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Iets.',
+  opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   missing: [],
   ...over,
 });
@@ -169,12 +170,12 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await waitFor(() => {
       expect(api.writes).toHaveLength(1);
     });
-    expect(api.writes[0]?.input.checklist.homework).toBe(true);
+    expect(api.writes[0]?.input.checklist.ownGroup).toBe(true);
     expect(api.writes[0]?.input.token).toBe('token-900');
   });
 
@@ -284,7 +285,7 @@ describe('useBriefingView', () => {
         '900': payloadVoor('900', {
           saved: {
             ...EMPTY_SAVED,
-            checklist: { ...EMPTY_SAVED.checklist, homework: true },
+            checklist: { ...EMPTY_SAVED.checklist, ownGroup: true },
             actorAnswered: true,
           },
         }),
@@ -293,19 +294,19 @@ describe('useBriefingView', () => {
     });
     const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
     await waitFor(() => {
-      expect(result.current.answers.checklist.homework).toBe(true);
+      expect(result.current.answers.checklist.ownGroup).toBe(true);
     });
 
     act(() => {
       monday.changeContext(CTX('901'));
     });
-    expect(result.current.answers.checklist.homework).toBe(false);
+    expect(result.current.answers.checklist.ownGroup).toBe(false);
 
     await waitFor(() => {
       expect(result.current.itemId).toBe('901');
       expect(result.current.status.kind).toBe('loaded');
     });
-    expect(result.current.answers.checklist.homework).toBe(false);
+    expect(result.current.answers.checklist.ownGroup).toBe(false);
   });
 
   it('schrijft naar de training die op het scherm staat, met háár token', async () => {
@@ -325,7 +326,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await waitFor(() => {
       expect(api.writes).toHaveLength(1);
@@ -349,7 +350,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     act(() => {
       monday.changeContext(CTX('901'));
@@ -360,7 +361,7 @@ describe('useBriefingView', () => {
     });
     expect(api.writes[0]?.itemId).toBe('900');
     expect(api.writes[0]?.input.token).toBe('token-900');
-    expect(api.writes[0]?.input.checklist.homework).toBe(true);
+    expect(api.writes[0]?.input.checklist.ownGroup).toBe(true);
   });
 
   /**
@@ -377,7 +378,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     act(() => {
       monday.changeContext(CTX('901'));
@@ -426,7 +427,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await waitFor(() => {
       expect(result.current.save.kind).toBe('conflict');
@@ -454,14 +455,14 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await waitFor(() => {
       expect(result.current.save.kind).toBe('conflict');
     });
 
     act(() => {
-      result.current.setChecklist({ trainingCycle: true });
+      result.current.setChecklist({ trainingActor: true });
     });
     await waitFor(() => {
       expect(api.writes).toHaveLength(2);
@@ -485,11 +486,11 @@ describe('useBriefingView', () => {
     expect(result.current.locked).toBe(true);
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(api.writes).toHaveLength(0);
-    expect(result.current.answers.checklist.homework).toBe(false);
+    expect(result.current.answers.checklist.ownGroup).toBe(false);
 
     act(() => {
       result.current.unlock();
@@ -497,7 +498,7 @@ describe('useBriefingView', () => {
     expect(result.current.locked).toBe(false);
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await waitFor(() => {
       expect(api.writes).toHaveLength(1);
@@ -519,7 +520,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     await waitFor(() => {
       expect(result.current.save.kind).toBe('mislukt');
@@ -562,7 +563,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     act(() => {
       monday.changeContext(CTX('901'));
@@ -573,7 +574,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ trainingCycle: true });
+      result.current.setChecklist({ trainingActor: true });
     });
     await waitFor(() => {
       expect(result.current.save.kind).toBe('conflict');
@@ -603,7 +604,7 @@ describe('useBriefingView', () => {
     });
 
     act(() => {
-      result.current.setChecklist({ homework: true });
+      result.current.setChecklist({ ownGroup: true });
     });
     act(() => {
       monday.changeContext(CTX('901'));

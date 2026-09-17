@@ -171,6 +171,48 @@ describe('agendaborden', () => {
     expect(zonder).toEqual(['Agenda 2026', 'Agenda 2027']);
   });
 
+  /**
+   * Kolommen die wíj hebben aangemaakt staan alleen op de borden waar we ze op zetten. Een
+   * jaargang die later gedeeld wordt mist ze, en dan faalt de briefing of de evaluatie daar.
+   */
+  it('meldt per actief agendabord welke van onze kolommen ontbreken', async () => {
+    const compleet = {
+      itg_huiswerk: 'status',
+      itg_cotrainers: 'board_relation',
+      itg_eindcijfer: 'numbers',
+      itg_respondenten: 'numbers',
+    };
+    const borden: AgendaBoardSet = {
+      boards: [
+        { ...bord('5087396949', 'Agenda 2026'), columnTypes: compleet },
+        bord('1703587792', 'Agenda 2025', true),
+        {
+          ...bord('6000000001', 'Agenda 2027'),
+          columnTypes: { itg_cotrainers: 'board_relation', itg_eindcijfer: 'text' },
+        },
+      ],
+      rejected: [],
+    };
+    const report = await runDailyCheck(deps({ readAgendaBoards: async () => borden }));
+    const meldingen = report.findings.flatMap((f) =>
+      f.kind === 'kolommen-ontbreken'
+        ? [{ naam: f.naam, kolommen: f.kolommen.map((k) => `${k.id}:${k.probleem}`) }]
+        : []
+    );
+    // Het gearchiveerde 2025 hoort er niet bij; 2026 is compleet.
+    expect(meldingen).toEqual([
+      {
+        naam: 'Agenda 2027',
+        kolommen: ['itg_huiswerk:ontbreekt', 'itg_eindcijfer:text', 'itg_respondenten:ontbreekt'],
+      },
+    ]);
+    // De opdracht moet het bord uit de melding raken, niet het ingestelde bord (2026).
+    const scripts = report.findings.flatMap((f) =>
+      f.kind === 'kolommen-ontbreken' ? f.kolommen.map((k) => k.script) : []
+    );
+    expect(scripts).toContain('pnpm agenda:evalkolommen --board 6000000001 --apply');
+  });
+
   it('noemt in de samenvatting op welke borden de aanbevelingen werken', async () => {
     const aangesloten: AgendaBoardSet = {
       boards: [

@@ -7,7 +7,7 @@
  * niet in een bundel die naar Monday gaat.
  */
 
-import type { BriefingChecklist } from './blocks';
+import type { BriefingAnswers } from './blocks';
 
 export const CONCEPT_MAX_LENGTH = 20_000;
 
@@ -19,7 +19,7 @@ export const CONCEPT_MAX_LENGTH = 20_000;
  * sessie met een niet-ingedeelde acteur niet te genereren.
  */
 export interface SavedChecklist {
-  readonly checklist: BriefingChecklist;
+  readonly checklist: BriefingAnswers;
   readonly actorItemIds: readonly string[];
   /**
    * Heeft een mens de acteurvraag beantwoord?
@@ -40,9 +40,6 @@ export const EMPTY_SAVED: SavedChecklist = {
   checklist: {
     ownGroup: false,
     sameGroup: false,
-    trainingCycle: false,
-    homework: false,
-    preparatoryAssignment: false,
     trainingActor: false,
   },
   actorItemIds: [],
@@ -62,6 +59,9 @@ export function validateChecklist(input: SavedChecklist): string | null {
   }
   if ((input.checklist.conceptInhoud ?? '').length > CONCEPT_MAX_LENGTH) {
     return `de concept-inhoud mag hoogstens ${CONCEPT_MAX_LENGTH} tekens zijn`;
+  }
+  if ((input.checklist.achtergrondInhoud ?? '').length > CONCEPT_MAX_LENGTH) {
+    return `de achtergrondinformatie mag hoogstens ${CONCEPT_MAX_LENGTH} tekens zijn`;
   }
   if (!input.checklist.trainingActor && input.actorItemIds.length > 0) {
     return 'er is een acteur aangewezen terwijl de acteurvraag op nee staat';

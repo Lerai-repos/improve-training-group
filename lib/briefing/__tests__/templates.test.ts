@@ -290,6 +290,7 @@ const TRAINING: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
+  opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   missing: [],
 };
 

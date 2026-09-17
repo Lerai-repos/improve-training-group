@@ -154,10 +154,13 @@ describe('formatTravel', () => {
     );
   });
 
-  /** `(0 min. factureren)` zou lezen als een afspraak die niemand heeft gemaakt. */
-  it('laat het factureerdeel weg onder de drempel', () => {
+  /**
+   * Dirkje, 17-Sep-2026: ook nul staat erbij. Een lege plek liet de trainer raden of hij
+   * iets mocht factureren; "0 min." is het antwoord.
+   */
+  it('noemt ook 0 minuten factureren onder de drempel', () => {
     expect(formatTravel({ roundTripKm: 12.4, roundTripMinutes: 30, thresholdMinutes: 90 })).toBe(
-      'Totaal: 12 km. / Totaal: 30 min.'
+      'Totaal: 12 km. / Totaal: 30 min. (0 min. factureren)'
     );
   });
 });

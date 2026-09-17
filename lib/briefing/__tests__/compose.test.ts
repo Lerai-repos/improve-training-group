@@ -48,6 +48,7 @@ const PROBIBLIO: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: '2674263314',
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
+  opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   missing: [],
 };
 
@@ -68,7 +69,7 @@ describe('composeBriefing', () => {
       groepsgrootte: '± 10-20 deelnemers',
       locatie: 'BrasserieBuitenhuis,J. Pellenbargweg 2, 2235 SP Valkenburg',
       voertaal: 'Nederlands',
-      materialenDeadline: '19 maart 2026; 09:30 uur (bijv. PowerPoint)',
+      materialenDeadline: '19 maart 2026; 09:00 uur (bijv. PowerPoint)',
       accountmanager: 'Dirkje Pril / 06-48431025',
       contactpersoon: 'Paula Hollander (06-42085076)',
       klantcontactmoment: 'Telefonisch contact',

@@ -194,9 +194,7 @@ export function composeBriefing(
   checklist: BriefingChecklist,
   extras: BriefingExtras = {}
 ): BriefingDocumentData {
-  const deadline = formatDeadline(
-    materialsDeadline({ datum: training.datum, tijden: training.tijden })
-  );
+  const deadline = formatDeadline(materialsDeadline({ datum: training.datum }));
 
   return {
     opdrachtgever: training.opdrachtgever.trim(),

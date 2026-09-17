@@ -111,7 +111,7 @@ describe('resolveBriefingTravel', () => {
       { locatie: 'Teams', trainers: [{ externalItemId: '1', adres: 'Amsterdam' }] }
     );
     expect(uit.perTrainer.get('1')?.roundTripKm).toBe(0);
-    expect(formatTravel(uit.perTrainer.get('1')!)).toBe('Totaal: 0 km. / Totaal: 0 min.');
+    expect(formatTravel(uit.perTrainer.get('1')!)).toBe('Totaal: 0 km. / Totaal: 0 min. (0 min. factureren)');
     expect(calls).toHaveLength(0);
   });
 

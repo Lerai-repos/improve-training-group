@@ -105,9 +105,6 @@ describe('saveChecklist', () => {
         checklist: {
           ownGroup: false,
           sameGroup: false,
-          trainingCycle: false,
-          homework: false,
-          preparatoryAssignment: false,
           trainingActor: false,
         },
         actorItemIds: [],

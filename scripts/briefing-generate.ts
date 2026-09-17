@@ -9,7 +9,11 @@ loadEnv({ path: '.env.local' });
 
 import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
-import { prefillTrainingActor, type BriefingChecklist } from '@lib/briefing/blocks';
+import {
+  prefillTrainingActor,
+  type BriefingChecklist,
+  type BriefingOpdrachten,
+} from '@lib/briefing/blocks';
 import {
   composeBriefing,
   countLinkedActors,
@@ -44,11 +48,12 @@ import { BRIE } from '@lib/briefing/types';
  * vóórdat er iets naar een trainer gaat.
  *
  *   pnpm briefing:generate <itemId>
- *   pnpm briefing:generate <itemId> --cyclus --huiswerk
+ *   pnpm briefing:generate <itemId> --geen-acteur --eigen-groep
  *   pnpm briefing:generate <itemId> --uit ./ergens-anders
  *   pnpm briefing:generate <itemId> --concept ./eigen-bullets.txt
  *
- * Checklistvlaggen: --eigen-groep --zelfde-groep --cyclus --huiswerk --voorbereidend
+ * Checklistvlaggen: --eigen-groep --zelfde-groep. Cyclus, huiswerk en voorbereidende opdracht
+ * komen van het agendabord (`Voorb. opdr.`, `Huisw. opdr.`, `DuurcategorieAG`), net als in de tab.
  * --acteur-is <itemId> wijst een gekoppelde persoon aan als acteur (mag meerdere keren).
  * De acteurvraag is verplicht: geef --acteur of --geen-acteur. Monday doet een voorstel,
  * maar beide signalen zijn onvolledig, dus het antwoord komt van de adviseur.
@@ -119,7 +124,11 @@ function readHistorieLimit(argv: readonly string[]): number | undefined {
   return value;
 }
 
-function readChecklist(argv: readonly string[], voorstel: boolean): BriefingChecklist {
+function readChecklist(
+  argv: readonly string[],
+  voorstel: boolean,
+  opdrachten: BriefingOpdrachten
+): BriefingChecklist {
   const ja = argv.includes('--acteur');
   const nee = argv.includes('--geen-acteur');
   if (ja && nee) {
@@ -135,9 +144,7 @@ function readChecklist(argv: readonly string[], voorstel: boolean): BriefingChec
   return {
     ownGroup: argv.includes('--eigen-groep'),
     sameGroup: argv.includes('--zelfde-groep'),
-    trainingCycle: argv.includes('--cyclus'),
-    homework: argv.includes('--huiswerk'),
-    preparatoryAssignment: argv.includes('--voorbereidend'),
+    ...opdrachten,
     trainingActor: ja,
     conceptInhoud: readConceptOverride(argv),
   };
@@ -293,7 +300,7 @@ async function main(): Promise<void> {
   }
 
   const voorstel = prefillTrainingActor(training.acteuraantal, countLinkedActors(training));
-  const checklist = readChecklist(argv, voorstel);
+  const checklist = readChecklist(argv, voorstel, training.opdrachten);
   if (checklist.trainingActor !== voorstel) {
     console.log(
       `  LET OP: acteurvraag staat op ${checklist.trainingActor ? 'ja' : 'nee'}, ` +

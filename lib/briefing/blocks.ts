@@ -318,20 +318,31 @@ function danglingHomeworkReference(): string {
 }
 
 /**
- * De vragen die de adviseur beantwoordt vóór het genereren.
+ * Wat er van het agendabord komt in plaats van uit de checklist.
+ *
+ * Tot 17-Sep-2026 waren dit vinkjes in de tab. Dirkje: de accountmanager vult ze al in bij het
+ * converteren, en een werkstudent die ze bij het maken van de briefing opnieuw moet opzoeken
+ * in de offerte doet dubbel werk. Ze komen nu uit `Voorb. opdr.`, `Huisw. opdr.` en
+ * `DuurcategorieAG`; zie `readOpdrachten` in `read.ts`.
+ */
+export interface BriefingOpdrachten {
+  readonly trainingCycle: boolean;
+  readonly homework: boolean;
+  readonly preparatoryAssignment: boolean;
+}
+
+/**
+ * De vragen die de adviseur zelf beantwoordt vóór het genereren.
  *
  * Alles is `boolean` en niets is optioneel: "niet beantwoord" bestaat niet: de adviseur
  * loopt de checklist langs en elk antwoord is expliciet. `null` zou hier stilzwijgend als
  * "nee" gelezen worden en dan verdwijnt een blok zonder dat iemand het merkt.
  */
-export interface BriefingChecklist {
+export interface BriefingAnswers {
   /** Meerdere trainers, elk op een eigen groep. Sluit `sameGroup` uit. */
   readonly ownGroup: boolean;
   /** Meerdere trainers samen op één groep. Sluit `ownGroup` uit. */
   readonly sameGroup: boolean;
-  readonly trainingCycle: boolean;
-  readonly homework: boolean;
-  readonly preparatoryAssignment: boolean;
   /**
    * Werkt er een trainingsacteur mee? Een eigen checklistvraag, zoals `06-briefing.md` hem
    * ook stelt, en niet af te leiden uit Monday.
@@ -357,7 +368,16 @@ export interface BriefingChecklist {
    * Eén tekstveld beantwoordt die vraag: leeg is ja, gevuld is nee.
    */
   readonly conceptInhoud?: string;
+  /**
+   * De achtergrondinformatie zoals de adviseur hem in de tab heeft getypt, of `undefined` als
+   * de Opportunity-tekst geldt. Zelfde regel als bij `conceptInhoud`: alleen opslaan als er
+   * echt getypt is. Zie `metEigenAchtergrond`.
+   */
+  readonly achtergrondInhoud?: string;
 }
+
+/** Alles wat de blokken bepaalt: de antwoorden van de adviseur plus wat het agendabord zegt. */
+export interface BriefingChecklist extends BriefingAnswers, BriefingOpdrachten {}
 
 /** Alles op nee: de basis waar de checklist bovenop komt. */
 export const EMPTY_CHECKLIST: BriefingChecklist = {

@@ -9,8 +9,9 @@
  * 4. de contactpersoon via Opportunity → Contacten, want de naam op de agenda heeft
  *    **nooit** een telefoonnummer: gemeten, 0 van 815
  *
- * De mirrors `spiegel6` en `spiegel8` op de agenda heten wél Contactpersoon maar zijn
- * leeg — 0 van 815 — dus die omweg is niet optioneel.
+ * De mirrors `spiegel6` (Contactpersoon) en `spiegel8` (Tel nr) op de agenda tonen precies
+ * die gekoppelde contactpersoon, maar als losse, komma-gescheiden lijsten. Via de Opportunity
+ * blijven naam en nummer per contactpersoon aan elkaar vast.
  */
 
 import { BRIEFING_REQUIRED_FIELDS } from './required';
@@ -24,6 +25,9 @@ import { formatTrainingCode } from './mc-codes';
 import {
   BRIEFING_AGENDA_COLUMNS,
   CONTACT_COLUMNS,
+  DUURCATEGORIE_CYCLUS,
+  HUISWERK_WEL,
+  VOORBEREIDEND_WEL,
   OPPORTUNITY_BOARD,
   OPPORTUNITY_COLUMNS,
   THEMAS_COLUMNS,
@@ -34,6 +38,7 @@ import {
 import type { AgendaHistoryColumns } from '@lib/evaluations';
 import type { ExpectedColumn } from '@lib/monday/board-config';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
+import type { BriefingOpdrachten } from './blocks';
 import type { BriefingTraining, BriefingTrainer, MissingField, BriefingThema } from './types';
 
 const C = BRIEFING_AGENDA_COLUMNS;
@@ -75,6 +80,10 @@ export const BRIEFING_EXPECTED_COLUMNS: ExpectedColumn[] = [
     settingsIncludes: ['"displayed_linked_columns":{"1279052045":["connect_boards31"]}'],
   },
   { id: C.accountmanager, type: 'people' },
+  /** Alleen het type: ITG mag de labels hernoemen, de lezer gaat op index. */
+  { id: C.voorbereidend, type: 'status' },
+  { id: C.huiswerk, type: 'status' },
+  { id: C.duurcategorie, type: 'dropdown', settingsIncludes: [`"id":${DUURCATEGORIE_CYCLUS},`] },
 ];
 
 /** Zonder deze velden is de briefing zichtbaar kapot, niet alleen karig. */
@@ -110,6 +119,10 @@ interface RawColumn {
   /** Leeg is zowel `[]` als `null`; zie `linkedIds()`. */
   linked_item_ids?: Array<string | number> | null;
   persons_and_teams?: Array<{ id: string | number; kind: string }>;
+  /** `StatusValue.index`; `null` bij een lege cel. */
+  index?: number | null;
+  /** `DropdownValue.values`: de gekozen labels. */
+  values?: Array<{ id: string | number }> | null;
 }
 
 interface RawItem {
@@ -150,6 +163,8 @@ export function briefingItemFields(relations: BriefingRelations): string {
     ... on PeopleValue { persons_and_teams { id kind } }
     ... on MirrorValue { display_value }
     ... on DateValue { date }
+    ... on StatusValue { index }
+    ... on DropdownValue { values { id } }
   }
 `;
 }
@@ -525,23 +540,50 @@ async function readContact(
   }));
 
   /**
-   * De agenda bepaalt WIE het is; het contactenbord levert alleen het nummer.
+   * De gekoppelde contactpersoon wint; de getypte naam op de agenda kiest alleen bij twijfel.
    *
-   * Een Opportunity kan meerdere contactpersonen hebben, en de eerste koppeling is niet
-   * per se degene die bij déze training hoort. Blind de eerste pakken zet de verkeerde
-   * naam én het verkeerde 06-nummer in een briefing die naar een trainer gaat, en dat
-   * ziet er volkomen normaal uit.
+   * Die getypte naam is een kopie van bij het converteren en veroudert zodra de klant van
+   * contactpersoon wisselt. Gemeten 17-Sep-2026: verouderd bij 13 komende trainingen (Alpine,
+   * alle SSR-sessies), en omdat de naam dan niet matchte viel ook het nummer weg. De
+   * gekoppelde contactpersoon is wat Monday zelf in de kolom `Contactpersoon` laat zien.
    *
-   * Staat er geen naam op de agenda (125 van de 816), dan is de enige gekoppelde
-   * contactpersoon een redelijke gok — maar bij meerdere kandidaten raden we niet.
+   * Pas bij meerdere gekoppelde contactpersonen doet de agendanaam ertoe: de eerste koppeling
+   * is niet per se degene die bij déze training hoort, en blind kiezen zet de verkeerde naam
+   * én het verkeerde 06-nummer in een briefing die er volkomen normaal uitziet. Zonder naam
+   * raden we dan niet.
    */
+  if (candidates.length === 1) {
+    return { contact: candidates[0] ?? null, achtergrond };
+  }
   if (naam !== '') {
     const match = candidates.find((c) => c.naam.toLowerCase() === naam.toLowerCase());
     return { contact: { naam, telefoon: match?.telefoon ?? '' }, achtergrond };
   }
+  return { contact: null, achtergrond };
+}
+
+/**
+ * Cyclus, huiswerk en voorbereidende opdracht, van het agendabord.
+ *
+ * De statuskolommen gaan op index (`VOORBEREIDEND_WEL`, `HUISWERK_WEL`), niet op labeltekst. Een lege cel of het
+ * grijze standaardlabel is nee. `values` moet er zijn: ontbreekt het veld, dan is de kolom van
+ * type veranderd en is "geen cyclus" niet te onderscheiden van "kolom kwijt".
+ */
+function readOpdrachten(item: RawItem): BriefingOpdrachten {
+  const wel = (id: string, ja: readonly number[]): boolean => {
+    const index = cell(item, id).index;
+    return typeof index === 'number' && ja.includes(index);
+  };
+  const duur = cell(item, C.duurcategorie);
+  if (!('values' in duur)) {
+    throw new Error(
+      `Briefing: kolom "${C.duurcategorie}" op training ${item.id} levert geen dropdown terug.`
+    );
+  }
   return {
-    contact: candidates.length === 1 ? (candidates[0] ?? null) : null,
-    achtergrond,
+    trainingCycle: (duur.values ?? []).some((v) => Number(v.id) === DUURCATEGORIE_CYCLUS),
+    homework: wel(C.huiswerk, HUISWERK_WEL),
+    preparatoryAssignment: wel(C.voorbereidend, VOORBEREIDEND_WEL),
   };
 }
 
@@ -691,6 +733,7 @@ export async function readBriefingTraining(
     acteuraantal: acteurRaw === '' ? null : Number(acteurRaw),
     opportunityItemId,
     achtergrond: opportunity.achtergrond,
+    opdrachten: readOpdrachten(item),
     missing: [],
   };
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST } from '../blocks';
-import { BRIEFING_AGENDA_COLUMNS } from '../columns';
+import { BRIEFING_AGENDA_COLUMNS, OPPORTUNITY_COLUMNS } from '../columns';
 import { buildTabView } from '../tab';
 
 import type { SavedChecklist } from '../answers';
@@ -43,6 +43,7 @@ const TRAINING: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Iets over de klant.',
+  opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   missing: [],
 };
 
@@ -399,6 +400,60 @@ describe('buildTabView', () => {
       expect(uit.gereedheid.controles.map((c) => c.label)).toEqual(
         expect.arrayContaining(['Trainers', 'Datum', 'Locatie', 'Concept inhoud'])
       );
+    });
+
+    /**
+     * Cyclus, huiswerk en voorbereidende opdracht zijn geen vragen meer maar regels: ze komen
+     * van het agendabord, en een oud opgeslagen vinkje overstemt het bord niet.
+     */
+    it('toont de opdrachten van het agendabord als regels', () => {
+      const training: BriefingTraining = {
+        ...KLAAR,
+        opdrachten: { trainingCycle: true, homework: false, preparatoryAssignment: true },
+      };
+      const uit = buildTabView(training, opgeslagen());
+      expect(controle(uit, 'Trainingscyclus: ja')?.uitleg).toMatch(/DuurcategorieAG/);
+      expect(controle(uit, 'Huiswerkopdracht: nee')?.uitleg).toMatch(/Huisw\. opdr\./);
+      expect(controle(uit, 'Voorbereidende opdracht: ja')?.status).toBe('ok');
+      expect(uit.checklist).toMatchObject({
+        trainingCycle: true,
+        homework: false,
+        preparatoryAssignment: true,
+      });
+    });
+
+    /**
+     * Dirkje, 17-Sep-2026: de achtergrondtekst staat vaak niet op de Opportunity. De tab heeft
+     * er een tekstvak voor; wat daar getypt is vervangt de Opportunity overal.
+     */
+    describe('achtergrondinformatie uit de tab', () => {
+      const LEEG: BriefingTraining = {
+        ...KLAAR,
+        achtergrond: '',
+        missing: [{ column: OPPORTUNITY_COLUMNS.achtergrond, label: 'Achtergrondinformatie' }],
+      };
+      const antwoord = (achtergrondInhoud: string | undefined) =>
+        opgeslagen({ checklist: { ...EMPTY_CHECKLIST, achtergrondInhoud } });
+
+      it('toont de Opportunity-tekst zolang er niets getypt is', () => {
+        const uit = buildTabView(KLAAR, opgeslagen());
+        expect(uit.achtergrondBron).toBe('Iets over de klant.');
+        expect(uit.achtergrondEigen).toBeNull();
+      });
+
+      it('maakt een lege Opportunity compleet zodra de adviseur tekst typt', () => {
+        expect(buildTabView(LEEG, opgeslagen()).gereedheid.compleet).toBe(false);
+        const uit = buildTabView(LEEG, antwoord('Over de klant.'));
+        expect(uit.achtergrondEigen).toBe('Over de klant.');
+        expect(uit.gereedheid.compleet).toBe(true);
+        expect(controle(uit, 'Achtergrondinformatie')?.uitleg).toMatch(/deze tab/);
+      });
+
+      it('meldt het veld weer als leeg wanneer de getypte tekst leeg is', () => {
+        const uit = buildTabView(KLAAR, antwoord(''));
+        expect(controle(uit, 'Achtergrondinformatie')?.status).toBe('ontbreekt');
+        expect(controle(uit, 'Achtergrondinformatie')?.uitleg).toMatch(/tekstvak/);
+      });
     });
 
     /** Bij een goede regel is de uitleg de waarde zelf. */

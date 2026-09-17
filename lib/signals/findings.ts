@@ -1,3 +1,5 @@
+import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
+import { EVAL_COLUMNS } from '@lib/report/record';
 import { KNOWN_AGENDA_BOARD_IDS, liveAgendaBoards } from '@lib/evaluations';
 import { engineBoardProblem, type EngineBoardRules } from '@lib/recommend/engine-boards';
 import { LABEL_CODES, resolveLabelCode } from '@lib/labels';
@@ -7,7 +9,7 @@ import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { AgendaBoard, AgendaBoardSet, RejectedAgendaBoard } from '@lib/evaluations';
 import type { MailFailure } from '@lib/mail';
-import type { Finding, LabelFieldIssue } from './types';
+import type { Finding, LabelFieldIssue, OntbrekendeKolom } from './types';
 
 /** Hoe vaak elke labelwaarde en elk thema-item op de agendaborden voorkomt. */
 export interface AgendaUsage {
@@ -230,6 +232,47 @@ export function mailFindings(failures: readonly MailFailure[]): readonly Finding
 }
 
 /**
+ * De kolommen die wíj op het agendabord hebben gezet, met wat ze nodig heeft.
+ *
+ * `Status Aanbevelingen` staat hier niet: die heeft zijn eigen melding
+ * (`aanbevelingen-niet-aangesloten`), omdat een bord zonder aanbevelingen een keuze kan zijn.
+ */
+interface EigenKolom extends Omit<OntbrekendeKolom, 'probleem'> {
+  readonly type: string;
+}
+
+const EIGEN_AGENDA_KOLOMMEN: readonly EigenKolom[] = [
+  {
+    id: BRIEFING_AGENDA_COLUMNS.huiswerk,
+    type: 'status',
+    titel: 'Huisw. opdr.',
+    voor: 'de briefing',
+    script: 'pnpm agenda:huiswerk',
+  },
+  {
+    id: BRIEFING_AGENDA_COLUMNS.coTrainerRelation,
+    type: 'board_relation',
+    titel: 'Co-trainer(s)',
+    voor: 'de briefing',
+    script: 'pnpm agenda:cotrainer',
+  },
+  {
+    id: EVAL_COLUMNS.eindcijfer,
+    type: 'numbers',
+    titel: 'Gem. eindcijfer',
+    voor: 'het wegschrijven van de evaluatie',
+    script: 'pnpm agenda:evalkolommen',
+  },
+  {
+    id: EVAL_COLUMNS.respondenten,
+    type: 'numbers',
+    titel: 'Respondenten',
+    voor: 'het wegschrijven van de evaluatie',
+    script: 'pnpm agenda:evalkolommen',
+  },
+];
+
+/**
  * Wat de ontdekking van de agendaborden oplevert.
  *
  * De twee gemeten borden (2025 en 2026) krijgen geen "doet mee"-melding: die deden altijd al
@@ -258,9 +301,29 @@ export function agendaBoardFindings(
       ? []
       : [{ kind: 'aanbevelingen-niet-aangesloten', boardId: b.boardId, naam: b.naam, reden }];
   });
+  const zonderKolommen = liveAgendaBoards(set).flatMap((b): Finding[] => {
+    const kolommen = EIGEN_AGENDA_KOLOMMEN.flatMap((k): OntbrekendeKolom[] => {
+      const type = b.columnTypes[k.id];
+      return type === k.type
+        ? []
+        : [
+            {
+              id: k.id,
+              titel: k.titel,
+              voor: k.voor,
+              script: `${k.script} --board ${b.boardId} --apply`,
+              probleem: type === undefined ? 'ontbreekt' : type,
+            },
+          ];
+    });
+    return kolommen.length === 0
+      ? []
+      : [{ kind: 'kolommen-ontbreken', boardId: b.boardId, naam: b.naam, kolommen }];
+  });
   return [
     ...set.boards.filter((b) => !KNOWN_AGENDA_BOARD_IDS.has(b.boardId)).map(nieuw),
     ...set.rejected.map(onbruikbaar),
     ...zonderAanbevelingen,
+    ...zonderKolommen,
   ];
 }

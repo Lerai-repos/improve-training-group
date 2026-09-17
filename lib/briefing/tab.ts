@@ -25,6 +25,7 @@ import { prefillTrainingActor, type BriefingChecklist } from './blocks';
 import { conceptLines, resolveConceptInhoud } from './concept';
 import { formatDutchDate } from './deadline';
 import { resolveRecipientRoles, type RecipientRole } from './recipients';
+import { metEigenAchtergrond } from './achtergrond';
 import { EMPTY_SAVED, type SavedChecklist } from './answers';
 
 import type { BriefingTraining, BriefingTrainer } from './types';
@@ -138,6 +139,10 @@ export interface TabView {
   readonly conceptEigen: string | null;
   /** De regels zoals ze in het document zouden komen, met `{organisatie}` ingevuld. */
   readonly conceptResultaat: readonly string[];
+  /** De achtergrondinformatie van de Opportunity. Vult het tekstvak voor. */
+  readonly achtergrondBron: string;
+  /** Wat de adviseur zelf heeft getypt, of `null` als hij het niet heeft aangeraakt. */
+  readonly achtergrondEigen: string | null;
   readonly documenten: readonly TabDocument[];
   readonly issues: readonly TabIssue[];
   readonly gereedheid: TabGereedheid;
@@ -236,6 +241,7 @@ function controlesVoor(input: {
   readonly soloTrainer: boolean;
   readonly acteurBeantwoord: boolean;
   readonly trainingActor: boolean;
+  readonly achtergrondEigen: boolean;
 }): TabControle[] {
   const { training, issues } = input;
   const C = BRIEFING_AGENDA_COLUMNS;
@@ -334,11 +340,50 @@ function controlesVoor(input: {
   }
   veld('themas', "Thema's", C.themaRelation, training.themas.join(', '));
   veld('accountmanager', 'Accountmanager', C.accountmanager, training.accountmanager?.naam ?? '');
-  veld(
-    'achtergrond',
-    'Achtergrondinformatie',
-    OPPORTUNITY_COLUMNS.achtergrond,
-    'Ingevuld op de gekoppelde Opportunity.'
+  if (mist(OPPORTUNITY_COLUMNS.achtergrond) === undefined) {
+    lijst.push({
+      key: 'achtergrond',
+      label: 'Achtergrondinformatie',
+      status: 'ok',
+      uitleg: input.achtergrondEigen
+        ? 'Aangepast in deze tab.'
+        : 'Ingevuld op de gekoppelde Opportunity.',
+    });
+  } else {
+    lijst.push({
+      key: 'achtergrond',
+      label: 'Achtergrondinformatie',
+      status: 'ontbreekt',
+      uitleg:
+        'Er staat geen tekst op de Opportunity. Typ hem in het tekstvak Achtergrondinformatie; ' +
+        'in het document komt anders een zichtbare regel.',
+    });
+  }
+
+  /**
+   * Geen vraag maar een weergave: deze drie komen van het agendabord. Wie ze wil wijzigen doet
+   * dat daar, dus de uitleg zegt in welke kolom.
+   */
+  const opdracht = (key: string, naam: string, aan: boolean, bron: string): void => {
+    lijst.push({
+      key,
+      label: `${naam}: ${aan ? 'ja' : 'nee'}`,
+      status: 'ok',
+      uitleg: `${aan ? 'Het blok staat in de briefing' : 'Geen blok in de briefing'}. Dit komt uit ${bron} op het agendabord; wijzig het daar.`,
+    });
+  };
+  opdracht(
+    'cyclus',
+    'Trainingscyclus',
+    training.opdrachten.trainingCycle,
+    'DuurcategorieAG ("trainingscyclus")'
+  );
+  opdracht('huiswerk', 'Huiswerkopdracht', training.opdrachten.homework, 'de kolom Huisw. opdr.');
+  opdracht(
+    'voorbereidend',
+    'Voorbereidende opdracht',
+    training.opdrachten.preparatoryAssignment,
+    'de kolom Voorb. opdr.'
   );
 
   const regels = input.regels.map(splitOpenIssue);
@@ -387,8 +432,10 @@ const ROL: Record<RecipientRole, string> = {
  * `saved` is wat er in KV staat; zonder opgeslagen antwoorden begint het scherm leeg, met de
  * acteurvraag voorgezet op wat Monday suggereert.
  */
-export function buildTabView(training: BriefingTraining, saved: SavedChecklist | null): TabView {
+export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist | null): TabView {
   const antwoorden = saved ?? EMPTY_SAVED;
+  /** Vanaf hier de training zoals de briefing hem gebruikt: met de getypte achtergrond. */
+  const training = metEigenAchtergrond(opgehaald, antwoorden.checklist.achtergrondInhoud);
   const voorstel = prefillTrainingActor(training.acteuraantal, countLinkedActors(training));
 
   /**
@@ -420,9 +467,11 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
   const soloTrainer = training.trainers.length === 1 && !training.trainers[0].isActeur;
 
   const beantwoord = soloTrainer || antwoorden.actorAnswered;
+  /** De antwoorden van de adviseur, aangevuld met wat het agendabord over de opdrachten zegt. */
+  const metOpdrachten: BriefingChecklist = { ...antwoorden.checklist, ...training.opdrachten };
   const gekozen: BriefingChecklist = antwoorden.actorAnswered
-    ? antwoorden.checklist
-    : { ...antwoorden.checklist, trainingActor: voorstel };
+    ? metOpdrachten
+    : { ...metOpdrachten, trainingActor: voorstel };
   const metActeurkeuze: BriefingChecklist = soloTrainer
     ? { ...gekozen, trainingActor: false }
     : gekozen;
@@ -559,6 +608,8 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
     conceptSkelet: conceptLines(training.themaInhoud),
     conceptEigen: eigen,
     conceptResultaat,
+    achtergrondBron: opgehaald.achtergrond,
+    achtergrondEigen: antwoorden.checklist.achtergrondInhoud ?? null,
     documenten,
     issues,
     gereedheid: {
@@ -572,6 +623,7 @@ export function buildTabView(training: BriefingTraining, saved: SavedChecklist |
         soloTrainer,
         acteurBeantwoord: beantwoord,
         trainingActor: checklist.trainingActor,
+        achtergrondEigen: antwoorden.checklist.achtergrondInhoud !== undefined,
       }),
     },
     kanGenereren: !issues.some((i) => i.blokkeert),

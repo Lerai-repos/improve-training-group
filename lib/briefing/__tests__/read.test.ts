@@ -30,6 +30,10 @@ function agendaItem(overrides: Record<string, unknown> = {}) {
     [C.brie]: { text: 'Aanmaken' },
     [C.acteuraantal]: { text: '' },
     [C.opportunity]: { linked_item_ids: ['300'] },
+    // Grijs "Voorb. opdr.?", "Geen huiswerkopdracht (deze sessie)", en geen duurcategorie.
+    [C.voorbereidend]: { text: 'Voorb. opdr.?', index: 5 },
+    [C.huiswerk]: { text: 'Geen huiswerk (deze sessie)', index: 6 },
+    [C.duurcategorie]: { text: '', values: [] },
     ...overrides,
   };
   return {
@@ -351,10 +355,29 @@ describe('readBriefingTraining', () => {
     expect(t.contactpersoon).toEqual({ naam: 'Paula Hollander', telefoon: '+31 6 42085076' });
   });
 
-  it('keeps the agenda name when no linked contact matches it', async () => {
+  /**
+   * The typed name on the agenda is a copy taken at conversion and goes stale when the
+   * client changes contact. Measured 17-Sep-2026: stale on 13 upcoming trainings (Alpine,
+   * every SSR session), which put the old name in the briefing and dropped the phone.
+   * The linked contact is what Monday itself shows in `Contactpersoon`.
+   */
+  it('takes the single linked contact over a stale agenda name', async () => {
     const t = await readBriefingTraining(
       client(agendaItem(), {
         contacts: [{ id: '801', name: 'Marco de Vries', phone: '+31 6 11111111' }],
+      }),
+      '1'
+    );
+    expect(t.contactpersoon).toEqual({ naam: 'Marco de Vries', telefoon: '+31 6 11111111' });
+  });
+
+  it('keeps the agenda name when several contacts are linked and none matches it', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), {
+        contacts: [
+          { id: '801', name: 'Marco de Vries', phone: '+31 6 11111111' },
+          { id: '802', name: 'Ans Bakker', phone: '+31 6 22222222' },
+        ],
       }),
       '1'
     );
@@ -372,6 +395,81 @@ describe('readBriefingTraining', () => {
       '1'
     );
     expect(t.contactpersoon).toBeNull();
+  });
+
+  /**
+   * Cyclus, huiswerk en voorbereidende opdracht komen sinds 17-Sep-2026 van het agendabord.
+   * Op labelindex. Voorb. opdr.: Wel 0, Staat klaar 1, Verzonden 3 zijn ja; Geen 2, grijs 5 nee.
+   * Huisw. opdr. kreeg via de API andere indexen: Wel 9, Staat klaar 19, Verzonden 1, Geen 6.
+   */
+  it('reads the three assignments from the agenda board', async () => {
+    const leeg = await readBriefingTraining(client(agendaItem()), '1');
+    expect(leeg.opdrachten).toEqual({
+      trainingCycle: false,
+      homework: false,
+      preparatoryAssignment: false,
+    });
+
+    const vol = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.voorbereidend]: { text: 'Verzonden', index: 3 },
+          [C.huiswerk]: { text: 'Wel huiswerkopdracht', index: 9 },
+          [C.duurcategorie]: { text: 'trainingscyclus (2x4/2x7)', values: [{ id: '6' }] },
+        })
+      ),
+      '1'
+    );
+    expect(vol.opdrachten).toEqual({
+      trainingCycle: true,
+      homework: true,
+      preparatoryAssignment: true,
+    });
+  });
+
+  it('counts Staat klaar as yes and an empty status as no', async () => {
+    const t = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.voorbereidend]: { text: 'Staat klaar', index: 1 },
+          [C.huiswerk]: { text: '', index: null },
+          [C.duurcategorie]: { text: 'dag (5-7 uur)', values: [{ id: 4 }] },
+        })
+      ),
+      '1'
+    );
+    expect(t.opdrachten).toEqual({
+      trainingCycle: false,
+      homework: false,
+      preparatoryAssignment: true,
+    });
+  });
+
+  /** Index 0 is "Wel" bij Voorb. opdr. maar bestaat niet bij Huisw. opdr.; per kolom lezen. */
+  it('reads each status column with its own indexes', async () => {
+    const t = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.voorbereidend]: { text: 'Staat klaar', index: 1 },
+          [C.huiswerk]: { text: 'Staat klaar', index: 19 },
+        })
+      ),
+      '1'
+    );
+    expect(t.opdrachten.preparatoryAssignment).toBe(true);
+    expect(t.opdrachten.homework).toBe(true);
+
+    const geen = await readBriefingTraining(
+      client(agendaItem({ [C.huiswerk]: { text: 'Geen huiswerk (deze sessie)', index: 6 } })),
+      '1'
+    );
+    expect(geen.opdrachten.homework).toBe(false);
+  });
+
+  /** Zonder `values` is de kolom van type veranderd; dat is geen "geen cyclus". */
+  it('throws when the duration category comes back without dropdown values', async () => {
+    const item = agendaItem({ [C.duurcategorie]: { text: '' } });
+    await expect(readBriefingTraining(client(item), '1')).rejects.toThrow(/dropdown/);
   });
 
   /** The label picks the template, so a blank one means there is nothing to generate. */

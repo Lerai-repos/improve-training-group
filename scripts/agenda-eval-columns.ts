@@ -4,6 +4,7 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: '.env.local' });
 
 import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
+import { boardFromArgv } from '@lib/monday/board-arg';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
 import { checkColumn } from '@lib/monday/provisioning';
@@ -27,6 +28,7 @@ import { EVAL_COLUMNS, IE_STATUS_COLUMN, IE_STATUS_ONVINDBAAR } from '@lib/repor
  *
  *   pnpm agenda:evalkolommen            # droogloop
  *   pnpm agenda:evalkolommen --apply
+ *   pnpm agenda:evalkolommen --board <id> --apply   # een ander agendabord
  *
  * Draait tegen het live bord van de klant, dus droogloop is de standaard.
  */
@@ -67,7 +69,7 @@ async function main(): Promise<void> {
     throw new Error('Missing MONDAY_API_TOKEN (.env.local)');
   }
   const apply = process.argv.includes('--apply');
-  const board = agendaBoardId();
+  const board = boardFromArgv(process.argv.slice(2)) ?? agendaBoardId();
   const read = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
   const write = createMondayMutationClient({ token, apiVersion: MONDAY_API_VERSION });
 

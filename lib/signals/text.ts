@@ -97,6 +97,8 @@ export function findingName(finding: Finding): string {
       return `Agendabord "${finding.naam}" doet niet mee — ${finding.reden}`;
     case 'aanbevelingen-niet-aangesloten':
       return `Agendabord "${finding.naam}" krijgt geen aanbevelingen — ${finding.reden}`;
+    case 'kolommen-ontbreken':
+      return `Agendabord "${finding.naam}" mist kolommen van Lerai: ${finding.kolommen.map((k) => k.titel).join(', ')}`;
   }
 }
 
@@ -219,6 +221,21 @@ export function findingDetail(finding: Finding): string {
           AFVINKEN.charAt(0).toLowerCase() +
           AFVINKEN.slice(1),
       ].join('\n\n');
+
+    case 'kolommen-ontbreken':
+      return [
+        `Op "${finding.naam}" (bord ${finding.boardId}) ontbreken kolommen die Lerai heeft ` +
+          'aangemaakt en die de automatisering nodig heeft:',
+        finding.kolommen
+          .map(
+            (k) =>
+              `- ${k.titel} (${k.id}) ${k.probleem === 'ontbreekt' ? 'ontbreekt' : `is van het verkeerde type (${k.probleem})`}; zonder deze kolom werkt ${k.voor} niet op dit bord.`
+          )
+          .join('\n'),
+        'Laat Lerai ze aanmaken. Niet met de hand toevoegen: de kolom moet dezelfde id krijgen ' +
+          `als op Agenda 2026. Opdracht(en): ${[...new Set(finding.kolommen.map((k) => k.script))].join(', ')}.`,
+        'Is dit een afgesloten jaar? Archiveer het bord, dan verdwijnt deze melding.',
+      ].join('\n\n');
   }
 }
 
@@ -241,6 +258,8 @@ export function findingOnderdeel(finding: Finding): string {
       return 'Agendaborden';
     case 'aanbevelingen-niet-aangesloten':
       return 'Aanbevelingen';
+    case 'kolommen-ontbreken':
+      return 'Agendaborden';
   }
 }
 

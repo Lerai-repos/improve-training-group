@@ -6,6 +6,7 @@ import {
 } from '@lib/sharepoint/publish';
 import { yearOfDate } from '@lib/sharepoint/paths';
 
+import { metEigenAchtergrond } from './achtergrond';
 import { generateBriefings, plannedFilenames } from './generate';
 import { planChangeReason, planFingerprint, trainingFingerprint } from './plan-token';
 import { recordGeneration, recordInputFor } from './record';
@@ -105,8 +106,10 @@ export async function runGenerate(
   deps: RunGenerateDeps,
   input: RunGenerateInput
 ): Promise<RunGenerateOutcome> {
-  const training = await deps.readTraining();
+  const opgehaald = await deps.readTraining();
   const snapshot = await deps.readChecklist();
+  /** De getypte achtergrond hoort in het document, net als op het scherm. */
+  const training = metEigenAchtergrond(opgehaald, snapshot.saved?.checklist.achtergrondInhoud);
 
   /**
    * Onleesbare antwoorden blokkeren het genereren.
@@ -128,7 +131,7 @@ export async function runGenerate(
    * Dezelfde beslissingen als het scherm, uit dezelfde functie: zou de knop ze hier opnieuw
    * uitschrijven, dan kan hij iets anders vinden dan het scherm ernaast toont.
    */
-  const view = buildTabView(training, snapshot.saved);
+  const view = buildTabView(opgehaald, snapshot.saved);
   if (!view.kanGenereren) {
     return {
       kind: 'blocked',
@@ -205,7 +208,7 @@ export async function runGenerate(
   const verseTraining = await deps.readTraining();
   if (
     verse.token !== snapshot.token ||
-    trainingFingerprint(verseTraining) !== trainingFingerprint(training)
+    trainingFingerprint(verseTraining) !== trainingFingerprint(opgehaald)
   ) {
     return {
       kind: 'changed',

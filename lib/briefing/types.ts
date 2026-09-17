@@ -13,6 +13,8 @@
  *   doet bij de aanbevelingen.
  */
 
+import type { BriefingOpdrachten } from './blocks';
+
 /** Een leeg veld dat de adviseur moet invullen. `label` is wat er in Monday staat. */
 export interface MissingField {
   readonly column: string;
@@ -126,6 +128,8 @@ export interface BriefingTraining {
    * aangemaakt en begon dus overal leeg.
    */
   readonly achtergrond: string;
+  /** Cyclus, huiswerk en voorbereidende opdracht, zoals het agendabord ze aangeeft. */
+  readonly opdrachten: BriefingOpdrachten;
 
   /** Lege verplichte velden. Leeg betekent: klaar om te genereren. */
   readonly missing: readonly MissingField[];

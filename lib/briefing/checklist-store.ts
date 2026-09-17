@@ -60,14 +60,17 @@ export interface ChecklistStore {
   save(mondayItemId: string, input: SavedChecklist & { token: string }): Promise<ChecklistWrite>;
 }
 
+/**
+ * Cyclus, huiswerk en voorbereidende opdracht stonden hier tot 17-Sep-2026; ze komen nu van
+ * het agendabord. Oudere records dragen ze nog, en Zod laat onbekende sleutels vallen, dus die
+ * blijven leesbaar zonder dat een oud vinkje het bord overstemt.
+ */
 const checklistSchema = z.object({
   ownGroup: z.boolean(),
   sameGroup: z.boolean(),
-  trainingCycle: z.boolean(),
-  homework: z.boolean(),
-  preparatoryAssignment: z.boolean(),
   trainingActor: z.boolean(),
   conceptInhoud: z.string().max(CONCEPT_MAX_LENGTH).optional(),
+  achtergrondInhoud: z.string().max(CONCEPT_MAX_LENGTH).optional(),
 });
 
 const recordSchema = z.object({

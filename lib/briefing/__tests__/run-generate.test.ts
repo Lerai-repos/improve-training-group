@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST } from '../blocks';
+import { OPPORTUNITY_COLUMNS } from '../columns';
+import { ACHTERGROND_LEEG } from '../compose';
 import { plannedFilenames } from '../generate';
 import { runGenerate, UPLOAD_BUDGET_MS, type RunGenerateDeps } from '../run-generate';
 
@@ -53,6 +55,7 @@ const TRAINING: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Iets over de klant.',
+  opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   missing: [],
 };
 
@@ -214,6 +217,35 @@ describe('runGenerate — schrijven', () => {
     expect(vals.brie).toEqual(['Begonnen, niet klaar']);
     expect(uit.brie).toBe('Begonnen, niet klaar');
     expect(uit.administratie).toEqual([]);
+  });
+
+  /** Dirkje, 17-Sep-2026: getypte achtergrond in de tab moet in het document komen. */
+  it('zet de in de tab getypte achtergrond in het document in plaats van een lege regel', async () => {
+    const leeg: BriefingTraining = {
+      ...TRAINING,
+      achtergrond: '',
+      missing: [{ column: OPPORTUNITY_COLUMNS.achtergrond, label: 'Achtergrondinformatie' }],
+    };
+    const schrijf = async (saved: SavedChecklist) => {
+      const { deps } = bouw({
+        readTraining: () => Promise.resolve(leeg),
+        readChecklist: () => Promise.resolve({ saved, token: 't1', unreadable: false }),
+      });
+      const gepland = await runGenerate(deps, { itemId: '900', confirmExisting: false });
+      const token = gepland.kind === 'planned' ? gepland.plan.planToken : '';
+      return runGenerate(deps, { itemId: '900', confirmExisting: true, planToken: token });
+    };
+
+    const zonder = await schrijf(OPGESLAGEN);
+    const met = await schrijf({
+      ...OPGESLAGEN,
+      checklist: { ...EMPTY_CHECKLIST, achtergrondInhoud: 'Over de klant.' },
+    });
+    if (zonder.kind !== 'written' || met.kind !== 'written') {
+      throw new Error(`niet geschreven: ${zonder.kind} / ${met.kind}`);
+    }
+    expect(zonder.documents[0].open).toContain(ACHTERGROND_LEEG);
+    expect(met.documents[0].open).not.toContain(ACHTERGROND_LEEG);
   });
 
   /**

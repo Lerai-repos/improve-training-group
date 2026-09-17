@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   }
 
   const t = await readBriefingTraining(client, itemId);
-  const deadline = formatDeadline(materialsDeadline({ datum: t.datum, tijden: t.tijden }));
+  const deadline = formatDeadline(materialsDeadline({ datum: t.datum }));
 
   const rows: Array<[string, string]> = [
     ['Opdrachtgever', t.opdrachtgever],

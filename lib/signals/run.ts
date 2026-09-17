@@ -40,6 +40,7 @@ const AGENDABORD_KINDS: readonly FindingKind[] = [
   'agendabord-nieuw',
   'agendabord-onbruikbaar',
   'aanbevelingen-niet-aangesloten',
+  'kolommen-ontbreken',
 ];
 
 export interface DailyCheckDeps {
