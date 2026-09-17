@@ -1,5 +1,5 @@
 import { createAddressFormatter } from '@lib/recommend/address';
-import { createOpenRouterCompletion } from '@lib/recommend/completion';
+import { createAnthropicCompletion } from '@lib/recommend/completion';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { createGoogleRoutesTransport, createRoutesProvider } from '@lib/recommend/travel';
 import {
@@ -60,7 +60,7 @@ async function resolveReis(
   itemIds: readonly string[],
   notes: ContextNote[]
 ): Promise<ReadonlyMap<string, TravelInput>> {
-  const missend = ['OPENROUTER_API_KEY', 'GOOGLE_MAPS_API_KEY'].filter(
+  const missend = ['ANTHROPIC_API_KEY', 'GOOGLE_MAPS_API_KEY'].filter(
     (naam) => (process.env[naam] ?? '') === ''
   );
   if (missend.length > 0) {
@@ -95,7 +95,7 @@ async function resolveReis(
   const travel = await resolveBriefingTravel(
     {
       formatter: createAddressFormatter(
-        createOpenRouterCompletion(process.env.OPENROUTER_API_KEY ?? '')
+        createAnthropicCompletion(process.env.ANTHROPIC_API_KEY ?? '')
       ),
       cache: createTravelCache(store),
       provider: createRoutesProvider(

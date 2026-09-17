@@ -379,7 +379,7 @@ function checkPlainVars(): void {
     ['CRON_SECRET', 'guards the publish-pending sweep'],
     ['ADDRESS_HASH_KEY', 'keyed address fingerprints'],
     ['GOOGLE_MAPS_API_KEY', 'travel'],
-    ['OPENROUTER_API_KEY', 'address cleanup'],
+    ['ANTHROPIC_API_KEY', 'address cleanup'],
   ];
   for (const [name, why] of required) {
     record(name, present(name) ? 'ok' : 'fail', why);

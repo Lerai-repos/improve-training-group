@@ -53,7 +53,7 @@ import { sessionTokenConfigFromEnv } from './session-token';
 import type { AuthDeps } from './view-auth';
 import { canonicalJson } from './artifact';
 import { currentDeadlineMs } from './deadline';
-import { createOpenRouterCompletion } from './completion';
+import { createAnthropicCompletion } from './completion';
 import { buildEngineConfig, newWorkerOwner } from './engine-config';
 import type { WebhookRouting } from './event';
 import { createMondayReader } from './monday-reader';
@@ -482,7 +482,7 @@ export async function buildWorkerDeps(mondayItemId: string): Promise<WorkerDeps>
       roster: await readRoster(client, ITEM_FIELDS),
       evaluations,
       addressFormatter: createAddressFormatter(
-        createOpenRouterCompletion(requireEnv('OPENROUTER_API_KEY'))
+        createAnthropicCompletion(requireEnv('ANTHROPIC_API_KEY'))
       ),
       travelProvider: createRoutesProvider(
         createGoogleRoutesTransport(requireEnv('GOOGLE_MAPS_API_KEY'))

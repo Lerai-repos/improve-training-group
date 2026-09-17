@@ -37,7 +37,7 @@ land), the reconciliation sweep, and evaluations/scores. See `docs/m2b/README.md
   `MirrorValue` fragments
 - **Upstash Redis** — job state and caches only, never a system of record
 - **Upstash QStash** — the durable job queue (retries, backoff, dead-letter)
-- **Google Routes API** (travel), **OpenRouter** (address cleanup)
+- **Google Routes API** (travel), **Anthropic API** (address cleanup, Claude Haiku)
 - **Doppler** for secrets
 
 ---
@@ -50,7 +50,7 @@ pnpm install
 
 Secrets come from Doppler; for local work put them in `.env.local`. The full list
 with notes is in [`docs/m2b/README.md`](docs/m2b/README.md) §5 — at minimum you need
-`MONDAY_API_TOKEN`, plus `GOOGLE_MAPS_API_KEY` and `OPENROUTER_API_KEY` for real
+`MONDAY_API_TOKEN`, plus `GOOGLE_MAPS_API_KEY` and `ANTHROPIC_API_KEY` for real
 travel and address resolution (both fall back to stubs without them).
 
 No database, no Docker, no migrations.

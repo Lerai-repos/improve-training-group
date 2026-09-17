@@ -103,6 +103,7 @@ function sortAuditArrays(value: unknown): unknown {
  * Adding one here is a decision; a version absent from it fails the comparison.
  */
 const FOLDED_PROMPT_VERSIONS = new Set(['v1', 'v2', 'v3']);
+const FOLDED_ADDRESS_MODELS = new Set(['anthropic/claude-haiku-4.5', 'claude-haiku-4-5']);
 
 function stripIntentional(artifact: Record<string, unknown>): unknown {
   const trainers = Array.isArray(artifact.trainers) ? artifact.trainers : [];
@@ -132,6 +133,13 @@ function stripIntentional(artifact: Record<string, unknown>): unknown {
       promptVersion: FOLDED_PROMPT_VERSIONS.has(String(enrichment.promptVersion))
         ? 'v1'
         : enrichment.promptVersion,
+      /**
+       * The same Haiku model, first named by its OpenRouter id and, since 17-Sep-2026, by
+       * Anthropic's own. Listed explicitly for the same reason as the prompt versions.
+       */
+      model: FOLDED_ADDRESS_MODELS.has(String(enrichment.model))
+        ? 'anthropic/claude-haiku-4.5'
+        : enrichment.model,
     },
     // v2 → v3, deliberate.
     version: undefined,
@@ -296,14 +304,14 @@ async function main(): Promise<void> {
     const deps: ServiceDeps = {
       reader,
       roster,
-    /**
-     * Empty, deliberately. The baselines were recorded when evaluations were inert, so
-     * `scores[]` and every ranked row hold `(null, 0)`; feeding live statistics here
-     * would make this check fail every night for a reason that is not a regression.
-     * The fixtures are NOT regenerated — that would hide a real engine change behind
-     * this one.
-     */
-    evaluations: null,
+      /**
+       * Empty, deliberately. The baselines were recorded when evaluations were inert, so
+       * `scores[]` and every ranked row hold `(null, 0)`; feeding live statistics here
+       * would make this check fail every night for a reason that is not a regression.
+       * The fixtures are NOT regenerated — that would hide a real engine change behind
+       * this one.
+       */
+      evaluations: null,
       addressFormatter: {
         format: () =>
           Promise.resolve(

@@ -45,7 +45,7 @@ export interface AddressFormatter {
 /** A single classification call: given system+user text, return the model's raw text. */
 export type Completion = (prompt: { system: string; user: string }) => Promise<string>;
 
-export const ADDRESS_MODEL = 'anthropic/claude-haiku-4.5';
+export const ADDRESS_MODEL = 'claude-haiku-4-5';
 /**
  * `v2` added `city`. `v3` added `city_only`, which changes what the same input means.
  *
@@ -163,7 +163,7 @@ export function parseAiResponse(text: string): AddressDecision {
 /**
  * Build a formatter over an injected {@link Completion} transport. An empty/blank
  * location is `unresolved_location` (unknown travel, not zero); a transport throw
- * is `error` (→ retry → FOUT). The Claude/OpenRouter transport is wired separately.
+ * is `error` (→ retry → FOUT). The Anthropic transport is wired separately.
  */
 export function createAddressFormatter(complete: Completion): AddressFormatter {
   return {

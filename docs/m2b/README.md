@@ -15,7 +15,7 @@ Monday (a move into Inplannen OR Herplannen / Inplannen)
         └─ job → read training + roster + qualifications LIVE
                  eligibility (effective-GREEN for EVERY theme)
                  rates (unpriceable trainers dropped BEFORE any provider call)
-                 address (OpenRouter) → travel (Google Routes, cache-first) → 5-layer rank
+                 address (Anthropic) → travel (Google Routes, cache-first) → 5-layer rank
                  record ONE immutable outcome for this generation
                  write GEREED | GEEN MATCH | FOUT to OUR status column
 ```
@@ -302,7 +302,7 @@ actual request goes through a route file.
 | `CRON_SECRET` | `/api/cron/publish-pending` | Unset ⇒ the endpoint rejects everything. |
 | `CONFIG_API_SECRET` | `/api/config/trainer-groups` | Unset ⇒ rejects everything. |
 | `GOOGLE_MAPS_API_KEY` | travel | Needs the **Routes API** enabled *and* allowed in the key's restrictions. |
-| `OPENROUTER_API_KEY` | address cleanup | |
+| `ANTHROPIC_API_KEY` | address cleanup | |
 | `ADDRESS_HASH_KEY` | travel cache + artifact | HMAC for keyed fingerprints. **Required in production.** |
 | `RECOMMENDABLE_TRAINER_GROUPS` | — | **Rollback-only, and no longer read.** The `TRAINERGROEPEN` row on the Instellingen board is the sole source (§6); this variable is not consulted even as a fallback. Keep it configured until the cutover is proven stable — a Vercel code rollback lands on a build that still needs it — then delete it as its own deliberate step. |
 | `HQ_ADRES`, `TRAVEL_RATE_*`, `TRAVEL_TIME_THRESHOLD_MINUTES`, `TRAVEL_TIME_FEE_PER_MINUTE_CENTS` | — | **Rollback-only.** These now come from the **Instellingen board** (5102171946): `HQ ADRES`, `REISTARIEF TRAINERS`, `REISTARIEF HQ`, `REISTIJD DREMPEL`, `REISTIJD VERGOEDING`. **Do not delete them yet** — a Vercel code rollback does not restore deleted variables, and the previous build's `buildAppConfig` throws when the financial ones are absent. Remove them as a deliberate step once the cutover is stable. |
