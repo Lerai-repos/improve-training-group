@@ -189,8 +189,8 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
       {/*
         Twee kolommen die elk los stapelen, in plaats van rijen: in een rij bepaalt het hoogste
         blok de hoogte en valt er naast een kort blok een gat. Links wat er nog mist en de
-        inhoud, rechts de keuzes en onderaan de knop die dat alles vrijgeeft. Op een smal
-        scherm vallen ze gewoon onder elkaar.
+        concept-inhoud, rechts de keuzes, de achtergrondinformatie en onderaan de knop die dat
+        alles vrijgeeft. Op een smal scherm vallen ze gewoon onder elkaar.
 
         Het slot hieronder zit daarom op twee `fieldset`s — één per kolom — met dezelfde
         voorwaarde.
@@ -206,13 +206,8 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
           <ReadinessPanel gereedheid={tab.gereedheid} />
           <fieldset
             disabled={bewerkenOpSlot}
-            className={cn('grid min-w-0 gap-4', bewerkenOpSlot && 'opacity-60')}
+            className={cn('min-w-0', bewerkenOpSlot && 'opacity-60')}
           >
-            <AchtergrondPanel
-              bron={tab.achtergrondBron}
-              eigen={tab.achtergrondEigen}
-              onChange={handleAchtergrond}
-            />
             <ConceptPanel
               skelet={tab.conceptSkelet}
               eigen={tab.checklist.conceptInhoud ?? null}
@@ -225,7 +220,7 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
         <div className="flex min-w-0 flex-col gap-4">
           <fieldset
             disabled={bewerkenOpSlot}
-            className={cn('min-w-0', bewerkenOpSlot && 'opacity-60')}
+            className={cn('grid min-w-0 gap-4', bewerkenOpSlot && 'opacity-60')}
           >
             <ChecklistPanel
               /**
@@ -241,6 +236,11 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
               onChecklist={view.setChecklist}
               onActors={view.setActorItemIds}
               onAnswerActor={view.answerActor}
+            />
+            <AchtergrondPanel
+              bron={tab.achtergrondBron}
+              eigen={tab.achtergrondEigen}
+              onChange={handleAchtergrond}
             />
           </fieldset>
           <DocumentsPanel documenten={tab.documenten} />
