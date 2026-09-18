@@ -68,6 +68,60 @@ export interface BriefingThema {
   readonly mcCode: string;
 }
 
+/** Eén sessie van een trainingscyclus: wat per sessie kan verschillen. */
+export interface BriefingSessie {
+  readonly itemId: string;
+  /** Een cyclus kan over twee jaargangen lopen, dus elke sessie draagt haar eigen bord. */
+  readonly boardId: string;
+  /** Een gearchiveerde jaargang wordt gelezen, maar er wordt niets meer op geschreven. */
+  readonly gearchiveerd: boolean;
+  /** `YYYY-MM-DD`, of leeg. */
+  readonly datum: string;
+  readonly tijden: string;
+  readonly locatie: string;
+  readonly groepsgrootte: string;
+  /** Geen thema ingevuld. Doet wel mee, maar de tab meldt het. */
+  readonly zonderThema: boolean;
+}
+
+/** Eén regel in de vraag "welke sessies horen bij deze cyclus?". */
+export interface CyclusOptie {
+  readonly itemId: string;
+  readonly datum: string;
+  readonly klanttitel: string;
+  /** Lead- en co-trainers als namen; waar de adviseur op herkent of het klopt. */
+  readonly trainers: string;
+  /** Deze training zelf: staat er altijd bij en is niet uit te vinken. */
+  readonly huidig: boolean;
+  readonly aangevinkt: boolean;
+  /** Wat de regel voorstelt; los van wat er is aangevinkt of bevestigd. */
+  readonly voorgesteld: boolean;
+  /** Waarom de regel deze sessie niet voorstelt, of `null` als hij dat wel doet. */
+  readonly reden: string | null;
+}
+
+/**
+ * De vraag die de tab stelt: welke sessies krijgen samen één briefing?
+ *
+ * Tim, 18-Sep-2026: de regel stelt voor, een mens bevestigt. Tot die bevestiging houdt elke
+ * sessie haar eigen briefing.
+ */
+export interface CyclusKeuze {
+  readonly opties: readonly CyclusOptie[];
+  /** Er is nog niet bevestigd, of er is een sessie bij gekomen sinds de bevestiging. */
+  readonly openstaand: boolean;
+}
+
+export interface BriefingCyclus {
+  /** De bevestigde sessies, deze training inbegrepen, oudste eerst. */
+  readonly sessies: readonly BriefingSessie[];
+  /**
+   * Het item waar de antwoorden van deze cyclus onder staan — zoals het record het vastlegt,
+   * niet zoals het uit de sessies zou zijn af te leiden.
+   */
+  readonly anker: string;
+}
+
 export interface BriefingTraining {
   /**
    * De Trainingscode MC zoals hij in de gegevenstabel komt.
@@ -130,6 +184,15 @@ export interface BriefingTraining {
   readonly achtergrond: string;
   /** Cyclus, huiswerk en voorbereidende opdracht, zoals het agendabord ze aangeeft. */
   readonly opdrachten: BriefingOpdrachten;
+  /**
+   * De BEVESTIGDE trainingscyclus, of `null`.
+   *
+   * `null` is de gewone training: geen cycluslabel, geen andere sessies, of een cyclus die nog
+   * niemand heeft bevestigd. Alleen dit stuurt het document; zie `bepaalCyclusKeuze`.
+   */
+  readonly cyclus: BriefingCyclus | null;
+  /** De vraag met de vinkjes, of `null` als er geen andere sessies onder de opdracht staan. */
+  readonly cyclusKeuze: CyclusKeuze | null;
 
   /** Lege verplichte velden. Leeg betekent: klaar om te genereren. */
   readonly missing: readonly MissingField[];

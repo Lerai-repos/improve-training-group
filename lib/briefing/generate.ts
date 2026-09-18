@@ -71,7 +71,15 @@ export type GenerateResult =
 export async function generateBriefings(
   training: BriefingTraining,
   checklist: BriefingChecklist,
-  context: GenerateContext
+  context: GenerateContext,
+  /**
+   * Waar de bestandsnaam vandaan komt, als dat iets anders is dan de training zelf.
+   *
+   * Bij een trainingscyclus is dat de eerste sessie: het document heet naar de cyclus, niet
+   * naar de sessie die op Genereren drukte. Plannen en schrijven moeten dezelfde naam
+   * uitrekenen, dus die keuze hoort hier binnen te komen en niet twee keer gemaakt te worden.
+   */
+  identiteit: BriefingTraining = training
 ): Promise<GenerateResult> {
   const rollen = resolveRecipientRoles(training, checklist, {
     actorItemIds: context.actorItemIds,
@@ -108,7 +116,7 @@ export async function generateBriefings(
       trainerItemId: ontvanger.trainer.itemId,
       trainerNaam: ontvanger.trainer.naam,
       role: ontvanger.role,
-      filename: filenameFor(training, ontvanger.trainer.naam),
+      filename: filenameFor(identiteit, ontvanger.trainer.naam),
       bytes: await renderBriefing(training.label, eigen),
       open: openIssues(eigen),
     });

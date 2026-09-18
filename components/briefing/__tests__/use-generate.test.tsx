@@ -60,6 +60,7 @@ function api(
     aanroepen,
     get: () => Promise.reject(new Error('niet nodig in deze suite')),
     saveChecklist: () => Promise.reject(new Error('niet nodig in deze suite')),
+    saveCyclus: () => Promise.reject(new Error('niet nodig in deze suite')),
     generate: (itemId, options) => {
       const confirm = options?.confirmExisting === true;
       aanroepen.push({ itemId, confirm, planToken: options?.planToken });

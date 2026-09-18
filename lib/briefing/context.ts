@@ -169,7 +169,14 @@ export async function buildGenerateContext(
     client,
     {
       bedrijf: training.opdrachtgever,
-      excludeItemId: training.itemId,
+      /**
+       * Alleen de training zelf — nog niet de andere sessies van de cyclus.
+       *
+       * Die uit de tabel halen hoort bij het cyclusdocument, dat ze zelf opsomt. Zolang het
+       * document nog per sessie wordt gemaakt zouden ze nergens meer staan: niet in de tabel,
+       * niet in de tekst. Zodra deel 2 er is wordt dit `cyclus.sessies`.
+       */
+      excludeItemIds: [training.itemId],
       limit: input.historieLimit,
     },
     (await loadAgendaBoards(client)).boards

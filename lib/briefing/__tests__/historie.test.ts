@@ -176,7 +176,7 @@ describe('isRealClient', () => {
 });
 
 describe('readHistorie', () => {
-  const base = { bedrijf: 'CNV', excludeItemId: '999' };
+  const base = { bedrijf: 'CNV', excludeItemIds: ['999'] };
 
   it('haalt sessies van beide agendaborden op, oudste eerst', async () => {
     const rows = await readHistorie(
@@ -220,6 +220,24 @@ describe('readHistorie', () => {
       base
     );
     expect(rows).toEqual([]);
+  });
+
+  /**
+   * Dirkje, 17-Sep-2026: de andere sessies van de cyclus staan al in de briefing zelf. Een
+   * andere training bij dezelfde klant hoort er wél in, ook als die nog moet komen.
+   */
+  it('laat de andere sessies van de cyclus weg, maar niet de rest van de klant', async () => {
+    const rows = await readHistorie(
+      client({
+        b2026: [
+          { id: '999', bedrijf: 'CNV', datum: '2026-09-22' },
+          { id: '998', bedrijf: 'CNV', datum: '2027-01-04', klanttitel: 'Deel II' },
+          { id: '5', bedrijf: 'CNV', datum: '2026-11-01', klanttitel: 'Iets anders' },
+        ],
+      }),
+      { ...base, excludeItemIds: ['999', '998'] }
+    );
+    expect(rows.map((r) => r.klanttitel)).toEqual(['Iets anders']);
   });
 
   it('matcht niet op een andere klant', async () => {

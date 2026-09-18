@@ -10,6 +10,7 @@ import {
   type ItemBoardReader,
 } from '@lib/recommend';
 import { createUpstashChecklistStore, type ChecklistStore } from '@lib/briefing/checklist-store';
+import { createUpstashCyclusStore, type CyclusStore } from '@lib/briefing/cyclus-bevestiging';
 import { briefingRelationsFor, type BriefingRelations } from '@lib/briefing/read';
 import { agendaBoardOverride, readAgendaBoard, type AgendaClassification } from '@lib/evaluations';
 import { MONDAY_API_VERSION } from '@lib/monday/board-config';
@@ -35,6 +36,8 @@ export interface BriefingDeps {
   /** Schrijven naar Monday. Apart, want de leesclient weigert elk `mutation`-document. */
   readonly mutate: MondayMutationClient;
   readonly checklists: ChecklistStore;
+  /** Welke sessies de adviseur als één trainingscyclus heeft bevestigd, per Opportunity. */
+  readonly cycli: CyclusStore;
   readonly boards: ItemBoardReader;
   /** Ook hierbinnen: ontbrekende sessievariabelen zijn net zo goed "niet ingericht". */
   readonly auth: Parameters<typeof authorizeToken>[1];
@@ -83,6 +86,7 @@ function buildDeps(deadlines: GuardDeadlines): BriefingDeps {
         deadlineMs: deadlines.write ?? deadlines.read,
       }),
       checklists: createUpstashChecklistStore(createRedisClient()),
+      cycli: createUpstashCyclusStore(createRedisClient()),
       boards: createItemBoardReader(monday),
       auth: { session: sessionTokenConfigFromEnv(), policy: capabilityPolicyFromEnv() },
     };

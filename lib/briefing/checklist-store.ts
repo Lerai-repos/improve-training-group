@@ -55,9 +55,36 @@ export type ChecklistWrite =
       readonly unreadable: boolean;
     };
 
+/**
+ * Een tweede sleutel die niet veranderd mag zijn, wil de schrijfactie doorgaan.
+ *
+ * Voor de trainingscyclus: onder welk item de antwoorden horen volgt uit het cyclusrecord, en dat
+ * kan veranderen tussen het bepalen en het schrijven. Elke schrijfactie die daarvan afhangt
+ * draagt daarom het token van dat record mee, en het script controleert beide in één adem. Een
+ * controle ná het schrijven is te laat: dan staat het er al.
+ */
+export interface Fence {
+  readonly key: string;
+  /** De sha1 van de bytes van die sleutel, of `absent`. */
+  readonly token: string;
+}
+
 export interface ChecklistStore {
   read(mondayItemId: string): Promise<ChecklistSnapshot>;
-  save(mondayItemId: string, input: SavedChecklist & { token: string }): Promise<ChecklistWrite>;
+  save(
+    mondayItemId: string,
+    input: SavedChecklist & { token: string },
+    fence?: Fence
+  ): Promise<ChecklistWrite>;
+  /**
+   * Het record vervangen door een grafsteen, met dezelfde tokencontrole als `save`.
+   *
+   * Voor de trainingscyclus: de antwoorden leven op precies één plek, het anker. Een sessie die
+   * bij een cyclus komt of waarvan het anker verschuift houdt anders een oud record dat later
+   * weer voor "de antwoorden" kan doorgaan. Een grafsteen en geen `DEL`, zodat "weggehaald" niet
+   * hetzelfde leest als "nooit opgeslagen".
+   */
+  clear(mondayItemId: string, token: string, fence?: Fence): Promise<'ok' | 'conflict'>;
 }
 
 /**
@@ -156,6 +183,9 @@ const snapshotOf = (raw: string | null): ChecklistSnapshot => {
   };
 };
 
+const encodeTombstone = (nowIso: string): string =>
+  JSON.stringify({ v: 1, deleted: true, at: nowIso });
+
 function encodeRecord(input: SavedChecklist, nowIso: string): string {
   return JSON.stringify({
     v: 1,
@@ -189,11 +219,15 @@ function reconcile(current: string | null, input: SavedChecklist): ChecklistWrit
 }
 
 /**
- * Vergelijk het token en schrijf dan. Eén script, dus er komt niets tussen.
+ * Vergelijk het token — en het hek, als dat er is — en schrijf dan. Eén script, dus er komt
+ * niets tussen.
  *
  * Geeft `{ 0, current }` bij een mismatch, zodat de aanroeper kan verzoenen zonder tweede
  * ronde — en `''` voor afwezig, want een Lua-tabel kapt af bij de eerste nil. We schrijven
- * nooit een lege string, dus die twee zijn niet te verwarren.
+ * nooit een lege string, dus die twee zijn niet te verwarren. `{ 2, current }` betekent dat het
+ * hek het tegenhield: de cyclus is intussen veranderd.
+ *
+ * KEYS[2] is de heksleutel, of dezelfde sleutel als er geen hek is; ARGV[5] is dan `''`.
  */
 const LUA_CAS = `
 local current = redis.call('GET', KEYS[1])
@@ -204,9 +238,25 @@ end
 if token ~= ARGV[1] then
   return {0, current or ''}
 end
+if ARGV[5] ~= '' then
+  local hek = redis.call('GET', KEYS[2])
+  local hektoken = ARGV[3]
+  if hek then
+    hektoken = redis.sha1hex(hek)
+  end
+  if hektoken ~= ARGV[5] then
+    return {2, current or ''}
+  end
+end
 redis.call('SET', KEYS[1], ARGV[2], 'PX', tonumber(ARGV[4]))
 return {1, ARGV[2]}
 `;
+
+/** De sleutels en het hek-argument voor het script. */
+const metHek = (key: string, fence: Fence | undefined): { keys: string[]; hek: string } => ({
+  keys: [key, fence?.key ?? key],
+  hek: fence?.token ?? '',
+});
 
 export function createUpstashChecklistStore(
   redis: Redis,
@@ -218,13 +268,16 @@ export function createUpstashChecklistStore(
       return snapshotOf(raw === undefined ? null : raw);
     },
 
-    async save(mondayItemId, input) {
+    async save(mondayItemId, input, fence) {
       const next = encodeRecord(input, now().toISOString());
-      const res = await redis.eval(
-        LUA_CAS,
-        [storeKey(mondayItemId)],
-        [input.token, next, ABSENT_TOKEN, String(CHECKLIST_TTL_MS)]
-      );
+      const { keys, hek } = metHek(storeKey(mondayItemId), fence);
+      const res = await redis.eval(LUA_CAS, keys, [
+        input.token,
+        next,
+        ABSENT_TOKEN,
+        String(CHECKLIST_TTL_MS),
+        hek,
+      ]);
       if (!Array.isArray(res) || res.length !== 2) {
         throw new Error('checklist store: onverwacht antwoord van het script');
       }
@@ -233,27 +286,68 @@ export function createUpstashChecklistStore(
       if (won === 1) {
         return { kind: 'ok', saved: { ...input }, token: tokenOf(current) };
       }
-      return reconcile(current, input);
+      /**
+       * Hield het hek het tegen, dan is dit géén dubbele schrijfactie van onszelf maar een
+       * verschoven cyclus: de aanroeper moet opnieuw laden, ook al zou de inhoud toevallig
+       * gelijk zijn.
+       */
+      return won === 2 ? { kind: 'conflict', ...snapshotOf(current) } : reconcile(current, input);
+    },
+
+    async clear(mondayItemId, token, fence) {
+      const { keys, hek } = metHek(storeKey(mondayItemId), fence);
+      const res = await redis.eval(LUA_CAS, keys, [
+        token,
+        encodeTombstone(now().toISOString()),
+        ABSENT_TOKEN,
+        String(CHECKLIST_TTL_MS),
+        hek,
+      ]);
+      if (!Array.isArray(res) || res.length !== 2) {
+        throw new Error('checklist store: onverwacht antwoord van het script');
+      }
+      return res[0] === 1 ? 'ok' : 'conflict';
     },
   };
 }
 
-/** Een store in het geheugen, voor tests en voor draaien zonder Redis. */
-export function createMemoryChecklistStore(now: () => Date = () => new Date()): ChecklistStore {
+/**
+ * Een store in het geheugen, voor tests en voor draaien zonder Redis.
+ *
+ * `hekToken` beantwoordt wat het script in Redis zelf zou lezen: de sha1 van de heksleutel. In
+ * een test is dat de geheugenversie van de cyclusstore; zonder hek wordt hij nooit gevraagd.
+ */
+export function createMemoryChecklistStore(
+  now: () => Date = () => new Date(),
+  hekToken: (key: string) => Promise<string> = () => Promise.resolve(ABSENT_TOKEN)
+): ChecklistStore {
   const rows = new Map<string, string>();
+  const hekHoudt = async (fence: Fence | undefined): Promise<boolean> =>
+    fence === undefined || (await hekToken(fence.key)) === fence.token;
   return {
     read(mondayItemId) {
       return Promise.resolve(snapshotOf(rows.get(storeKey(mondayItemId)) ?? null));
     },
-    save(mondayItemId, input) {
+    async save(mondayItemId, input, fence) {
       const key = storeKey(mondayItemId);
       const current = rows.get(key) ?? null;
       if (tokenOf(current) !== input.token) {
-        return Promise.resolve(reconcile(current, input));
+        return reconcile(current, input);
+      }
+      if (!(await hekHoudt(fence))) {
+        return { kind: 'conflict', ...snapshotOf(current) };
       }
       const next = encodeRecord(input, now().toISOString());
       rows.set(key, next);
-      return Promise.resolve({ kind: 'ok', saved: { ...input }, token: tokenOf(next) });
+      return { kind: 'ok', saved: { ...input }, token: tokenOf(next) };
+    },
+    async clear(mondayItemId, token, fence) {
+      const key = storeKey(mondayItemId);
+      if (tokenOf(rows.get(key) ?? null) !== token || !(await hekHoudt(fence))) {
+        return 'conflict';
+      }
+      rows.set(key, encodeTombstone(now().toISOString()));
+      return 'ok';
     },
   };
 }

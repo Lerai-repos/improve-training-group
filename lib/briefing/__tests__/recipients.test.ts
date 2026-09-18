@@ -32,6 +32,8 @@ const PROBIBLIO: BriefingTraining = {
   opportunityItemId: null,
   achtergrond: '',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
 };
 

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { buildGenerateContext } from '@lib/briefing/context';
-import { readBriefingTraining } from '@lib/briefing/read';
+import { ankerMetAntwoorden, raaktDezeCyclus } from '@lib/briefing/cyclus-antwoorden';
+import { CyclusDruk, readBriefingMetCyclus, type GeladenBriefing } from '@lib/briefing/load';
 import { createBriefingRecorder } from '@lib/briefing/record';
 import { runGenerate } from '@lib/briefing/run-generate';
 import { siteConfigFromEnv } from '@lib/sharepoint/config';
@@ -11,6 +12,7 @@ import { amsterdamToday } from '@lib/evaluations';
 import { log } from '@lib/logger';
 
 import { guard, readJsonBody, requireAgendaItem } from '../guard';
+
 
 /**
  * POST /api/briefing/[itemId]/generate — de knop.
@@ -141,7 +143,7 @@ export async function POST(
       return scope.response;
     }
 
-    const { monday, mutate, checklists } = guarded.deps;
+    const { monday, mutate, checklists, cycli } = guarded.deps;
     const site = siteConfigFromEnv();
     const graphConfig = graphConfigFromEnv();
     const graph = createGraphClient(graphConfig, { signal: afbreken.signal });
@@ -155,14 +157,53 @@ export async function POST(
     const herstel = createGraphClient(graphConfig, { signal: herstelAfbreken.signal });
     const store = createSharePointStore(graph, await resolveSiteId(graph, site), herstel);
 
+    /**
+     * Het hek van de cyclusstand hoort bij de training die eruit gelezen is; `runGenerate` geeft
+     * die training terug aan `readChecklist`, en zo komt het hek weer boven.
+     */
+    const hekken = new WeakMap<object, Pick<GeladenBriefing, 'fence' | 'geblokkeerd'>>();
     const uit = await runGenerate(
       {
-        readTraining: () =>
-          readBriefingTraining(monday, itemId, {
+        readTraining: async () => {
+          const geladen = await readBriefingMetCyclus(monday, itemId, {
             boardId: scope.boardId,
             relations: scope.relations,
-          }),
-        readChecklist: () => checklists.read(itemId),
+            cycli,
+            checklists,
+          });
+          hekken.set(geladen.training, geladen);
+          return geladen.training;
+        },
+        /**
+         * Hetzelfde anker als het scherm, mét hetzelfde herstel: is het anker verschoven nadat
+         * de tab laadde — een jaargang die archiveert — dan zou een kale lezing hier een leeg
+         * formulier opleveren terwijl de antwoorden onder de vorige sessie staan, en gaat er een
+         * briefing de deur uit zonder het programma dat op het scherm stond.
+         */
+        readChecklist: async (training) => {
+          /**
+           * Een verhuizing die vastloopt op onleesbare antwoorden telt hier als onleesbaar: dan
+           * blokkeert `runGenerate`, in plaats van een briefing te maken uit een leeg formulier
+           * terwijl er ergens antwoorden staan. De lading heeft de verhuizingen al gedraaid en het
+           * hek daarná gelezen, dus hier wordt niets meer gedraaid.
+           */
+          const geladen = hekken.get(training);
+          if (geladen === undefined) {
+            throw new Error('Briefing: checklist gelezen voor een training die niet hier is geladen');
+          }
+          const anker = await ankerMetAntwoorden(checklists, training, geladen.fence);
+          if (anker.opnieuw) {
+            throw new CyclusDruk();
+          }
+          const snapshot = await checklists.read(anker.anker);
+          return {
+            ...snapshot,
+            unreadable:
+              snapshot.unreadable ||
+              anker.geblokkeerd ||
+              raaktDezeCyclus(geladen.geblokkeerd, training),
+          };
+        },
         store,
         site,
         buildContext: (training, invoer) => buildGenerateContext(monday, training, invoer),

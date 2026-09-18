@@ -17,6 +17,7 @@ const BASIS = {
   filenames: ['Briefing.docx'],
   conflicts: [] as readonly string[],
   checklistToken: 'token-1',
+  trainingToken: 'training-1',
 };
 
 describe('planFingerprint', () => {
@@ -33,6 +34,13 @@ describe('planFingerprint', () => {
 
   it('verandert als er een botsing bij komt', () => {
     expect(planFingerprint({ ...BASIS, conflicts: ['Briefing.docx'] })).not.toBe(
+      planFingerprint(BASIS)
+    );
+  });
+
+  /** De cyclus, de datum en de locatie staan op het bord; die horen net zo goed bij de invoer. */
+  it('verandert als de training zelf wijzigt', () => {
+    expect(planFingerprint({ ...BASIS, trainingToken: 'training-2' })).not.toBe(
       planFingerprint(BASIS)
     );
   });

@@ -79,7 +79,7 @@ async function render(
     const extraInfo = await readExtraInfo(client, [training.itemId, training.opportunityItemId]);
     const historie = await readHistorie(
       client,
-      { bedrijf: training.opdrachtgever, excludeItemId: training.itemId },
+      { bedrijf: training.opdrachtgever, excludeItemIds: [training.itemId] },
       await agendaBoardsFor(client)
     );
     const uit = await generateBriefings(training, view.checklist, {

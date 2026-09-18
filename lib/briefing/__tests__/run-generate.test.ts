@@ -4,6 +4,7 @@ import { EMPTY_CHECKLIST } from '../blocks';
 import { OPPORTUNITY_COLUMNS } from '../columns';
 import { ACHTERGROND_LEEG } from '../compose';
 import { plannedFilenames } from '../generate';
+import { ankerItemId } from '../cyclus';
 import { runGenerate, UPLOAD_BUDGET_MS, type RunGenerateDeps } from '../run-generate';
 
 import type { SavedChecklist } from '../answers';
@@ -56,6 +57,8 @@ const TRAINING: BriefingTraining = {
   opportunityItemId: null,
   achtergrond: 'Iets over de klant.',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
 };
 
@@ -162,6 +165,86 @@ describe('runGenerate — plannen', () => {
 
     expect(uit.kind === 'planned' && uit.plan.conflicts).toEqual([VERWACHT[0]]);
     expect(vals.geupload).toEqual([]);
+  });
+
+  /** Vanuit elke sessie van een cyclus dezelfde antwoorden: die van de eerste sessie. */
+  it('leest de antwoorden van een cyclus onder de eerste sessie', async () => {
+    const gelezen: string[] = [];
+    const sessie = (itemId: string, datum: string) => ({
+      itemId,
+      boardId: '5087396949',
+      gearchiveerd: false,
+      datum,
+      tijden: '09:00 - 13:00',
+      locatie: 'Almere',
+      groepsgrootte: '12',
+      zonderThema: false,
+    });
+    const tweede = {
+      ...TRAINING,
+      cyclus: { sessies: [sessie('800', '2026-09-22'), sessie('900', '2027-01-04')], anker: '800' },
+    };
+    const { deps } = bouw({
+      readTraining: () => Promise.resolve(tweede),
+      readChecklist: (training) => {
+        gelezen.push(ankerItemId(training));
+        return Promise.resolve({ saved: OPGESLAGEN, token: 't1', unreadable: false });
+      },
+    });
+
+    await runGenerate(deps, { itemId: '900', confirmExisting: false });
+
+    expect(gelezen).toEqual(['800']);
+  });
+
+  /**
+   * Het document heet naar de cyclus. Zou elke sessie op haar eigen datum schrijven, dan botsen
+   * de bestanden niet en staan er na een jaarwisseling twee briefings voor dezelfde cyclus.
+   */
+  it('gebruikt de datum van de eerste sessie voor de bestandsnaam en de map', async () => {
+    const sessie = (itemId: string, datum: string, gearchiveerd = false) => ({
+      itemId,
+      boardId: gearchiveerd ? '1703587792' : '5087396949',
+      gearchiveerd,
+      datum,
+      tijden: '09:00 - 13:00',
+      locatie: 'Almere',
+      groepsgrootte: '12',
+      zonderThema: false,
+    });
+    /** De eerste sessie is gearchiveerd, dus sessie 2 genereert — met dezelfde bestandsnaam. */
+    const tweede = {
+      ...TRAINING,
+      itemId: '901',
+      datum: '2027-01-04',
+      /** Na de jaarwisseling: het anker is al naar de schrijfbare sessie verplaatst. */
+      cyclus: { sessies: [sessie('900', '2026-09-22', true), sessie('901', '2027-01-04')], anker: '901' },
+    };
+    const { deps, vals } = bouw({ readTraining: () => Promise.resolve(tweede) });
+    /** Precies de namen die sessie 1 zou schrijven, ook al drukt sessie 2 op de knop. */
+    const namenVanDeCyclus = plannedFilenames(
+      { ...TRAINING, datum: '2026-09-22' },
+      EMPTY_CHECKLIST,
+      []
+    );
+
+    const gepland = await runGenerate(deps, { itemId: '901', confirmExisting: false });
+
+    expect(gepland.kind).toBe('planned');
+    if (gepland.kind !== 'planned') {
+      return;
+    }
+    expect(gepland.plan.filenames).toEqual(namenVanDeCyclus);
+    expect(namenVanDeCyclus[0]).toMatch(/22-09-2026/);
+    expect(gepland.plan.folderPath).toBe(MAP);
+
+    await runGenerate(deps, {
+      itemId: '901',
+      confirmExisting: true,
+      planToken: gepland.plan.planToken,
+    });
+
+    expect(vals.geupload).toEqual(namenVanDeCyclus.map((naam) => `${MAP}/${naam}`));
   });
 
   it('blokkeert zonder eenduidige leadtrainer', async () => {

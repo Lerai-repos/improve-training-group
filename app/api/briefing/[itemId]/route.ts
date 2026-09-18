@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { readBriefingTraining } from '@lib/briefing/read';
+import { ankerMetAntwoorden, raaktDezeCyclus } from '@lib/briefing/cyclus-antwoorden';
+import { CyclusDruk, readBriefingMetCyclus } from '@lib/briefing/load';
 
 import { guard, requireAgendaItem } from './guard';
 
@@ -37,13 +38,26 @@ export async function GET(
   }
 
   try {
-    const { monday, checklists } = guarded.deps;
-    const training = await readBriefingTraining(monday, itemId, {
+    const { monday, checklists, cycli } = guarded.deps;
+    /**
+     * De lading maakt eerst af wat een vorige bevestiging niet afkreeg en leest dán het
+     * cyclusrecord, zodat het hek hieronder bij de stand hoort die nu geldt.
+     */
+    const { training, fence, geblokkeerd } = await readBriefingMetCyclus(monday, itemId, {
       boardId: scope.boardId,
       relations: scope.relations,
+      cycli,
+      checklists,
     });
-
-    const snapshot = await checklists.read(itemId);
+    /**
+     * De antwoorden van een trainingscyclus staan onder het anker, zodat de tab op elke sessie
+     * hetzelfde toont. Alles wat hier aan de checklist verandert is gehekt op die cyclusstand.
+     */
+    const anker = await ankerMetAntwoorden(checklists, training, fence);
+    if (anker.opnieuw) {
+      throw new CyclusDruk();
+    }
+    const snapshot = await checklists.read(anker.anker);
 
     return NextResponse.json({
       success: true,
@@ -55,8 +69,15 @@ export async function GET(
          * Er stáát iets in KV en het is niet te lezen. De tab moet dat kunnen zeggen én het
          * bewerken tegenhouden: een leeg formulier tonen leest als "nog niets ingevuld",
          * terwijl één vinkje er onbekende antwoorden mee zou overschrijven.
+         *
+         * Ook als het bij een ánder item van de cyclus staat: een verhuizing die daarop
+         * vastloopt levert een leeg anker op, en dat leest net zo goed als "nog niets
+         * ingevuld" terwijl er antwoorden zijn die niemand ziet.
          */
-        unreadable: snapshot.unreadable,
+        unreadable:
+          snapshot.unreadable ||
+          anker.geblokkeerd ||
+          raaktDezeCyclus(geblokkeerd, training),
       },
     });
   } catch (error) {

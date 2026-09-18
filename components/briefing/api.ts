@@ -151,6 +151,11 @@ export interface BriefingApi {
     itemId: string,
     options?: { confirmExisting?: boolean; planToken?: string }
   ): Promise<GenerateResponse>;
+  /**
+   * Welke sessies samen één briefing krijgen. Een lege lijst betekent "dit is geen cyclus",
+   * en dat wordt net zo goed vastgelegd — anders komt de vraag elke keer terug.
+   */
+  saveCyclus(itemId: string, itemIds: readonly string[], getoond: readonly string[]): Promise<void>;
 }
 
 const UNAUTHORIZED = 401;
@@ -241,6 +246,13 @@ export function createBriefingApi(monday: MondayBridge): BriefingApi {
         true
       );
       return asSaveResult(body.data);
+    },
+
+    async saveCyclus(itemId, itemIds, getoond) {
+      await send(`${base(itemId)}/cyclus`, {
+        method: 'PUT',
+        body: JSON.stringify({ itemIds: [...itemIds], getoond: [...getoond] }),
+      });
     },
 
     async generate(itemId, options) {

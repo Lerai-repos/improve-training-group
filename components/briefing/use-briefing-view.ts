@@ -47,6 +47,12 @@ export type BriefingStatus =
   | { kind: 'loaded'; payload: BriefingPayload; view: TabView }
   | { kind: 'error'; message: string };
 
+/** De stand van het bevestigen van een cyclus. */
+export type CyclusSave =
+  | { kind: 'rust' }
+  | { kind: 'bezig' }
+  | { kind: 'mislukt'; message: string };
+
 /** Waar het opslaan staat. `conflict` is geen fout maar een vraag aan de adviseur. */
 export type SaveState =
   | { kind: 'rust' }
@@ -73,6 +79,16 @@ export interface UseBriefingView {
   answerActor(werktMee: boolean): void;
   /** Het onleesbare record bewust overschrijven. */
   unlock(): void;
+  /**
+   * Bevestigen welke sessies samen één briefing krijgen; een lege lijst is "geen cyclus".
+   *
+   * Laadt daarna opnieuw, want de bevestiging verandert waar de antwoorden staan en wat er
+   * gegenereerd zou worden. Dat uit één bron laten komen is goedkoper dan het scherm zelf
+   * laten raden wat de server ervan gemaakt heeft.
+   */
+  bevestigCyclus(itemIds: readonly string[], getoond: readonly string[]): void;
+  /** De stand van die bevestiging, voor de knop en de melding eronder. */
+  readonly cyclus: CyclusSave;
   refresh(): void;
   /**
    * De openstaande wijziging nú wegschrijven, en zeggen of het concept daarna veilig staat.
@@ -227,6 +243,10 @@ export function useBriefingView(
         }
         zetSave(taakVoor.itemId, { kind: 'bezig' });
         try {
+          /**
+           * Naar het item van de context; de server bepaalt zelf onder welk anker dit landt.
+           * Een anker dat de tab bij het laden onthield kan intussen verschoven zijn.
+           */
           const result = await api.saveChecklist(
             taakVoor.itemId,
             { ...taakVoor.answers, token },
@@ -256,15 +276,21 @@ export function useBriefingView(
     }
     const controller = new AbortController();
     /**
-     * Eerst de lopende schrijfactie voor dít item afwachten.
+     * Eerst ELKE lopende schrijfactie afwachten, niet alleen die van dít item.
      *
      * Na een flush bij het wegnavigeren kan de adviseur terugkomen vóórdat die klaar is. Dan
      * liepen `GET` en `PUT` door elkaar: wint de schrijfactie, dan staat er een oud beeld op
      * het scherm mét een vers token, en overschrijft de volgende wijziging de geflushte
      * wijziging. Wint de `GET`, dan draagt hij een verlopen token en botst de volgende
      * wijziging met onszelf.
+     *
+     * Alles afwachten en niet alleen dit item, omdat de sessies van één trainingscyclus
+     * **hetzelfde record** delen: wie van sessie 1 naar sessie 2 klikt terwijl de opslag van
+     * sessie 1 nog onderweg is, leest anders de stand van vóór zijn eigen wijziging — met een
+     * token dat meteen daarna botst. De schrijfacties duren tientallen milliseconden, dus dit
+     * kost niets merkbaars.
      */
-    const lopend = inFlight.current.get(itemId);
+    const lopend = Promise.allSettled([...inFlight.current.values()]);
     setLoaded({ itemId, value: { kind: 'loading' } });
     /**
      * Een botsing of een mislukte schrijfactie blijft staan tot iemand hem oplost.
@@ -467,6 +493,11 @@ export function useBriefingView(
     []
   );
 
+  const [cyclus, setCyclus] = useState<Owned<CyclusSave>>({
+    itemId: null,
+    value: { kind: 'rust' },
+  });
+
   const refresh = useCallback(() => {
     // De adviseur zegt: ik heb de botsing of de fout gezien. Pas dán mag hij weg.
     if (itemId !== null) {
@@ -505,6 +536,47 @@ export function useBriefingView(
     return stand === undefined || stand.kind === 'rust' || stand.kind === 'bewaard';
   }, [bewaar, itemId]);
 
+  /**
+   * Bevestigen welke sessies samen één briefing krijgen.
+   *
+   * **Eerst flushen.** De checklist wordt uitgesteld opgeslagen; wie een tekst typt en meteen
+   * bevestigt zou anders de oude tekst mee laten verhuizen, waarna de late schrijfactie de
+   * nieuwe tekst onder het óude item achterlaat — en het scherm na het herladen de verouderde
+   * versie toont. Lukt dat opslaan niet, dan gaat de bevestiging niet door en staat er waarom.
+   */
+  const bevestigCyclus = useCallback(
+    (itemIds: readonly string[], getoond: readonly string[]) => {
+      const doel = itemId;
+      if (doel === null) {
+        return;
+      }
+      setCyclus({ itemId: doel, value: { kind: 'bezig' } });
+      void flush()
+        .then(async (veilig) => {
+          if (!veilig) {
+            setCyclus({
+              itemId: doel,
+              value: {
+                kind: 'mislukt',
+                message:
+                  'Je laatste wijziging is niet opgeslagen. Los dat eerst op en bevestig daarna ' +
+                  'opnieuw.',
+              },
+            });
+            return;
+          }
+          await api.saveCyclus(doel, itemIds, getoond);
+          setCyclus({ itemId: doel, value: { kind: 'rust' } });
+          setNonce((n) => n + 1);
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          setCyclus({ itemId: doel, value: { kind: 'mislukt', message } });
+        });
+    },
+    [api, flush, itemId]
+  );
+
   return {
     itemId,
     theme: context?.theme ?? null,
@@ -523,5 +595,7 @@ export function useBriefingView(
     unlock,
     refresh,
     flush,
+    bevestigCyclus,
+    cyclus: cyclus.itemId === itemId ? cyclus.value : { kind: 'rust' },
   };
 }

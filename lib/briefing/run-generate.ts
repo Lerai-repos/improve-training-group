@@ -7,6 +7,7 @@ import {
 import { yearOfDate } from '@lib/sharepoint/paths';
 
 import { metEigenAchtergrond } from './achtergrond';
+import { cyclusIdentiteit } from './cyclus';
 import { generateBriefings, plannedFilenames } from './generate';
 import { planChangeReason, planFingerprint, trainingFingerprint } from './plan-token';
 import { recordGeneration, recordInputFor } from './record';
@@ -41,8 +42,14 @@ export interface GenerateSnapshot {
 export interface RunGenerateDeps {
   /** De training van het agendabord. Wordt twee keer aangeroepen: vóór en ná het renderen. */
   readTraining(): Promise<BriefingTraining>;
-  /** De opgeslagen antwoorden. Ook twee keer, om dezelfde reden. */
-  readChecklist(): Promise<GenerateSnapshot>;
+  /**
+   * De opgeslagen antwoorden van deze training. Ook twee keer, om dezelfde reden.
+   *
+   * Krijgt de hele training mee en niet alleen een item-id, want bij een trainingscyclus staan
+   * de antwoorden onder het anker — en dat anker kan hersteld moeten worden voordat er iets te
+   * lezen valt. Die ene plek bepaalt wat het scherm én de knop zien.
+   */
+  readChecklist(training: BriefingTraining): Promise<GenerateSnapshot>;
   readonly store: BriefingStore;
   readonly site: SiteConfig;
   buildContext(
@@ -107,7 +114,7 @@ export async function runGenerate(
   input: RunGenerateInput
 ): Promise<RunGenerateOutcome> {
   const opgehaald = await deps.readTraining();
-  const snapshot = await deps.readChecklist();
+  const snapshot = await deps.readChecklist(opgehaald);
   /** De getypte achtergrond hoort in het document, net als op het scherm. */
   const training = metEigenAchtergrond(opgehaald, snapshot.saved?.checklist.achtergrondInhoud);
 
@@ -140,11 +147,17 @@ export async function runGenerate(
     };
   }
 
+  /**
+   * De naam en de map horen bij de CYCLUS, niet bij de sessie die op Genereren drukte. Zo
+   * schrijft elke sessie naar hetzelfde bestand en ziet de adviseur een botsing in plaats van
+   * een tweede briefing voor dezelfde cyclus.
+   */
+  const identiteit = cyclusIdentiteit(training);
   const plek = {
-    label: training.label,
-    klant: training.opdrachtgever,
-    jaar: yearOfDate(training.datum),
-    filenames: plannedFilenames(training, view.checklist, view.actorItemIds),
+    label: identiteit.label,
+    klant: identiteit.opdrachtgever,
+    jaar: yearOfDate(identiteit.datum),
+    filenames: plannedFilenames(identiteit, view.checklist, view.actorItemIds),
   };
 
   const gepland = await planBriefings(deps.store, deps.site, plek);
@@ -158,6 +171,7 @@ export async function runGenerate(
     filenames: plek.filenames,
     conflicts: gepland.plan.conflicts,
     checklistToken: snapshot.token,
+    trainingToken: trainingFingerprint(opgehaald),
   });
   const plan: PlanPayload = {
     stage: 'planned',
@@ -194,7 +208,7 @@ export async function runGenerate(
     trainerItemIds: view.documenten.map((doc) => doc.itemId),
   });
 
-  const gemaakt = await generateBriefings(training, view.checklist, context);
+  const gemaakt = await generateBriefings(training, view.checklist, context, identiteit);
   if (gemaakt.kind === 'refused') {
     return { kind: 'refused', message: gemaakt.reason };
   }
@@ -204,7 +218,11 @@ export async function runGenerate(
    * de LLM. Een collega kan in die seconden een antwoord wijzigen of de datum verzetten, en
    * dan hoort er geen document de deur uit te gaan dat bij niemands antwoorden past.
    */
-  const verse = await deps.readChecklist();
+  /**
+   * Onder hetzelfde anker — dus met de training van vóór het renderen. Is de cyclus intussen
+   * veranderd, dan verschilt de vingerafdruk van de training hieronder al, want die omvat hem.
+   */
+  const verse = await deps.readChecklist(opgehaald);
   const verseTraining = await deps.readTraining();
   if (
     verse.token !== snapshot.token ||
@@ -269,6 +287,7 @@ export async function runGenerate(
                   filenames: plek.filenames,
                   conflicts: opnieuw.plan.conflicts,
                   checklistToken: snapshot.token,
+                  trainingToken: trainingFingerprint(opgehaald),
                 }),
               }
             : { ...plan, changed: 'files' },
@@ -292,7 +311,14 @@ export async function runGenerate(
       trainingItemId: input.itemId,
       documents: gemaakt.documents,
       written: geschreven.written,
-      ontbrekend: training.missing.map((veld) => veld.label),
+      /**
+       * Ook een sessie van de cyclus zonder thema: dezelfde regel als het Compleet-label in de
+       * tab, zodat het label en `Brie` hetzelfde zeggen.
+       */
+      ontbrekend: [
+        ...training.missing.map((veld) => veld.label),
+        ...view.issues.filter((issue) => issue.kind === 'cyclus').map((issue) => issue.tekst),
+      ],
       vandaag: deps.today(),
     })
   );

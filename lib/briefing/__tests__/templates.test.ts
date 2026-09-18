@@ -291,6 +291,8 @@ const TRAINING: BriefingTraining = {
   opportunityItemId: null,
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
 };
 

@@ -22,13 +22,14 @@ import {
 } from './compose';
 import { describeOpenIssue, isNotDecided, splitOpenIssue } from './open-issues';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
+import { ankerItemId } from './cyclus';
 import { conceptLines, resolveConceptInhoud } from './concept';
 import { formatDutchDate } from './deadline';
 import { resolveRecipientRoles, type RecipientRole } from './recipients';
 import { metEigenAchtergrond } from './achtergrond';
 import { EMPTY_SAVED, type SavedChecklist } from './answers';
 
-import type { BriefingTraining, BriefingTrainer } from './types';
+import type { BriefingTraining, BriefingTrainer, CyclusKeuze } from './types';
 
 /** Eén gekoppelde persoon, zoals de tab hem toont bij de acteurvraag. */
 export interface TabPerson {
@@ -63,7 +64,8 @@ export interface TabIssue {
     | 'acteur_niet_gekoppeld'
     | 'interne_trainer'
     | 'veld_leeg'
-    | 'onbepaald';
+    | 'onbepaald'
+    | 'cyclus';
   readonly tekst: string;
   readonly blokkeert: boolean;
 }
@@ -144,6 +146,8 @@ export interface TabView {
   /** Wat de adviseur zelf heeft getypt, of `null` als hij het niet heeft aangeraakt. */
   readonly achtergrondEigen: string | null;
   readonly documenten: readonly TabDocument[];
+  /** De vinkjes voor "welke sessies horen bij deze cyclus?", of `null` als er niets te vragen is. */
+  readonly cyclusKeuze: CyclusKeuze | null;
   readonly issues: readonly TabIssue[];
   readonly gereedheid: TabGereedheid;
   readonly kanGenereren: boolean;
@@ -386,6 +390,35 @@ function controlesVoor(input: {
     'de kolom Voorb. opdr.'
   );
 
+  const cyclus = training.cyclus;
+  if (cyclus !== null && cyclus.sessies.length > 1) {
+    lijst.push({
+      key: 'cyclus-sessies',
+      label: `Trainingscyclus: ${cyclus.sessies.length} sessies`,
+      status: 'ok',
+      uitleg:
+        `${cyclus.sessies.map((sessie) => sessieDatum(sessie.datum)).join(', ')}. ` +
+        'Deze sessies horen bij één cyclus; de keuzes en teksten in deze tab gelden voor alle ' +
+        'sessies.',
+    });
+  }
+  const elders = genereertElders(training);
+  if (elders !== null) {
+    lijst.push({ key: 'cyclus-anker', label: 'Genereren vanaf sessie 1', status: 'blokkeert', uitleg: elders });
+  }
+  const vraag = openstaandeCyclusvraag(training);
+  if (vraag !== null) {
+    lijst.push({ key: 'cyclus-vraag', label: 'Cyclus bevestigen', status: 'ontbreekt', uitleg: vraag });
+  }
+  themaloos(training).forEach((tekst, index) => {
+    lijst.push({
+      key: `cyclus-thema-${index}`,
+      label: 'Thema ontbreekt',
+      status: 'ontbreekt',
+      uitleg: tekst,
+    });
+  });
+
   const regels = input.regels.map(splitOpenIssue);
   const concept = regels.find((r) => r.wat.toLowerCase() === 'concept-inhoud');
   lijst.push(
@@ -418,6 +451,69 @@ function controlesVoor(input: {
     .map((controle, index) => ({ controle, index }))
     .sort((a, b) => VOLGORDE[a.controle.status] - VOLGORDE[b.controle.status] || a.index - b.index)
     .map(({ controle }) => controle);
+}
+
+/** "22 september 2026", of zeggen dát de datum ontbreekt. */
+const sessieDatum = (datum: string): string =>
+  datum === '' ? 'een sessie zonder datum' : formatDutchDate(datum);
+
+/**
+ * Sessies van de BEVESTIGDE cyclus zonder thema, behalve deze training (die meldt haar eigen
+ * lege thema al).
+ *
+ * Wél een probleem: de sessie hoort bij de cyclus, dus het bord klopt niet en de adviseur kan
+ * het oplossen.
+ */
+function themaloos(training: BriefingTraining): string[] {
+  return (training.cyclus?.sessies ?? [])
+    .filter((sessie) => sessie.zonderThema && sessie.itemId !== training.itemId)
+    .map(
+      (sessie) =>
+        `De sessie van ${sessieDatum(sessie.datum)} hoort bij deze cyclus maar heeft geen ` +
+        'thema. Vul het thema in Monday in.'
+    );
+}
+
+/**
+ * Deze sessie hoort bij een bevestigde cyclus, maar is niet de sessie die de briefing maakt.
+ *
+ * Zolang het document nog per sessie wordt gemaakt (zie het geheugen `itg-briefing-cyclus-groep`,
+ * deel 2 wacht op ITG's voorbeeld) zou genereren vanaf sessie 2 een tweede briefing opleveren —
+ * met een andere datum, een andere bestandsnaam en een eigen map — voor een cyclus die er al een
+ * heeft. Eén sessie maakt hem dus, en dat is dezelfde sessie waar de antwoorden onder staan.
+ */
+function genereertElders(training: BriefingTraining): string | null {
+  const sessies = training.cyclus?.sessies ?? [];
+  const anker = ankerItemId(training);
+  if (sessies.length < 2 || anker === training.itemId) {
+    return null;
+  }
+  const eerste = sessies.find((sessie) => sessie.itemId === anker);
+  return (
+    `Deze sessie hoort bij een trainingscyclus. De briefing wordt gemaakt vanaf de sessie van ` +
+    `${sessieDatum(eerste?.datum ?? '')} en geldt voor alle sessies; open die sessie om te ` +
+    'genereren.'
+  );
+}
+
+/**
+ * De vraag die nog beantwoord moet worden, of `null`.
+ *
+ * Zolang niemand bevestigt blijft elke sessie haar eigen briefing houden. Dat is de veilige
+ * stand, maar het is wél een open vraag: daarom telt hij mee voor "Nog niet compleet", net als
+ * een leeg veld, en niet als blokkade.
+ */
+function openstaandeCyclusvraag(training: BriefingTraining): string | null {
+  const keuze = training.cyclusKeuze;
+  if (keuze === null || !keuze.openstaand) {
+    return null;
+  }
+  const anderen = keuze.opties.filter((optie) => !optie.huidig).length;
+  return (
+    `Er ${anderen === 1 ? 'staat 1 andere sessie' : `staan ${anderen} andere sessies`} onder ` +
+    'dezelfde opdracht met een trainingscyclus. Vink bij Trainingscyclus aan welke sessies ' +
+    'samen één briefing krijgen, of bevestig dat het er geen is.'
+  );
 }
 
 const ROL: Record<RecipientRole, string> = {
@@ -562,6 +658,17 @@ export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist 
     });
   }
   issues.push(...legeVelden(training, onderdrukt));
+  const anderSessie = genereertElders(training);
+  const cyclusvraag = openstaandeCyclusvraag(training);
+  issues.push(
+    ...(anderSessie === null
+      ? []
+      : [{ kind: 'cyclus' as const, tekst: anderSessie, blokkeert: true }]),
+    ...(cyclusvraag === null
+      ? []
+      : [{ kind: 'cyclus' as const, tekst: cyclusvraag, blokkeert: false }]),
+    ...themaloos(training).map((tekst) => ({ kind: 'cyclus' as const, tekst, blokkeert: false }))
+  );
   const regels = onbepaaldeRegels(training, checklist, antwoorden.actorItemIds);
   issues.push(
     ...regels.map((t) => ({
@@ -611,6 +718,7 @@ export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist 
     achtergrondBron: opgehaald.achtergrond,
     achtergrondEigen: antwoorden.checklist.achtergrondInhoud ?? null,
     documenten,
+    cyclusKeuze: training.cyclusKeuze,
     issues,
     gereedheid: {
       compleet: issues.length === 0,

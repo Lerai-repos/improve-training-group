@@ -22,6 +22,15 @@ export interface PlanFingerprintInput {
   readonly conflicts: readonly string[];
   /** Het token van de opgeslagen checklist: verandert zodra iemand een antwoord wijzigt. */
   readonly checklistToken: string;
+  /**
+   * De vingerafdruk van de training zelf (`trainingFingerprint`).
+   *
+   * Hoort bij de invoer, want niet alles wat het document bepaalt staat in de checklist: de
+   * datum, de locatie én de trainingscyclus zitten op het bord. Zonder dit blijft een plan
+   * geldig terwijl iemand een sessie bij de cyclus vinkt — dezelfde bestandsnamen, hetzelfde
+   * checklisttoken — en bevestigt de adviseur iets anders dan hij heeft gezien.
+   */
+  readonly trainingToken: string;
 }
 
 const hash = (waarde: unknown): string =>
@@ -46,7 +55,7 @@ export function planFingerprint(input: PlanFingerprintInput): string {
       filenames: [...input.filenames].sort(),
       conflicts: [...input.conflicts].sort(),
     }),
-    hash(input.checklistToken),
+    hash([input.checklistToken, input.trainingToken]),
   ].join('.');
 }
 

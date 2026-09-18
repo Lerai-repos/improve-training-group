@@ -309,8 +309,13 @@ async function readTrainerNames(
 export interface HistorieInput {
   /** De `Bedrijf`-waarde van de training waarvoor de briefing wordt gemaakt. */
   readonly bedrijf: string;
-  /** De training zelf hoort niet in haar eigen historie. */
-  readonly excludeItemId: string;
+  /**
+   * De training zelf hoort niet in haar eigen historie, en de andere sessies van haar
+   * trainingscyclus ook niet: die staan al in de briefing zelf. Dirkje, 17-Sep-2026, over
+   * CNV: *"Die staan dan ook in die tabel. Terwijl eigenlijk gaat die briefing in theorie ook
+   * over die opdrachten."* Andere trainingen bij dezelfde klant blijven gewoon staan.
+   */
+  readonly excludeItemIds: readonly string[];
   /**
    * Hoeveel rijen er hoogstens in de tabel komen, of `undefined` voor alles.
    *
@@ -341,9 +346,10 @@ export async function readHistorie(
   const matches = (bedrijf: string): boolean => clientKey(bedrijf) === wanted;
 
   const perBoard = await Promise.all(boards.map((board) => readBoard(client, board, matches)));
+  const uitgesloten = new Set(input.excludeItemIds);
   const sessions = perBoard
     .flat()
-    .filter((session) => session.itemId !== input.excludeItemId)
+    .filter((session) => !uitgesloten.has(session.itemId))
     /**
      * Zonder datum is een rij onbruikbaar: hij is niet te sorteren en de eerste kolom van
      * de tabel blijft leeg. Gemeten is dat zeldzaam (1649 van de 1780 items hebben datum,

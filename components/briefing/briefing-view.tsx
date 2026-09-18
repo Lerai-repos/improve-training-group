@@ -8,6 +8,7 @@ import { cn } from '@lib/utils';
 
 import { AchtergrondPanel } from './achtergrond-panel';
 import { ChecklistPanel } from './checklist-panel';
+import { CyclusPanel } from './cyclus-panel';
 import { GeneratePanel, type GenerateState } from './generate-panel';
 import { ConceptPanel } from './concept-panel';
 import { DocumentsPanel } from './documents-panel';
@@ -137,7 +138,14 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
   }
 
   const { view: tab } = view.status;
-  const bewerkenOpSlot = view.locked || generate.state.kind === 'bezig';
+  const cyclusBezig = view.cyclus.kind === 'bezig';
+  const genererenBezig = generate.state.kind === 'bezig';
+  /**
+   * Ook op slot terwijl de cyclus bevestigd wordt: die stap flusht eerst het concept en
+   * verschuift daarna waar de antwoorden staan. Een vinkje in dat gat zou een nieuwe
+   * schrijfactie starten naar het oude anker, en de herlaadactie erna gooit dat weg.
+   */
+  const bewerkenOpSlot = view.locked || genererenBezig || cyclusBezig;
 
   return (
     <div className={surface} data-testid="briefing-view">
@@ -218,6 +226,26 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
+          {/*
+            Boven de keuzes, want dit gaat over de vraag hoevéél briefings er komen — en dat
+            bepaalt waar de antwoorden hieronder terechtkomen. Buiten de `fieldset`: het is
+            geen antwoord dat met de checklist wordt meegeschreven, maar een eigen bevestiging
+            met een eigen knop.
+          */}
+          {tab.cyclusKeuze !== null && (
+            <CyclusPanel
+              keuze={tab.cyclusKeuze}
+              /**
+               * Ook op slot terwijl er gegenereerd wordt, en omgekeerd staat Genereren stil
+               * terwijl dit loopt. De twee gaan over hetzelfde: welke sessies in dit document
+               * horen. Een wijziging die landt ná de laatste controle van de server levert een
+               * briefing op voor een cyclus die niet meer bestaat.
+               */
+              bezig={cyclusBezig || genererenBezig}
+              fout={view.cyclus.kind === 'mislukt' ? view.cyclus.message : null}
+              onBevestig={view.bevestigCyclus}
+            />
+          )}
           <fieldset
             disabled={bewerkenOpSlot}
             className={cn('grid min-w-0 gap-4', bewerkenOpSlot && 'opacity-60')}
@@ -250,7 +278,7 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
           */}
           <GeneratePanel
             state={generate.state}
-            kanGenereren={tab.kanGenereren && !view.locked}
+            kanGenereren={tab.kanGenereren && !view.locked && !cyclusBezig}
             onGenerate={generate.generate}
             onConfirm={generate.confirm}
             onCancel={generate.cancel}

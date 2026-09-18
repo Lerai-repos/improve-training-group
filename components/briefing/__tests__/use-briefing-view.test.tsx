@@ -50,6 +50,8 @@ const trainingVoor = (itemId: string, over: Partial<BriefingTraining> = {}): Bri
   opportunityItemId: null,
   achtergrond: 'Iets.',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
   ...over,
 });
@@ -96,6 +98,10 @@ function fakeApi(over: {
     /** Deze suite gaat over opslaan; genereren heeft zijn eigen tests en hoort hier niet. */
     generate: () =>
       Promise.reject(new Error('generate hoort in deze suite niet aangeroepen te worden')),
+    saveCyclus: (itemId, itemIds) => {
+      log.push(`cyclus:${itemId}:${[...itemIds].join(',')}`);
+      return Promise.resolve();
+    },
     async get(itemId) {
       /**
        * De waarde wordt gelezen op het moment dat het verzoek binnenkomt, en pas daarna komt
@@ -177,6 +183,119 @@ describe('useBriefingView', () => {
     });
     expect(api.writes[0]?.input.checklist.ownGroup).toBe(true);
     expect(api.writes[0]?.input.token).toBe('token-900');
+  });
+
+  /**
+   * Een trainingscyclus: de tab schrijft naar het item van de context en laat de SERVER het
+   * anker bepalen. Een anker dat de tab bij het laden zou onthouden kan intussen verschoven zijn.
+   */
+  it('schrijft naar het eigen item en laat het anker aan de server', async () => {
+    const sessie = (itemId: string, datum: string) => ({
+      itemId,
+      boardId: '5087396949',
+      gearchiveerd: false,
+      datum,
+      tijden: '09:00 - 13:00',
+      locatie: 'Almere',
+      groepsgrootte: '12',
+      zonderThema: false,
+    });
+    const monday = fakeMonday(CTX('900'));
+    const api = fakeApi({
+      payloads: {
+        '900': payloadVoor('900', {
+          training: {
+            ...trainingVoor('900'),
+            cyclus: { sessies: [sessie('800', '2026-09-22'), sessie('900', '2027-01-04')], anker: '800' },
+          },
+        }),
+      },
+    });
+    const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    act(() => {
+      result.current.setChecklist({ ownGroup: true });
+    });
+    await waitFor(() => {
+      expect(api.writes).toHaveLength(1);
+    });
+    expect(api.writes[0]?.itemId).toBe('900');
+    expect(api.writes[0]?.input.token).toBe('token-900');
+  });
+
+  /**
+   * Typen en meteen bevestigen: de uitgestelde schrijfactie moet éérst geland zijn, anders
+   * verhuist de oude tekst mee en landt de nieuwe onder het verlaten item.
+   */
+  it('schrijft een openstaande wijziging weg vóór het bevestigen van de cyclus', async () => {
+    const monday = fakeMonday(CTX('900'));
+    const api = fakeApi({});
+    const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    /** Twee gebeurtenissen, zoals in het echt: typen, en daarna klikken. */
+    act(() => {
+      result.current.setChecklist({ conceptInhoud: 'Vers programma' });
+    });
+    act(() => {
+      result.current.bevestigCyclus(['800', '900'], ['800', '900']);
+    });
+
+    await waitFor(() => {
+      expect(api.log).toContain('cyclus:900:800,900');
+    });
+    expect(api.log.indexOf('save:end:900')).toBeLessThan(api.log.indexOf('cyclus:900:800,900'));
+    expect(api.writes[0]?.input.checklist.conceptInhoud).toBe('Vers programma');
+  });
+
+  /** Lukt dat opslaan niet, dan mag de cyclus niet verschuiven: de tekst zou zoekraken. */
+  it('bevestigt de cyclus niet als de laatste wijziging niet opgeslagen is', async () => {
+    const monday = fakeMonday(CTX('900'));
+    const api = fakeApi({ conflict: true });
+    const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    act(() => {
+      result.current.setChecklist({ conceptInhoud: 'Vers programma' });
+    });
+    await waitFor(() => {
+      expect(result.current.save.kind).toBe('conflict');
+    });
+    act(() => {
+      result.current.bevestigCyclus(['800', '900'], ['800', '900']);
+    });
+
+    await waitFor(() => {
+      expect(result.current.cyclus.kind).toBe('mislukt');
+    });
+    expect(api.log.some((r) => r.startsWith('cyclus:'))).toBe(false);
+  });
+
+  /** Bevestigen verandert waar de antwoorden staan, dus daarna moet het scherm opnieuw laden. */
+  it('bevestigt de cyclus en laadt daarna opnieuw', async () => {
+    const monday = fakeMonday(CTX('900'));
+    const api = fakeApi({});
+    const { result } = renderHook(() => useBriefingView(monday, api, OPTIES));
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    act(() => {
+      result.current.bevestigCyclus(['800', '900'], ['800', '900']);
+    });
+
+    await waitFor(() => {
+      expect(api.log.filter((r) => r.startsWith('get:start')).length).toBe(2);
+    });
+    expect(api.log).toContain('cyclus:900:800,900');
+    expect(result.current.cyclus).toEqual({ kind: 'rust' });
   });
 
   /**
@@ -623,6 +742,34 @@ describe('useBriefingView', () => {
     const tweedeGet = api.log.indexOf('get:start:900', api.log.indexOf('get:end:900') + 1);
     expect(saveEnd).toBeGreaterThan(-1);
     expect(tweedeGet).toBeGreaterThan(saveEnd);
+  });
+
+  /**
+   * Twee sessies van één cyclus delen hetzelfde record. Wie doorklikt terwijl de opslag van de
+   * vorige sessie nog loopt, zou anders de stand van vóór zijn eigen wijziging lezen — met een
+   * token dat meteen daarna botst.
+   */
+  it('laadt een andere sessie pas nadat de lopende schrijfactie klaar is', async () => {
+    const monday = fakeMonday(CTX('900'));
+    const api = fakeApi({ vertraagSave: 30 });
+    const { result } = renderHook(() => useBriefingView(monday, api, { saveDebounceMs: 5_000 }));
+    await waitFor(() => {
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    act(() => {
+      result.current.setChecklist({ ownGroup: true });
+    });
+    act(() => {
+      monday.changeContext(CTX('901'));
+    });
+
+    await waitFor(() => {
+      expect(result.current.itemId).toBe('901');
+      expect(result.current.status.kind).toBe('loaded');
+    });
+
+    expect(api.log.indexOf('save:end:900')).toBeLessThan(api.log.indexOf('get:start:901'));
   });
 
   /**

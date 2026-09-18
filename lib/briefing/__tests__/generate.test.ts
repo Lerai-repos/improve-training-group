@@ -48,6 +48,8 @@ const TRAINING: BriefingTraining = {
   opportunityItemId: null,
   achtergrond: 'Iets over de klant.',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
 };
 

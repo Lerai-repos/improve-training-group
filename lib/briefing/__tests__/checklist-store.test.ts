@@ -18,6 +18,37 @@ const ANTWOORD: SavedChecklist = {
   actorAnswered: true,
 };
 
+/**
+ * Het hek: een tweede sleutel die niet veranderd mag zijn.
+ *
+ * Voor de trainingscyclus. Waar de antwoorden horen volgt uit het cyclusrecord, en dat kan
+ * veranderen tussen het bepalen en het schrijven. Een controle ná het schrijven is te laat.
+ */
+describe('checklist-store — hek', () => {
+  const HEK = 'briefing:cyclus:opp1';
+
+  it('schrijft als het hek nog staat', async () => {
+    const store = createMemoryChecklistStore(undefined, () => Promise.resolve('versie-1'));
+    const uit = await store.save('1', { ...ANTWOORD, token: 'absent' }, { key: HEK, token: 'versie-1' });
+    expect(uit.kind).toBe('ok');
+  });
+
+  it('weigert te schrijven als het hek verschoven is, ook met een kloppend token', async () => {
+    const store = createMemoryChecklistStore(undefined, () => Promise.resolve('versie-2'));
+    const uit = await store.save('1', { ...ANTWOORD, token: 'absent' }, { key: HEK, token: 'versie-1' });
+    expect(uit.kind).toBe('conflict');
+    expect((await store.read('1')).saved).toBeNull();
+  });
+
+  it('weigert ook een grafsteen als het hek verschoven is', async () => {
+    const store = createMemoryChecklistStore(undefined, () => Promise.resolve('versie-2'));
+    await store.save('1', { ...ANTWOORD, token: 'absent' });
+    const token = (await store.read('1')).token;
+    expect(await store.clear('1', token, { key: HEK, token: 'versie-1' })).toBe('conflict');
+    expect((await store.read('1')).saved).not.toBeNull();
+  });
+});
+
 describe('checklist-store', () => {
   it('geeft niets terug voor een training die nog niet is aangeraakt', async () => {
     const store = createMemoryChecklistStore();

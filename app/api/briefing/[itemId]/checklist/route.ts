@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { CONCEPT_MAX_LENGTH, validateChecklist } from '@lib/briefing/checklist-store';
+import { resolveChecklistAnker } from '@lib/briefing/cyclus-anker';
 
 import { guard, readJsonBody, requireAgendaItem } from '../guard';
 
@@ -77,7 +78,23 @@ export async function PUT(
   }
 
   try {
-    const uit = await guarded.deps.checklists.save(itemId, { ...input, token: parsed.data.token });
+    const { monday, cycli, checklists } = guarded.deps;
+    /**
+     * Op de server bepalen waar dit landt, bij élke schrijfactie.
+     *
+     * De tab kent het anker van bij het laden, maar een collega kan de cyclus intussen anders
+     * hebben bevestigd. Schrijven naar het oude anker lukt dan gewoon — en de laatste wijziging
+     * staat onder een sleutel die niemand meer leest. Klopt het token niet meer met het record
+     * waar het nú hoort, dan wordt dat hieronder een botsing, en laadt de tab opnieuw.
+     */
+    const { anker, fence } = await resolveChecklistAnker(monday, cycli, itemId);
+    /**
+     * Gehekt op de cyclusstand waar het anker uit komt: verandert een collega de cyclus tussen
+     * het bepalen en het schrijven, dan gaat het schrijven niet door en is dit een botsing. Een
+     * controle ná het schrijven zou te laat zijn — dan stond het concept al onder een sleutel die
+     * intussen bij een andere cyclus hoort.
+     */
+    const uit = await checklists.save(anker, { ...input, token: parsed.data.token }, fence);
     if (uit.kind === 'conflict') {
       return NextResponse.json(
         {

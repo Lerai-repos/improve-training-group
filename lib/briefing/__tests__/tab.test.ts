@@ -44,6 +44,8 @@ const TRAINING: BriefingTraining = {
   opportunityItemId: null,
   achtergrond: 'Iets over de klant.',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
 };
 
@@ -419,6 +421,105 @@ describe('buildTabView', () => {
         trainingCycle: true,
         homework: false,
         preparatoryAssignment: true,
+      });
+    });
+
+    describe('trainingscyclus', () => {
+      const sessie = (itemId: string, datum: string, zonderThema = false) => ({
+        itemId,
+        boardId: '5087396949',
+        gearchiveerd: false,
+        datum,
+        tijden: '09:00 - 13:00',
+        locatie: 'Almere',
+        groepsgrootte: '12',
+        zonderThema,
+      });
+      const optie = (itemId: string, huidig: boolean, aangevinkt: boolean) => ({
+        itemId,
+        datum: '2027-01-04',
+        klanttitel: 'Navigating difficult conversations',
+        trainers: 'Isabelle Zwetsloot',
+        huidig,
+        aangevinkt,
+        voorgesteld: aangevinkt,
+        reden: null,
+      });
+
+      it('toont de bevestigde sessies en blijft compleet', () => {
+        const uit = buildTabView(
+          {
+            ...KLAAR,
+            itemId: '900',
+            cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04')], anker: '900' },
+            cyclusKeuze: { opties: [optie('900', true, true), optie('901', false, true)], openstaand: false },
+          },
+          opgeslagen()
+        );
+        expect(controle(uit, 'Trainingscyclus: 2 sessies')?.uitleg).toMatch(
+          /^22 september 2026, 4 januari 2027\./
+        );
+        expect(uit.gereedheid.compleet).toBe(true);
+      });
+
+      /**
+       * De vraag staat open: er gebeurt nog niets, maar de briefing is pas af als iemand heeft
+       * gezegd of deze sessies samen één document worden.
+       */
+      it('vraagt om bevestiging zolang de cyclus niet beantwoord is', () => {
+        const uit = buildTabView(
+          {
+            ...KLAAR,
+            itemId: '900',
+            cyclusKeuze: { opties: [optie('900', true, true), optie('901', false, true)], openstaand: true },
+          },
+          opgeslagen()
+        );
+        expect(controle(uit, 'Cyclus bevestigen')?.uitleg).toMatch(
+          /staat 1 andere sessie onder dezelfde opdracht/
+        );
+        expect(uit.gereedheid.compleet).toBe(false);
+        expect(uit.kanGenereren).toBe(true);
+        expect(uit.cyclusKeuze?.opties).toHaveLength(2);
+      });
+
+      /**
+       * Zolang het document per sessie gemaakt wordt, maakt één sessie hem — anders staan er twee
+       * briefings voor dezelfde cyclus in de klantmap.
+       */
+      it('laat alleen de eerste sessie genereren', () => {
+        const cyclus = {
+          sessies: [sessie('800', '2026-09-22'), sessie('900', '2027-01-04')],
+          anker: '800',
+        };
+        const tweede = buildTabView(
+          { ...KLAAR, itemId: '900', cyclus, cyclusKeuze: null },
+          opgeslagen()
+        );
+        expect(tweede.kanGenereren).toBe(false);
+        expect(controle(tweede, 'Genereren vanaf sessie 1')?.uitleg).toMatch(
+          /sessie van 22 september 2026/
+        );
+
+        const eerste = buildTabView(
+          { ...KLAAR, itemId: '800', cyclus, cyclusKeuze: null },
+          opgeslagen()
+        );
+        expect(eerste.kanGenereren).toBe(true);
+      });
+
+      it('meldt een bevestigde sessie zonder thema als ontbrekend', () => {
+        const uit = buildTabView(
+          {
+            ...KLAAR,
+            itemId: '900',
+            cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04', true)], anker: '900' },
+            cyclusKeuze: { opties: [optie('900', true, true), optie('901', false, true)], openstaand: false },
+          },
+          opgeslagen()
+        );
+        expect(controle(uit, 'Thema ontbreekt')?.uitleg).toMatch(/4 januari 2027/);
+        expect(uit.gereedheid.compleet).toBe(false);
       });
     });
 

@@ -365,7 +365,7 @@ async function main(): Promise<void> {
     client,
     {
       bedrijf: training.opdrachtgever,
-      excludeItemId: training.itemId,
+      excludeItemIds: [training.itemId],
       limit: readHistorieLimit(argv),
     },
     (await loadAgendaBoards(client)).boards

@@ -49,6 +49,8 @@ const PROBIBLIO: BriefingTraining = {
   opportunityItemId: '2674263314',
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
+  cyclus: null,
+  cyclusKeuze: null,
   missing: [],
 };
 

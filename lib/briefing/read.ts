@@ -734,6 +734,9 @@ export async function readBriefingTraining(
     opportunityItemId,
     achtergrond: opportunity.achtergrond,
     opdrachten: readOpdrachten(item),
+    // De cyclus vraagt een zoektocht over alle agendaborden; zie `readBriefingMetCyclus`.
+    cyclus: null,
+    cyclusKeuze: null,
     missing: [],
   };
 
