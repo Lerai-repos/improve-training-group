@@ -49,6 +49,7 @@
     "briefing:read": "tsx scripts/briefing-read.ts",
     "briefing:generate": "tsx scripts/briefing-generate.ts",
     "opportunity:achtergrond": "tsx scripts/opportunity-achtergrond.ts",
+    "opportunity:overname": "tsx scripts/opportunity-overname.ts",
     "agenda:cotrainer": "tsx scripts/agenda-cotrainer.ts",
     "themas:conceptinhoud": "tsx scripts/themas-conceptinhoud.ts",
     "briefings:create": "tsx scripts/briefings-create.ts",
