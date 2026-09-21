@@ -58,6 +58,8 @@ const rij = (
 interface FakeOptions {
   readonly columns?: Col[];
   readonly items?: readonly unknown[];
+  /** Rijen per pagina; standaard alles op één pagina. */
+  readonly pagina?: number;
   readonly opportunityItems?: readonly { id: string }[];
   /** Wat `items(ids:)` teruggeeft voor een agenda-item, bij de herlezing. */
   readonly agendaItems?: readonly { id: string }[];
@@ -68,8 +70,21 @@ function fakeClient(options: FakeOptions = {}): MondayGraphQLClient & { vragen: 
   return {
     vragen,
     // Testdubbel: de fake geeft terug wat de test erin stopte, in de vorm die de lezer verwacht.
-    query: async <T>(_document: string, variables?: Record<string, unknown>): Promise<T> => {
+    query: async <T>(document: string, variables?: Record<string, unknown>): Promise<T> => {
       vragen.push(JSON.stringify(variables));
+      if (document.includes('items_page')) {
+        // Het bord in pagina's van `pagina` rijen; de cursor is de index van de volgende rij.
+        const alle = options.items ?? [];
+        const grootte = options.pagina ?? alle.length;
+        const vanaf = typeof variables?.cursor === 'string' ? Number(variables.cursor) : 0;
+        const tot = vanaf + grootte;
+        const page = {
+          cursor: tot < alle.length ? String(tot) : null,
+          items: alle.slice(vanaf, tot),
+        };
+        const eerste = { boards: [{ items_page: page }] };
+        return (document.includes('next_items_page') ? { next_items_page: page } : eerste) as T;
+      }
       const ruw = variables?.ids;
       const gevraagd = new Set(Array.isArray(ruw) ? ruw.map(String) : []);
       const items = [...(options.opportunityItems ?? []), ...(options.agendaItems ?? [])].filter(
@@ -93,8 +108,10 @@ function fakeClient(options: FakeOptions = {}): MondayGraphQLClient & { vragen: 
             ? [col(O.voorbereidend, 'status'), col(O.huiswerk, 'status'), col(O.cyclus, 'status')]
             : (options.columns ?? agendaKolommen()),
       })),
-    // Testdubbel, zoals in lib/signals/__tests__/read.test.ts.
-    fetchBoardItems: async <T>(): Promise<T[]> => (options.items ?? []) as T[],
+    // De overname bladert zelf; de gehekte lezer hoort hier niet gebruikt te worden.
+    fetchBoardItems: async () => {
+      throw new Error('board changed during pagination');
+    },
     lastReportedVersion: () => null,
   };
 }
@@ -140,6 +157,24 @@ describe('readKandidaten', () => {
         },
       },
     ]);
+  });
+
+  it("bladert door alle pagina's, en een bewerking tijdens het bladeren houdt de scan niet tegen", async () => {
+    const items = ['a', 'b', 'c', 'd', 'e'].map((id) =>
+      rij(id, { datum_1: { date: '2026-10-01' }, [C.opportunity]: { linked_item_ids: [11] } })
+    );
+    const client = fakeClient({ items, pagina: 2 });
+    const uit = await readKandidaten(client, BORD, '2026-09-18');
+    expect(uit.map((k) => k.itemId)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it("een rij die op twee pagina's opduikt telt één keer", async () => {
+    const a = rij('a', {
+      datum_1: { date: '2026-10-01' },
+      [C.opportunity]: { linked_item_ids: [11] },
+    });
+    const client = fakeClient({ items: [a, a], pagina: 1 });
+    expect(await readKandidaten(client, BORD, '2026-09-18')).toHaveLength(1);
   });
 
   it('vandaag telt nog mee', async () => {

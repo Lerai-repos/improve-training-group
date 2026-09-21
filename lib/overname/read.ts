@@ -14,6 +14,10 @@ const O = OPPORTUNITY_OVERNAME_COLUMNS;
 /** `items(ids:)` levert er stilzwijgend hoogstens 25; zie [[itg-evaluation-join-viability]]. */
 const ITEMS_BATCH = 25;
 
+const PAGE_SIZE = 200;
+/** 10.000 rijen tegen een bord van nog geen duizend: alleen een op hol geslagen cursor komt hier. */
+const MAX_PAGES = 50;
+
 export interface Kandidaat {
   readonly itemId: string;
   readonly boardId: string;
@@ -89,13 +93,68 @@ async function gekeurdSchema(
   return board;
 }
 
+interface Page {
+  readonly cursor: string | null;
+  readonly items: readonly Row[];
+}
+
+/**
+ * Het hele bord, pagina voor pagina — met opzet NIET via `fetchBoardItems`.
+ *
+ * Die weigert de hele lezing zodra iemand tijdens het bladeren één rij bewerkt ("not a coherent
+ * snapshot"). Voor een telling is dat terecht; hier legde het de job overdag plat op een bord
+ * van bijna duizend rijen waar altijd wel iemand in werkt (gezien 21-Sep-2026). En hier is het
+ * niet nodig: elke training wordt vlak voor het schrijven opnieuw gelezen (`herleesKandidaat`),
+ * dus een rij die tijdens de scan veranderde wordt op haar actuele stand beoordeeld, en een rij
+ * die de scan miste komt de volgende nacht gewoon mee.
+ */
+async function alleRijen(
+  client: MondayGraphQLClient,
+  boardId: string,
+  fields: string
+): Promise<readonly Row[]> {
+  const rijen = new Map<string, Row>();
+  let cursor: string | null = null;
+  for (let pagina = 0; pagina < MAX_PAGES; pagina += 1) {
+    let page: Page | undefined;
+    if (cursor === null) {
+      const data = await client.query<{ boards?: { items_page: Page }[] | null }>(
+        `query ($board: [ID!], $limit: Int!) {
+           boards(ids: $board) { items_page(limit: $limit) { cursor items { ${fields} } } }
+         }`,
+        { board: [boardId], limit: PAGE_SIZE }
+      );
+      page = data.boards?.[0]?.items_page;
+    } else {
+      const data = await client.query<{ next_items_page?: Page | null }>(
+        `query ($cursor: String!, $limit: Int!) {
+           next_items_page(cursor: $cursor, limit: $limit) { cursor items { ${fields} } }
+         }`,
+        { cursor, limit: PAGE_SIZE }
+      );
+      page = data.next_items_page ?? undefined;
+    }
+    if (page === undefined) {
+      throw new Error(`Bord ${boardId}: Monday gaf geen pagina terug.`);
+    }
+    for (const row of page.items) {
+      rijen.set(String(row.id), row);
+    }
+    if (page.cursor === null) {
+      return [...rijen.values()];
+    }
+    cursor = page.cursor;
+  }
+  throw new Error(`Bord ${boardId}: meer dan ${MAX_PAGES} pagina's; de cursor loopt niet af.`);
+}
+
 /**
  * De komende trainingen op één agendabord die aan een Opportunity hangen, met wat er nu in de
  * drie doelcellen staat.
  *
- * Het hele bord, gehekt op volledigheid (`fetchBoardItems`), en dan lokaal gefilterd op datum.
- * Trainingen van gisteren en eerder doen niet mee: daar verandert een voorgevulde cel niets
- * meer aan. Zonder datum ook niet — dat is een lege rij onder een Opportunity, geen training.
+ * Het hele bord en dan lokaal gefilterd op datum. Trainingen van gisteren en eerder doen niet
+ * mee: daar verandert een voorgevulde cel niets meer aan. Zonder datum ook niet — dat is een
+ * lege rij onder een Opportunity, geen training.
  */
 export async function readKandidaten(
   client: MondayGraphQLClient,
@@ -117,10 +176,10 @@ export async function readKandidaten(
     .map((id) => `"${id}"`)
     .join(', ');
   const fields =
-    `id name updated_at column_values(ids: [${ids}]) { id ` +
+    `id name column_values(ids: [${ids}]) { id ` +
     '... on DateValue { date } ... on StatusValue { index } ' +
     '... on DropdownValue { values { id } } ... on BoardRelationValue { linked_item_ids } }';
-  const rows = await client.fetchBoardItems<Row>(board.boardId, fields, meta.items_count ?? null);
+  const rows = await alleRijen(client, board.boardId, fields);
 
   const uit: Kandidaat[] = [];
   for (const row of rows) {
