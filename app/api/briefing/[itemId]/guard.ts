@@ -10,7 +10,8 @@ import {
   type ItemBoardReader,
 } from '@lib/recommend';
 import { createUpstashChecklistStore, type ChecklistStore } from '@lib/briefing/checklist-store';
-import { createUpstashCyclusStore, type CyclusStore } from '@lib/briefing/cyclus-bevestiging';
+import { type CyclusStore } from '@lib/briefing/cyclus-bevestiging';
+import { createUpstashCyclusStore } from '@lib/briefing/cyclus-store';
 import { briefingRelationsFor, type BriefingRelations } from '@lib/briefing/read';
 import { agendaBoardOverride, readAgendaBoard, type AgendaClassification } from '@lib/evaluations';
 import { MONDAY_API_VERSION } from '@lib/monday/board-config';

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST } from '../blocks';
 import { createMemoryChecklistStore, type ChecklistStore } from '../checklist-store';
-import { createMemoryCyclusStore, type CyclusStore } from '../cyclus-bevestiging';
+import { type CyclusStore } from '../cyclus-bevestiging';
+import { createMemoryCyclusStore } from '../cyclus-store';
 import { voerVerhuizingenUit } from '../cyclus-antwoorden';
 import { bevestigCyclus } from '../cyclus-confirm';
 
@@ -96,7 +97,11 @@ describe('bevestigCyclus', () => {
   it('legt de aangevinkte sessies vast en geeft de gebundelde training terug', async () => {
     const { deps, cycli } = bouw();
 
-    const uit = await bevestigCyclus(deps, { itemId: '900', gekozen: ['800', '900'], getoond: GETOOND });
+    const uit = await bevestigCyclus(deps, {
+      itemId: '900',
+      gekozen: ['800', '900'],
+      getoond: GETOOND,
+    });
 
     expect(uit.kind).toBe('ok');
     if (uit.kind !== 'ok') {
@@ -118,13 +123,21 @@ describe('bevestigCyclus', () => {
     const uit = await bevestigCyclus(deps, { itemId: '900', gekozen: [], getoond: GETOOND });
 
     expect(uit.kind === 'ok' && uit.training.cyclus).toBeNull();
-    expect(await cycli.read('opp1')).toEqual({ groepen: [], beslist: { '900': ['800', '900'] }, verhuizingen: [] });
+    expect(await cycli.read('opp1')).toEqual({
+      groepen: [],
+      beslist: { '900': ['800', '900'] },
+      verhuizingen: [],
+    });
   });
 
   it('weigert een sessie die niet onder deze opdracht staat', async () => {
     const { deps, cycli } = bouw();
 
-    const uit = await bevestigCyclus(deps, { itemId: '900', gekozen: ['900', '123'], getoond: GETOOND });
+    const uit = await bevestigCyclus(deps, {
+      itemId: '900',
+      gekozen: ['900', '123'],
+      getoond: GETOOND,
+    });
 
     expect(uit).toEqual({
       kind: 'geweigerd',
@@ -195,7 +208,10 @@ describe('bevestigCyclus', () => {
     };
 
     await expect(
-      bevestigCyclus({ ...deps, checklists: hapert }, { itemId: '900', gekozen: ['800', '900'], getoond: GETOOND })
+      bevestigCyclus(
+        { ...deps, checklists: hapert },
+        { itemId: '900', gekozen: ['800', '900'], getoond: GETOOND }
+      )
     ).rejects.toThrow(/onbereikbaar/);
     expect((await checklists.read('800')).saved).toBeNull();
     expect((await cycli.read('opp1'))?.verhuizingen).toHaveLength(1);
@@ -236,7 +252,10 @@ describe('bevestigCyclus', () => {
     };
 
     await expect(
-      bevestigCyclus({ ...deps, checklists: hapert }, { itemId: '900', gekozen: ['900', '950'], getoond: GETOOND })
+      bevestigCyclus(
+        { ...deps, checklists: hapert },
+        { itemId: '900', gekozen: ['900', '950'], getoond: GETOOND }
+      )
     ).rejects.toThrow(/onbereikbaar/);
     expect((await cycli.read('opp1'))?.groepen).toEqual([{ leden: ['900', '950'], anker: '900' }]);
 
@@ -320,7 +339,9 @@ describe('bevestigCyclus', () => {
     expect((await checklists.read('960')).saved?.checklist.conceptInhoud).toBe(
       'Programma van de collega'
     );
-    expect((await cycli.read('opp1'))?.groepen).toEqual([{ leden: ['800', '900', '950'], anker: '800' }]);
+    expect((await cycli.read('opp1'))?.groepen).toEqual([
+      { leden: ['800', '900', '950'], anker: '800' },
+    ]);
   });
 
   /**
@@ -334,9 +355,15 @@ describe('bevestigCyclus', () => {
       kandidaat('950', '2027-03-01'),
       kandidaat('960', '2027-04-01'),
     ];
-    const { deps, checklists, cycli } = bouw({ kandidaten, training: { ...TRAINING, itemId: '800' } });
+    const { deps, checklists, cycli } = bouw({
+      kandidaten,
+      training: { ...TRAINING, itemId: '800' },
+    });
     await cycli.update('opp1', () => ({
-      groepen: [{ leden: ['800', '900'], anker: '800' }, { leden: ['950', '960'], anker: '950' }],
+      groepen: [
+        { leden: ['800', '900'], anker: '800' },
+        { leden: ['950', '960'], anker: '950' },
+      ],
       beslist: {
         '800': ['800', '900'],
         '900': ['800', '900'],
@@ -352,7 +379,9 @@ describe('bevestigCyclus', () => {
     expect((await checklists.read('960')).saved?.checklist.conceptInhoud).toBe(
       'Programma van cyclus 2'
     );
-    expect((await cycli.read('opp1'))?.groepen).toEqual([{ leden: ['800', '900', '950'], anker: '800' }]);
+    expect((await cycli.read('opp1'))?.groepen).toEqual([
+      { leden: ['800', '900', '950'], anker: '800' },
+    ]);
   });
 
   /**
@@ -376,7 +405,10 @@ describe('bevestigCyclus', () => {
     await bevestigCyclus(deps, { itemId: '950', gekozen: ['950', '960'], getoond: GETOOND });
 
     expect((await checklists.read('950')).saved).toBeNull();
-    expect((await cycli.read('opp1'))?.groepen).toEqual([{ leden: ['800', '900'], anker: '800' }, { leden: ['950', '960'], anker: '950' }]);
+    expect((await cycli.read('opp1'))?.groepen).toEqual([
+      { leden: ['800', '900'], anker: '800' },
+      { leden: ['950', '960'], anker: '950' },
+    ]);
   });
 
   /**
@@ -439,7 +471,10 @@ describe('bevestigCyclus', () => {
       training: { ...TRAINING, itemId: '800' },
     });
     await cycli.update('opp1', () => ({
-      groepen: [{ leden: ['800', '900'], anker: '800' }, { leden: ['950', '960'], anker: '950' }],
+      groepen: [
+        { leden: ['800', '900'], anker: '800' },
+        { leden: ['950', '960'], anker: '950' },
+      ],
       beslist: {},
       verhuizingen: [],
     }));
@@ -472,7 +507,11 @@ describe('bevestigCyclus', () => {
   it('weigert een aangevinkte sessie die niet op het scherm stond', async () => {
     const { deps } = bouw();
 
-    const uit = await bevestigCyclus(deps, { itemId: '900', gekozen: ['800', '900'], getoond: ['900'] });
+    const uit = await bevestigCyclus(deps, {
+      itemId: '900',
+      gekozen: ['800', '900'],
+      getoond: ['900'],
+    });
 
     expect(uit.kind).toBe('geweigerd');
   });
@@ -495,9 +534,7 @@ describe('bevestigCyclus', () => {
 
     await bevestigCyclus(deps, { itemId: '900', gekozen: ['900', '950'], getoond: GETOOND });
 
-    expect((await checklists.read('900')).saved?.checklist.conceptInhoud).toBe(
-      'Gedeeld programma'
-    );
+    expect((await checklists.read('900')).saved?.checklist.conceptInhoud).toBe('Gedeeld programma');
   });
 
   /**

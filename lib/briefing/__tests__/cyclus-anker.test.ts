@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createMemoryCyclusStore } from '../cyclus-bevestiging';
+import { createMemoryCyclusStore } from '../cyclus-store';
 import { resolveChecklistAnker, type AnkerReader } from '../cyclus-anker';
 
 import type { AgendaBoard } from '@lib/evaluations';
@@ -46,7 +46,12 @@ function client(items: Record<string, Item>): AnkerReader {
             id,
             board: { id: items[id].board },
             column_values: document.includes('linked_item_ids')
-              ? [{ id: 'board_relation', linked_item_ids: items[id].opp === null ? [] : [items[id].opp] }]
+              ? [
+                  {
+                    id: 'board_relation',
+                    linked_item_ids: items[id].opp === null ? [] : [items[id].opp],
+                  },
+                ]
               : [{ id: 'datum_1', date: items[id].datum }],
           })),
       };
@@ -98,7 +103,11 @@ describe('resolveChecklistAnker', () => {
    */
   it('geeft het hek van de gelezen cyclusstand mee', async () => {
     const cycli = createMemoryCyclusStore();
-    await cycli.update('opp1', () => ({ groepen: [{ leden: ['b', 'c'], anker: 'b' }], beslist: {}, verhuizingen: [] }));
+    await cycli.update('opp1', () => ({
+      groepen: [{ leden: ['b', 'c'], anker: 'b' }],
+      beslist: {},
+      verhuizingen: [],
+    }));
     const eerst = await resolveChecklistAnker(client(ITEMS), cycli, 'c');
 
     await cycli.update('opp1', () => ({ groepen: [], beslist: {}, verhuizingen: [] }));
@@ -107,5 +116,4 @@ describe('resolveChecklistAnker', () => {
     expect(eerst.fence?.key).toBe('briefing:cyclus:opp1');
     expect(eerst.fence?.token).not.toBe(daarna.fence?.token);
   });
-
 });

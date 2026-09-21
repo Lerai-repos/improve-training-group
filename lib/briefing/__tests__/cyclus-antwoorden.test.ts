@@ -2,12 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST } from '../blocks';
 import { createMemoryChecklistStore, type ChecklistStore } from '../checklist-store';
-import {
-  createMemoryCyclusStore,
-  metAnker,
-  metVerhuizingen,
-  type CyclusStore,
-} from '../cyclus-bevestiging';
+import { metAnker, metVerhuizingen, type CyclusStore } from '../cyclus-bevestiging';
+import { createMemoryCyclusStore } from '../cyclus-store';
 import { ankerMetAntwoorden, raaktDezeCyclus, voerVerhuizingenUit } from '../cyclus-antwoorden';
 import { moetZoeken } from '../load';
 
@@ -77,10 +73,14 @@ describe('ankerMetAntwoorden', () => {
       clear: (itemId, token) => echt.clear(itemId, token),
     };
 
-    const uit = await ankerMetAntwoorden(kapot, {
-      itemId: 'nieuw',
-      cyclus: { sessies: [sessie('oud', true), sessie('nieuw')], anker: 'nieuw' },
-    }, VRIJ);
+    const uit = await ankerMetAntwoorden(
+      kapot,
+      {
+        itemId: 'nieuw',
+        cyclus: { sessies: [sessie('oud', true), sessie('nieuw')], anker: 'nieuw' },
+      },
+      VRIJ
+    );
 
     expect(uit).toEqual({ anker: 'nieuw', geblokkeerd: true, opnieuw: false });
   });
@@ -97,7 +97,10 @@ describe('jaarwisseling als vastgelegde verhuizing', () => {
     const cycli = createMemoryCyclusStore();
     const checklists = createMemoryChecklistStore(undefined, (key) => cycli.hekToken(key));
     await checklists.save('oud', { ...antwoorden('Programma van de cyclus'), token: 'absent' });
-    await checklists.save('nieuw', { ...antwoorden('Restant van vóór de cyclus'), token: 'absent' });
+    await checklists.save('nieuw', {
+      ...antwoorden('Restant van vóór de cyclus'),
+      token: 'absent',
+    });
     await cycli.update('opp1', () => ({
       groepen: [{ leden: ['oud', 'nieuw'], anker: 'oud' }],
       beslist: {},
@@ -106,9 +109,14 @@ describe('jaarwisseling als vastgelegde verhuizing', () => {
 
     /** Wat `readBriefingMetCyclus` doet zodra het ziet dat `oud` gearchiveerd is. */
     await cycli.update('opp1', (stand) =>
-      metVerhuizingen(metAnker(stand ?? { groepen: [], beslist: {}, verhuizingen: [] }, ['oud', 'nieuw'], 'nieuw'), [
-        { naar: 'nieuw', bronnen: ['oud'], gezaghebbend: 'oud' },
-      ])
+      metVerhuizingen(
+        metAnker(
+          stand ?? { groepen: [], beslist: {}, verhuizingen: [] },
+          ['oud', 'nieuw'],
+          'nieuw'
+        ),
+        [{ naar: 'nieuw', bronnen: ['oud'], gezaghebbend: 'oud' }]
+      )
     );
     await voerVerhuizingenUit(cycli, checklists, 'opp1');
 
@@ -129,10 +137,14 @@ describe('ankerMetAntwoorden — één levend record per cyclus', () => {
     await checklists.save('a', { ...antwoorden('Gedeeld programma'), token: 'absent' });
     await checklists.save('b', { ...antwoorden('Oud restant van b'), token: 'absent' });
 
-    await ankerMetAntwoorden(checklists, {
-      itemId: 'a',
-      cyclus: { sessies: [sessie('a'), { ...sessie('b'), datum: '2027-02-01' }], anker: 'a' },
-      }, VRIJ);
+    await ankerMetAntwoorden(
+      checklists,
+      {
+        itemId: 'a',
+        cyclus: { sessies: [sessie('a'), { ...sessie('b'), datum: '2027-02-01' }], anker: 'a' },
+      },
+      VRIJ
+    );
 
     expect((await checklists.read('a')).saved?.checklist.conceptInhoud).toBe('Gedeeld programma');
     expect((await checklists.read('b')).saved).toBeNull();
@@ -166,18 +178,29 @@ describe('ankerMetAntwoorden — gehekt op de cyclusstand', () => {
   it('ruimt niets op als de cyclus intussen veranderd is', async () => {
     const cycli = createMemoryCyclusStore();
     const checklists = createMemoryChecklistStore(undefined, (key) => cycli.hekToken(key));
-    await cycli.update('opp1', () => ({ groepen: [{ leden: ['a', 'b'], anker: 'a' }], beslist: {}, verhuizingen: [] }));
+    await cycli.update('opp1', () => ({
+      groepen: [{ leden: ['a', 'b'], anker: 'a' }],
+      beslist: {},
+      verhuizingen: [],
+    }));
     const { fence: oud } = await cycli.readMetFence('opp1');
     await checklists.save('a', { ...antwoorden('Gedeeld programma'), token: 'absent' });
 
     /** De collega: nieuwe indeling, antwoorden naar b. */
-    await cycli.update('opp1', () => ({ groepen: [{ leden: ['b', 'c'], anker: 'b' }], beslist: {}, verhuizingen: [] }));
+    await cycli.update('opp1', () => ({
+      groepen: [{ leden: ['b', 'c'], anker: 'b' }],
+      beslist: {},
+      verhuizingen: [],
+    }));
     await checklists.save('b', { ...antwoorden('Gedeeld programma'), token: 'absent' });
 
     /** De oude lezing, met haar verouderde stand én hek. */
     const uit = await ankerMetAntwoorden(
       checklists,
-      { itemId: 'a', cyclus: { sessies: [sessie('a'), { ...sessie('b'), datum: '2027-02-01' }], anker: 'a' } },
+      {
+        itemId: 'a',
+        cyclus: { sessies: [sessie('a'), { ...sessie('b'), datum: '2027-02-01' }], anker: 'a' },
+      },
       oud
     );
 
@@ -368,7 +391,10 @@ describe('voerVerhuizingenUit', () => {
 describe('raaktDezeCyclus', () => {
   /** Twee cycli onder één opdracht: een blokkade bij de ene zet de andere niet op slot. */
   it('geldt alleen voor de cyclus waar de geblokkeerde sessies in zitten', () => {
-    const eigen = { itemId: 'nieuw', cyclus: { sessies: [sessie('oud', true), sessie('nieuw')], anker: 'nieuw' } };
+    const eigen = {
+      itemId: 'nieuw',
+      cyclus: { sessies: [sessie('oud', true), sessie('nieuw')], anker: 'nieuw' },
+    };
     expect(raaktDezeCyclus(['oud'], eigen)).toBe(true);
     expect(raaktDezeCyclus(['x', 'y'], eigen)).toBe(false);
     expect(raaktDezeCyclus(['900'], { itemId: '900', cyclus: null })).toBe(true);
@@ -382,9 +408,13 @@ describe('moetZoeken', () => {
 
   it('zoekt niet bij een gewone training zonder bevestiging', () => {
     expect(moetZoeken('900', false, null)).toBe(false);
-    expect(moetZoeken('900', false, { groepen: [{ leden: ['1', '2'], anker: '1' }], beslist: { '1': ['1', '2'] }, verhuizingen: [] })).toBe(
-      false
-    );
+    expect(
+      moetZoeken('900', false, {
+        groepen: [{ leden: ['1', '2'], anker: '1' }],
+        beslist: { '1': ['1', '2'] },
+        verhuizingen: [],
+      })
+    ).toBe(false);
   });
 
   /**
@@ -393,13 +423,21 @@ describe('moetZoeken', () => {
    */
   it('zoekt voor een sessie die in een bevestigde groep staat, ook zonder label', () => {
     expect(
-      moetZoeken('900', false, { groepen: [{ leden: ['800', '900'], anker: '800' }], beslist: { '800': ['800', '900'] }, verhuizingen: [] })
+      moetZoeken('900', false, {
+        groepen: [{ leden: ['800', '900'], anker: '800' }],
+        beslist: { '800': ['800', '900'] },
+        verhuizingen: [],
+      })
     ).toBe(true);
   });
 
   it('zoekt voor een sessie waarover eerder een antwoord is gegeven', () => {
-    expect(moetZoeken('900', false, { groepen: [], beslist: { '900': ['800', '900'] }, verhuizingen: [] })).toBe(
-      true
-    );
+    expect(
+      moetZoeken('900', false, {
+        groepen: [],
+        beslist: { '900': ['800', '900'] },
+        verhuizingen: [],
+      })
+    ).toBe(true);
   });
 });
