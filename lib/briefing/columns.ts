@@ -142,6 +142,12 @@ export const OPPORTUNITY_COLUMNS = {
    * dinsdag telefonisch bereikbaar". Hooguit grondstof, geen briefingtekst.
    */
   achtergrond: 'itg_achtergrond',
+  /**
+   * `Trainingscyclus?`, door Dirkje aangemaakt 17-Sep-2026: `8+4u`, `2x4u`, `4+8u`, `2x8u`,
+   * `3x4u` of `Nee`. Het cyclusdocument leest eruit hoeveel sessies er hóren te zijn. Dezelfde
+   * kolom voedt de nachtelijke overname; zie `lib/overname/columns.ts` voor de label-indexen.
+   */
+  cyclus: 'color_mm724vqh',
 } as const;
 
 /**

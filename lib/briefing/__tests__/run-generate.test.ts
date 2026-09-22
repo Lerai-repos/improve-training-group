@@ -59,6 +59,7 @@ const TRAINING: BriefingTraining = {
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
 };
 
@@ -178,6 +179,8 @@ describe('runGenerate — plannen', () => {
       tijden: '09:00 - 13:00',
       locatie: 'Almere',
       groepsgrootte: '12',
+      duur: '',
+      ieCode: '',
       zonderThema: false,
     });
     const tweede = {
@@ -210,6 +213,8 @@ describe('runGenerate — plannen', () => {
       tijden: '09:00 - 13:00',
       locatie: 'Almere',
       groepsgrootte: '12',
+      duur: '',
+      ieCode: '',
       zonderThema: false,
     });
     /** De eerste sessie is gearchiveerd, dus sessie 2 genereert — met dezelfde bestandsnaam. */
@@ -218,7 +223,10 @@ describe('runGenerate — plannen', () => {
       itemId: '901',
       datum: '2027-01-04',
       /** Na de jaarwisseling: het anker is al naar de schrijfbare sessie verplaatst. */
-      cyclus: { sessies: [sessie('900', '2026-09-22', true), sessie('901', '2027-01-04')], anker: '901' },
+      cyclus: {
+        sessies: [sessie('900', '2026-09-22', true), sessie('901', '2027-01-04')],
+        anker: '901',
+      },
     };
     const { deps, vals } = bouw({ readTraining: () => Promise.resolve(tweede) });
     /** Precies de namen die sessie 1 zou schrijven, ook al drukt sessie 2 op de knop. */
@@ -263,6 +271,62 @@ describe('runGenerate — plannen', () => {
 });
 
 describe('runGenerate — schrijven', () => {
+  /** Eén document, maar élke sessie van de cyclus krijgt de rij en `Brie`. */
+  it('legt een cyclus vast op elke sessie', async () => {
+    const sessie = (itemId: string, datum: string, gearchiveerd = false) => ({
+      itemId,
+      boardId: gearchiveerd ? '1703587792' : '5087396949',
+      gearchiveerd,
+      datum,
+      tijden: '09:00 - 13:00',
+      locatie: 'Almere',
+      groepsgrootte: '12',
+      duur: '',
+      ieCode: '',
+      zonderThema: false,
+    });
+    const gezet: [string, string | undefined][] = [];
+    const cyclus = {
+      ...TRAINING,
+      cyclus: {
+        sessies: [
+          sessie('899', '2026-01-10', true),
+          sessie('900', '2026-10-09'),
+          sessie('901', '2027-01-04'),
+        ],
+        anker: '900',
+      },
+    };
+    const { deps, vals } = bouw({ readTraining: () => Promise.resolve(cyclus) });
+    const metRecorder = {
+      ...deps,
+      recorder: {
+        ...deps.recorder,
+        setBrie: (itemId: string, _status: string, boardId?: string) => {
+          gezet.push([itemId, boardId]);
+          return Promise.resolve();
+        },
+      },
+    };
+    const gepland = await runGenerate(metRecorder, { itemId: '900', confirmExisting: false });
+    const uit = await runGenerate(metRecorder, {
+      itemId: '900',
+      confirmExisting: true,
+      planToken: gepland.kind === 'planned' ? gepland.plan.planToken : '',
+    });
+    expect(uit.kind).toBe('written');
+    // De gearchiveerde sessie staat op een ander bord en past niet in de relatie.
+    expect(vals.rijen.map((r) => r.trainingItemIds)).toEqual([
+      ['900', '901'],
+      ['900', '901'],
+    ]);
+    // De gearchiveerde sessie krijgt geen Brie; de andere wel, op haar eigen bord.
+    expect(gezet).toEqual([
+      ['900', undefined],
+      ['901', '5087396949'],
+    ]);
+  });
+
   /**
    * Het pad dat elke werkdag gelopen wordt en tot nu toe nergens werd nagespeeld: bevestigen,
    * renderen, wegschrijven, vastleggen.

@@ -67,6 +67,8 @@ function kolommen(board: CyclusBoard): ReadonlyArray<readonly [string, string]> 
     [C.tijden, 'text'],
     [C.locatie, 'text'],
     [C.deelnemers, 'text'],
+    [C.duurTekst, 'text'],
+    [C.ieCode, 'text'],
     [board.themaRelation, 'board_relation'],
     [board.trainerRelation, 'board_relation'],
     ...(board.coTrainerRelation === undefined
@@ -142,6 +144,8 @@ function alsKandidaat(item: RawItem, board: CyclusBoard): CyclusKandidaat {
     tijden: tekst(item, C.tijden),
     locatie: tekst(item, C.locatie),
     groepsgrootte: tekst(item, C.deelnemers),
+    duur: tekst(item, C.duurTekst),
+    ieCode: tekst(item, C.ieCode),
   };
 }
 

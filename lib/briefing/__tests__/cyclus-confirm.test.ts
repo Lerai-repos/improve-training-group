@@ -48,6 +48,7 @@ const TRAINING: BriefingTraining = {
   opdrachten: { trainingCycle: true, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
 };
 
@@ -61,6 +62,8 @@ const kandidaat = (itemId: string, datum: string, gearchiveerd = false): CyclusK
   leadIds: ['t1'],
   coIds: [],
   trainerNamen: 'Isabelle Zwetsloot',
+  duur: '',
+  ieCode: '',
   datum,
   tijden: '09:00 - 13:00',
   locatie: 'Almere',

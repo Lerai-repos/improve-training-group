@@ -26,6 +26,8 @@ const sessie = (itemId: string, gearchiveerd = false): BriefingSessie => ({
   tijden: '09:00 - 13:00',
   locatie: 'Almere',
   groepsgrootte: '12',
+  duur: '',
+  ieCode: '',
   zonderThema: false,
 });
 

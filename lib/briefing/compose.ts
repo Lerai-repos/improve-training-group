@@ -43,6 +43,15 @@ import {
   type HistoryRow,
   type SessionFacts,
 } from './blocks';
+import {
+  cyclusFeiten,
+  documentSessies,
+  eenmaligOfPerSessie,
+  formatCyclusDatumTijd,
+  formatCyclusDuur,
+  formatCyclusTravel,
+  reisPerSessie,
+} from './cyclus-document';
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
 import { resolveConceptInhoud } from './concept';
 
@@ -79,8 +88,15 @@ export interface BriefingExtras {
   readonly inventarisatie?: readonly InventoryAnswer[];
   /** Eerdere en komende sessies bij dezelfde klant, voor het blok `Vaste klant`. */
   readonly historie?: readonly HistoryRow[];
-  /** Km en reistijd van de toegewezen trainer. */
+  /** Km en reistijd van de toegewezen trainer, naar de locatie van deze training. */
   readonly reis?: TravelInput;
+  /**
+   * Bij een cyclus: de route van deze ontvanger per sessie-item, waar die bekend is.
+   *
+   * Zonder dit geldt `reis` voor elke sessie — goed genoeg zolang de cyclus op één plek is,
+   * en precies wat de tab (die geen routes rekent) toch al niet kan tonen.
+   */
+  readonly reisPerSessie?: (itemId: string) => TravelInput | undefined;
   /** `IT-58`. Nog niet uitgezocht of deze afleidbaar is uit label en thema. */
   readonly trainingscodeMc?: string;
   /**
@@ -194,30 +210,63 @@ export function composeBriefing(
   checklist: BriefingChecklist,
   extras: BriefingExtras = {}
 ): BriefingDocumentData {
-  const deadline = formatDeadline(materialsDeadline({ datum: training.datum }));
+  /**
+   * Het cyclusdocument: één briefing over alle sessies.
+   *
+   * Dirkje's Reade-voorbeeld (22-Sep-2026) bepaalt de vorm: `Duur` opgeteld, `Datum & tijd`
+   * per sessie, km per sessie plus totaal, de deadline van sessie 1, en de rest van de tabel
+   * één keer zolang de sessies daarin niet verschillen. Zonder cyclus is `sessies` leeg en
+   * gedraagt elke rij zich als voorheen.
+   */
+  const sessies = documentSessies(training);
+  const cyclus = sessies.length > 0;
+  const eersteDatum = cyclus ? (sessies[0]?.datum ?? '') : training.datum;
+  const deadline = formatDeadline(materialsDeadline({ datum: eersteDatum }));
+  const cyclusDuur = cyclus ? formatCyclusDuur(sessies) : '';
+  /**
+   * De route van de training zelf komt uit `reis`, ook als er per sessie gezocht wordt: de
+   * aanroeper rekent per sessie alleen voor de ÁNDERE sessies van een bevestigde cyclus, dus
+   * voor deze sessie levert die lookup niets op. Zonder deze terugval stond hier "nog niet
+   * bepaald" zodra een training alleen het cycluslabel droeg (gezien op COA, 22-Sep-2026).
+   */
+  const reisVoor = (itemId: string): TravelInput | undefined =>
+    extras.reisPerSessie?.(itemId) ?? (itemId === training.itemId ? extras.reis : undefined);
+  const reis = cyclus
+    ? formatCyclusTravel(reisPerSessie(sessies, reisVoor))
+    : extras.reis === undefined
+      ? null
+      : formatTravel(extras.reis);
 
   return {
     opdrachtgever: training.opdrachtgever.trim(),
     thema: training.themas.join(' & '),
     klanttitel: training.klanttitel.trim(),
-    duur: formatDuration(training.duur),
-    datumTijd: formatDateTime(training.datum, training.tijden),
-    groepsgrootte: formatGroupSize(training.groepsgrootte),
-    locatie: training.locatie.trim(),
+    duur: cyclusDuur === '' ? formatDuration(training.duur) : cyclusDuur,
+    datumTijd: cyclus
+      ? formatCyclusDatumTijd(sessies)
+      : formatDateTime(training.datum, training.tijden),
+    groepsgrootte: cyclus
+      ? eenmaligOfPerSessie(sessies, (s) => formatGroupSize(s.groepsgrootte))
+      : formatGroupSize(training.groepsgrootte),
+    locatie: cyclus
+      ? eenmaligOfPerSessie(sessies, (s) => s.locatie.trim())
+      : training.locatie.trim(),
     voertaal: formatLanguage(training.voertaal),
     materialenDeadline: deadline === '' ? '' : `${deadline} ${MATERIALS_SUFFIX}`,
     accountmanager:
       training.accountmanager === null
         ? ''
         : formatAccountmanager(training.accountmanager.naam, training.accountmanager.mobiel),
-    reis: extras.reis === undefined ? MISSING.reis : formatTravel(extras.reis),
+    reis: reis ?? MISSING.reis,
     contactpersoon:
       training.contactpersoon === null
         ? ''
         : formatContact(training.contactpersoon.naam, training.contactpersoon.telefoon),
     klantcontactmoment: clientContactFor(training, extras.recipient),
     evaluatie: formatEvaluation(training.evaluatie),
-    iecode: formatIeCode(training.ieCode),
+    iecode: cyclus
+      ? eenmaligOfPerSessie(sessies, (s) => formatIeCode(s.ieCode))
+      : formatIeCode(training.ieCode),
     /**
      * Van de training, en LEEG als er geen challenge is.
      *
@@ -241,7 +290,8 @@ export function composeBriefing(
       extras.roles ?? sessionFacts(training, checklist),
       extras.recipient === undefined
         ? undefined
-        : { recipient: extras.recipient, format: formatContact }
+        : { recipient: extras.recipient, format: formatContact },
+      cyclusFeiten(sessies)
     ),
     inventarisatie: extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
   };

@@ -24,6 +24,8 @@ const sessie = (over: Partial<CyclusKandidaat> & { itemId: string }): CyclusKand
   leadIds: ['lead'],
   coIds: ['co'],
   trainerNamen: 'Isabelle Zwetsloot',
+  duur: '',
+  ieCode: '',
   datum: '2026-09-22',
   tijden: '09:00 - 13:00',
   locatie: 'Breskensweg 5, Almere',
@@ -49,10 +51,7 @@ describe('regelVoorstel', () => {
   });
 
   it('stelt nooit een sessie zonder trainer voor, en stelt er zelf ook geen voor', () => {
-    const kandidaten = [
-      sessie({ itemId: '1' }),
-      sessie({ itemId: '2', leadIds: [], coIds: [] }),
-    ];
+    const kandidaten = [sessie({ itemId: '1' }), sessie({ itemId: '2', leadIds: [], coIds: [] })];
     expect(voorgesteld('1', kandidaten)).toEqual(['1']);
     expect(regelVoorstel('1', kandidaten).redenen.get('2')).toBe('geen trainer');
     expect(voorgesteld('2', [sessie({ itemId: '2', leadIds: [], coIds: [] })])).toEqual(['2']);
@@ -194,7 +193,11 @@ describe('bepaalCyclusKeuze', () => {
 
   /** "Nee, dit is geen cyclus" is ook een antwoord: de vraag hoort dan niet terug te komen. */
   it('onthoudt een bevestiging zonder groep', () => {
-    const { cyclus, keuze } = bepaalCyclusKeuze('1', twee, { groepen: [], beslist: { '1': ['1', '2'] }, verhuizingen: [] });
+    const { cyclus, keuze } = bepaalCyclusKeuze('1', twee, {
+      groepen: [],
+      beslist: { '1': ['1', '2'] },
+      verhuizingen: [],
+    });
     expect(cyclus).toBeNull();
     expect(keuze?.openstaand).toBe(false);
     expect(keuze?.opties.map((o) => o.aangevinkt)).toEqual([true, false]);
@@ -276,17 +279,27 @@ describe('metBevestiging', () => {
       beslist: { '1': ['1', '2', '3'], '2': ['1', '2', '3'], '3': ['1', '2', '3'] },
       verhuizingen: [],
     };
-    expect(metBevestiging(huidig, '1', ['1', '2'], ['1', '2', '3'], ANKER).groepen).toEqual([{ leden: ['1', '2'], anker: '1' }]);
+    expect(metBevestiging(huidig, '1', ['1', '2'], ['1', '2', '3'], ANKER).groepen).toEqual([
+      { leden: ['1', '2'], anker: '1' },
+    ]);
   });
 
   /** Onder één opdracht kunnen twee cycli staan; bevestigen vanaf de ene raakt de andere niet. */
   it('laat een andere groep staan, maar haalt er een aangevinkte sessie uit', () => {
     const huidig: BevestigdeCycli = {
-      groepen: [{ leden: ['a', 'b'], anker: 'a' }, { leden: ['c', 'd', 'e'], anker: 'c' }],
+      groepen: [
+        { leden: ['a', 'b'], anker: 'a' },
+        { leden: ['c', 'd', 'e'], anker: 'c' },
+      ],
       beslist: {},
       verhuizingen: [],
     };
-    expect(metBevestiging(huidig, 'a', ['a', 'b', 'c'], ['a', 'b', 'c', 'd', 'e'], ANKER).groepen).toEqual([{ leden: ['d', 'e'], anker: 'd' }, { leden: ['a', 'b', 'c'], anker: 'a' }]);
+    expect(
+      metBevestiging(huidig, 'a', ['a', 'b', 'c'], ['a', 'b', 'c', 'd', 'e'], ANKER).groepen
+    ).toEqual([
+      { leden: ['d', 'e'], anker: 'd' },
+      { leden: ['a', 'b', 'c'], anker: 'a' },
+    ]);
   });
 
   /**
@@ -306,8 +319,14 @@ describe('metBevestiging', () => {
   });
 
   it('laat een groep vervallen die op één sessie overblijft', () => {
-    const huidig: BevestigdeCycli = { groepen: [{ leden: ['c', 'd'], anker: 'c' }], beslist: { c: ['c', 'd'], d: ['c', 'd'] }, verhuizingen: [] };
-    expect(metBevestiging(huidig, 'a', ['a', 'c'], ['a', 'c', 'd'], ANKER).groepen).toEqual([{ leden: ['a', 'c'], anker: 'a' }]);
+    const huidig: BevestigdeCycli = {
+      groepen: [{ leden: ['c', 'd'], anker: 'c' }],
+      beslist: { c: ['c', 'd'], d: ['c', 'd'] },
+      verhuizingen: [],
+    };
+    expect(metBevestiging(huidig, 'a', ['a', 'c'], ['a', 'c', 'd'], ANKER).groepen).toEqual([
+      { leden: ['a', 'c'], anker: 'a' },
+    ]);
   });
 });
 
@@ -337,8 +356,15 @@ describe('ankerItemId', () => {
         itemId: '2',
         cyclus: bepaalCyclusKeuze(
           '2',
-          [sessie({ itemId: '1', datum: '2026-09-22' }), sessie({ itemId: '2', datum: '2027-01-04' })],
-          { groepen: [{ leden: ['1', '2'], anker: '1' }], beslist: { '1': ['1', '2'], '2': ['1', '2'] }, verhuizingen: [] }
+          [
+            sessie({ itemId: '1', datum: '2026-09-22' }),
+            sessie({ itemId: '2', datum: '2027-01-04' }),
+          ],
+          {
+            groepen: [{ leden: ['1', '2'], anker: '1' }],
+            beslist: { '1': ['1', '2'], '2': ['1', '2'] },
+            verhuizingen: [],
+          }
         ).cyclus,
       })
     ).toBe('1');

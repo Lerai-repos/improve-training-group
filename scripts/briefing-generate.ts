@@ -23,7 +23,12 @@ import {
 import { resolveRecipientRoles } from '@lib/briefing/recipients';
 import { readHistorie } from '@lib/briefing/historie';
 import { loadAgendaBoards } from '@lib/evaluations';
-import { readBriefingTraining } from '@lib/briefing/read';
+import { briefingRelationsFor, readBriefingTraining } from '@lib/briefing/read';
+import { readBriefingMetCyclus } from '@lib/briefing/load';
+import { createUpstashChecklistStore } from '@lib/briefing/checklist-store';
+import { createUpstashCyclusStore } from '@lib/briefing/cyclus-store';
+import { cyclusItemIds } from '@lib/briefing/context';
+import { ankerItemId, cyclusIdentiteit } from '@lib/briefing/cyclus';
 import { readExtraInfo } from '@lib/briefing/updates';
 import { readTrainerAddresses, resolveBriefingTravel } from '@lib/briefing/reis';
 import type { TravelInput } from '@lib/briefing/format';
@@ -258,6 +263,49 @@ async function resolveReis(
   return travel.perTrainer;
 }
 
+/**
+ * Dezelfde lezing als de tab: mét de bevestigde cyclus, zodat het script het cyclusdocument
+ * maakt dat de knop ook maakt. Daarvoor zijn de KV-stores nodig (het record met de
+ * bevestiging staat in Redis); zonder Redis valt het terug op de losse training en zegt dat.
+ */
+async function leesTraining(
+  client: ReturnType<typeof createMondayGraphQLClient>,
+  itemId: string
+): Promise<Awaited<ReturnType<typeof readBriefingTraining>>> {
+  const boardId = agendaBoardId();
+  let stores;
+  try {
+    stores = {
+      checklists: createUpstashChecklistStore(createRedisClient()),
+      cycli: createUpstashCyclusStore(createRedisClient()),
+    };
+  } catch {
+    console.log('  Let op: geen Redis, dus zonder bevestigde trainingscyclus gelezen.');
+    return readBriefingTraining(client, itemId, { boardId });
+  }
+  const bord = (await loadAgendaBoards(client)).boards.find((b) => b.boardId === boardId);
+  if (bord === undefined) {
+    throw new Error(`Agendabord ${boardId} niet gevonden bij het ontdekken van de borden.`);
+  }
+  const geladen = await readBriefingMetCyclus(client, itemId, {
+    boardId,
+    relations: briefingRelationsFor(bord),
+    ...stores,
+  });
+  /**
+   * Dezelfde grendel als de knop: de inhoud (klanttitel, contactpersoon, trainers) komt van de
+   * sessie die draait, dus alleen de sessie waar de antwoorden onder staan maakt het document.
+   */
+  const anker = ankerItemId(geladen.training);
+  if (anker !== itemId) {
+    throw new Error(
+      `Training ${itemId} hoort bij een bevestigde trainingscyclus; de briefing wordt gemaakt ` +
+        `vanaf sessie ${anker}. Draai het script met dat item-id.`
+    );
+  }
+  return geladen.training;
+}
+
 async function main(): Promise<void> {
   const token = process.env.MONDAY_API_TOKEN;
   if (!token) {
@@ -285,7 +333,7 @@ async function main(): Promise<void> {
   }
 
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
-  const training = await readBriefingTraining(client, itemId, { boardId: agendaBoardId() });
+  const training = await leesTraining(client, itemId);
 
   console.log(`\n${training.naam}   [label ${training.label} · Brie: ${training.brie}]\n`);
 
@@ -365,7 +413,7 @@ async function main(): Promise<void> {
     client,
     {
       bedrijf: training.opdrachtgever,
-      excludeItemIds: [training.itemId],
+      excludeItemIds: cyclusItemIds(training),
       limit: readHistorieLimit(argv),
     },
     (await loadAgendaBoards(client)).boards
@@ -375,11 +423,34 @@ async function main(): Promise<void> {
       `  Historie: ${historie.length} eerdere/komende sessie(s) bij ${training.opdrachtgever}`
     );
   }
-  const reis = await resolveReis(
-    client,
-    training,
-    ontvangers.recipients.map((r) => r.trainer.itemId)
-  );
+  const trainerIds = ontvangers.recipients.map((r) => r.trainer.itemId);
+  const reis = await resolveReis(client, training, trainerIds);
+  /**
+   * Zoals de knop: één route per LOCATIE van de cyclus, en per sessie opgezocht. Zonder dit
+   * zou het script de rit naar déze sessie voor elke sessie herhalen, ook voor een dag elders.
+   */
+  const reisPerLocatie = new Map<string, ReadonlyMap<string, TravelInput>>([
+    [training.locatie.trim(), reis],
+  ]);
+  const reisSessies = new Map<string, ReadonlyMap<string, TravelInput>>();
+  for (const sessie of training.cyclus?.sessies ?? []) {
+    const locatie = sessie.locatie.trim();
+    if (locatie === '') {
+      continue;
+    }
+    let route = reisPerLocatie.get(locatie);
+    if (route === undefined) {
+      route = await resolveReis(client, { ...training, locatie }, trainerIds);
+      reisPerLocatie.set(locatie, route);
+    }
+    reisSessies.set(sessie.itemId, route);
+  }
+  const reisPerSessie =
+    (trainerId: string) =>
+    (sessieId: string): TravelInput | undefined =>
+      reisSessies.get(sessieId)?.get(trainerId);
+  /** Het bestand heet naar de cyclus (sessie 1), ook als sessie 2 het script draait. */
+  const identiteit = cyclusIdentiteit(training);
   const gedeeld = {
     historie,
     extraInfo: extraInfo.lines,
@@ -398,6 +469,7 @@ async function main(): Promise<void> {
     ...gedeeld,
     recipient: eerste,
     reis: reis.get(eerste.trainer.itemId),
+    reisPerSessie: reisPerSessie(eerste.trainer.itemId),
   });
 
   console.log('  Gegevenstabel');
@@ -456,6 +528,7 @@ async function main(): Promise<void> {
       ...gedeeld,
       recipient: ontvanger,
       reis: reis.get(ontvanger.trainer.itemId),
+      reisPerSessie: reisPerSessie(ontvanger.trainer.itemId),
     });
 
     console.log(`\n  ── ${ontvanger.trainer.naam} — ${rol[ontvanger.role]}`);
@@ -486,7 +559,7 @@ async function main(): Promise<void> {
     const filename = briefingFilename({
       opdrachtgever: eigen.opdrachtgever,
       thema: eigen.thema,
-      isoDatum: training.datum,
+      isoDatum: identiteit.datum,
       // Eén naam: dit exemplaar is van deze persoon, ook als het een acteur is.
       trainers: [ontvanger.trainer.naam],
     });

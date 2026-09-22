@@ -41,6 +41,9 @@ export interface CyclusKandidaat {
   readonly tijden: string;
   readonly locatie: string;
   readonly groepsgrootte: string;
+  /** De kolom `Duur` als tekst; het cyclusdocument telt de sessies hieruit op. */
+  readonly duur: string;
+  readonly ieCode: string;
 }
 
 /**
@@ -81,6 +84,8 @@ const alsSessie = (k: CyclusKandidaat): BriefingSessie => ({
   tijden: k.tijden,
   locatie: k.locatie,
   groepsgrootte: k.groepsgrootte,
+  duur: k.duur,
+  ieCode: k.ieCode,
   zonderThema: k.themaIds.length === 0,
 });
 
@@ -96,10 +101,7 @@ interface Voorstel {
  * Zet alleen de vinkjes voor. Een sessie die er volgens de regel niet bij hoort krijgt een
  * reden, zodat de adviseur kan zien waarom hij hem zelf zou moeten aanvinken.
  */
-export function regelVoorstel(
-  itemId: string,
-  kandidaten: readonly CyclusKandidaat[]
-): Voorstel {
+export function regelVoorstel(itemId: string, kandidaten: readonly CyclusKandidaat[]): Voorstel {
   const huidig = kandidaten.find((k) => k.itemId === itemId);
   if (huidig === undefined) {
     throw new Error(
@@ -271,9 +273,9 @@ function optie(
  * Bewust de EERSTE sessie en niet de eerste schrijfbare: een archivering mag de naam van een
  * bestaand document niet veranderen.
  */
-export function cyclusIdentiteit<T extends { readonly datum: string; readonly cyclus: BriefingCyclus | null }>(
-  training: T
-): T {
+export function cyclusIdentiteit<
+  T extends { readonly datum: string; readonly cyclus: BriefingCyclus | null },
+>(training: T): T {
   const eerste = training.cyclus?.sessies[0];
   if (eerste === undefined || eerste.datum === '') {
     return training;

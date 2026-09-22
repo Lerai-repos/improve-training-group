@@ -463,16 +463,25 @@ const OPPORTUNITY_EXPECTED_COLUMNS: ExpectedColumn[] = [
    * van "de kolom bestaat niet meer".
    */
   { id: OPPORTUNITY_COLUMNS.achtergrond, type: 'long_text' },
+  { id: OPPORTUNITY_COLUMNS.cyclus, type: 'status' },
 ];
 
 async function readContact(
   client: MondayGraphQLClient,
   opportunityItemId: string | null,
   agendaNaam: string
-): Promise<{ contact: { naam: string; telefoon: string } | null; achtergrond: string }> {
+): Promise<{
+  contact: { naam: string; telefoon: string } | null;
+  achtergrond: string;
+  cyclusVariant: string;
+}> {
   const naam = agendaNaam.trim();
   if (opportunityItemId === null) {
-    return { contact: naam === '' ? null : { naam, telefoon: '' }, achtergrond: '' };
+    return {
+      contact: naam === '' ? null : { naam, telefoon: '' },
+      achtergrond: '',
+      cyclusVariant: '',
+    };
   }
   const [oppMeta] = await client.getSchema([OPPORTUNITY_BOARD]);
   if (oppMeta === undefined) {
@@ -484,7 +493,7 @@ async function readContact(
     `query ($ids: [ID!]) {
        items(ids: $ids) {
          id name
-         column_values(ids: ["${OPPORTUNITY_COLUMNS.contact}", "${OPPORTUNITY_COLUMNS.achtergrond}"]) {
+         column_values(ids: ["${OPPORTUNITY_COLUMNS.contact}", "${OPPORTUNITY_COLUMNS.achtergrond}", "${OPPORTUNITY_COLUMNS.cyclus}"]) {
            id text ... on BoardRelationValue { linked_item_ids }
          }
        }
@@ -510,9 +519,10 @@ async function readContact(
     throw new Error(`Briefing: Opportunity ${opportunityItemId} kon niet worden opgehaald`);
   }
   const achtergrond = text(oppItem, OPPORTUNITY_COLUMNS.achtergrond);
+  const cyclusVariant = text(oppItem, OPPORTUNITY_COLUMNS.cyclus);
   const linked = linkedIds(oppItem, OPPORTUNITY_COLUMNS.contact);
   if (linked.length === 0) {
-    return { contact: naam === '' ? null : { naam, telefoon: '' }, achtergrond };
+    return { contact: naam === '' ? null : { naam, telefoon: '' }, achtergrond, cyclusVariant };
   }
 
   const contact = await client.query<{ items: RawItem[] }>(
@@ -553,13 +563,13 @@ async function readContact(
    * raden we dan niet.
    */
   if (candidates.length === 1) {
-    return { contact: candidates[0] ?? null, achtergrond };
+    return { contact: candidates[0] ?? null, achtergrond, cyclusVariant };
   }
   if (naam !== '') {
     const match = candidates.find((c) => c.naam.toLowerCase() === naam.toLowerCase());
-    return { contact: { naam, telefoon: match?.telefoon ?? '' }, achtergrond };
+    return { contact: { naam, telefoon: match?.telefoon ?? '' }, achtergrond, cyclusVariant };
   }
-  return { contact: null, achtergrond };
+  return { contact: null, achtergrond, cyclusVariant };
 }
 
 /**
@@ -737,6 +747,7 @@ export async function readBriefingTraining(
     // De cyclus vraagt een zoektocht over alle agendaborden; zie `readBriefingMetCyclus`.
     cyclus: null,
     cyclusKeuze: null,
+    cyclusVariant: opportunity.cyclusVariant,
     missing: [],
   };
 

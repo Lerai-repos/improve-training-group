@@ -51,6 +51,7 @@ const PROBIBLIO: BriefingTraining = {
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
 };
 
@@ -228,10 +229,27 @@ const SOLO: SessionFacts = { certainTrainers: 1, identifiedActors: 0, unknownRol
 describe('nesting in de acteurblokken', () => {
   const acteur = (role: 'lead' | 'acteur') => ({
     recipient: {
-      trainer: { itemId: '1', naam: 'A', telefoon: '06-1', isActeur: role === 'acteur', isCoTrainer: false },
+      trainer: {
+        itemId: '1',
+        naam: 'A',
+        telefoon: '06-1',
+        isActeur: role === 'acteur',
+        isCoTrainer: false,
+      },
       role,
-      otherTrainers: [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: role !== 'acteur', isCoTrainer: false }],
-      actors: role === 'lead' ? [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: true, isCoTrainer: false }] : [],
+      otherTrainers: [
+        {
+          itemId: '2',
+          naam: 'B',
+          telefoon: '06-2',
+          isActeur: role !== 'acteur',
+          isCoTrainer: false,
+        },
+      ],
+      actors:
+        role === 'lead'
+          ? [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: true, isCoTrainer: false }]
+          : [],
     },
     format: (naam: string, telefoon: string) => `${naam} (${telefoon})`,
   });
@@ -240,9 +258,12 @@ describe('nesting in de acteurblokken', () => {
     ['Werken met een trainingsacteur', 'lead' as const],
     ['Werken als trainingsacteur', 'acteur' as const],
   ])('zet de taken onder "%s" een niveau dieper', (titel, role) => {
-    const blok = selectBlocks({ ...EMPTY_CHECKLIST, trainingActor: true }, [], SOLO, acteur(role)).find(
-      (b) => b.titel === titel
-    );
+    const blok = selectBlocks(
+      { ...EMPTY_CHECKLIST, trainingActor: true },
+      [],
+      SOLO,
+      acteur(role)
+    ).find((b) => b.titel === titel);
     if (blok === undefined) {
       throw new Error(`blok "${titel}" ontbreekt`);
     }
@@ -267,13 +288,17 @@ describe('nesting in de acteurblokken', () => {
       recipient: {
         trainer: { itemId: '1', naam: 'A', telefoon: '06-1', isActeur: false, isCoTrainer: false },
         role: 'lead' as const,
-        otherTrainers: [{ itemId: '2', naam: 'B', telefoon: '06-2', isActeur: false, isCoTrainer: true }],
+        otherTrainers: [
+          { itemId: '2', naam: 'B', telefoon: '06-2', isActeur: false, isCoTrainer: true },
+        ],
         actors: [],
       },
       format: (naam: string, telefoon: string) => `${naam} (${telefoon})`,
     };
 
-    const blok = selectBlocks(EMPTY_CHECKLIST, [], SOLO, lead).find((b) => b.titel === 'Leadtrainer');
+    const blok = selectBlocks(EMPTY_CHECKLIST, [], SOLO, lead).find(
+      (b) => b.titel === 'Leadtrainer'
+    );
 
     expect(blok?.regels.every((r) => r.niveau === 0)).toBe(true);
   });
@@ -446,22 +471,58 @@ describe('selectBlocks', () => {
   });
 
   /**
-   * De geneste alinea verwijst naar het kopje `Huiswerkopdracht`. Dat vinkje is volgens de
-   * specificatie apart, dus dit mag voorkomen — maar de trainer gaat anders zoeken naar
-   * instructies die er niet staan.
+   * De verwijzing naar het kopje `Huiswerkopdracht` staat er alleen als dat kopje er ook is.
+   * De huiswerkopdracht is volgens de specificatie apart aanvinken, dus een cyclus zonder
+   * huiswerk komt voor — en dan hoort de trainer niet naar instructies te zoeken die er niet zijn.
    */
-  it('markeert een verwijzing naar een kopje dat niet is aangevinkt', () => {
-    const blocks = selectBlocks(
-      { ...EMPTY_CHECKLIST, trainingCycle: true, preparatoryAssignment: true },
-      [],
-      SOLO
+  it('verwijst alleen naar het kopje Huiswerkopdracht als dat is aangevinkt', () => {
+    const zie = 'zie kopje ‘Huiswerkopdracht’';
+    const zonder = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true }, [], SOLO);
+    expect(zonder.find((b) => b.titel.includes('cyclus'))?.regels[0]?.tekst).not.toContain(zie);
+    const met = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true, homework: true }, [], SOLO);
+    expect(met.find((b) => b.titel.includes('cyclus'))?.regels[0]?.tekst).toContain(zie);
+  });
+
+  /**
+   * De cyclustekst zoals Dirkje hem zelf schreef in haar Reade-briefing (22-Sep-2026), met de
+   * cijfers van die cyclus erin. Tim: haar formulering is de standaard. Letterlijk vergeleken,
+   * omdat `verify-blocks.py` deze alinea's niet meer tegen ITG's bron kan houden.
+   */
+  it("cyclustekst: Dirkje's Reade-formulering met de cijfers van de cyclus", () => {
+    const blocks = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true }, [], SOLO, undefined, {
+      duur: '4 + 3 uur',
+      aantal: 2,
+    });
+    expect(blocks.find((b) => b.titel.includes('cyclus'))?.regels.map((r) => r.tekst)).toEqual([
+      'Bij een trainingscyclus van 4 + 3 uur volgt de groep twee sessies over één thema. Tussen de ' +
+        'sessies zit een oefen- en integratieperiode van zo’n 2 à 3 weken, of langer indien gewenst, ' +
+        'waarin deelnemers bezig zijn met een huiswerkopdracht.',
+      'Tijdens de laatste sessie definiëren deelnemers hun eigen Next Step. Dit is een concrete ' +
+        'vervolgstap waar ze na de training zelfstandig mee verder kunnen. Deze Next Step kan ' +
+        'eventueel worden opgenomen in de ontwikkelgesprekken tussen manager en medewerker.',
+      'Door deze cyclus komen deelnemers meerdere keren in contact met de lesstof. Dit heeft een ' +
+        'grote positieve invloed op het leerrendement. De cyclus ziet er dus als volgt uit:',
+    ]);
+  });
+
+  it('cyclustekst zonder cijfers: "meerdere sessies", zonder "van …"', () => {
+    const blocks = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true }, [], SOLO);
+    expect(blocks.find((b) => b.titel.includes('cyclus'))?.regels[0]?.tekst).toMatch(
+      /^Bij een trainingscyclus volgt de groep meerdere sessies over één thema\./
     );
-    const cyclus = blocks.find((b) => b.titel.includes('cyclus'));
-    expect(
-      cyclus?.regels.some(
-        (r) => r.tekst.includes('Huiswerkopdracht') && r.tekst.includes('nog niet bepaald')
-      )
-    ).toBe(true);
+    const alleenAantal = selectBlocks(
+      { ...EMPTY_CHECKLIST, trainingCycle: true },
+      [],
+      SOLO,
+      undefined,
+      {
+        duur: '',
+        aantal: 3,
+      }
+    );
+    expect(alleenAantal.find((b) => b.titel.includes('cyclus'))?.regels[0]?.tekst).toMatch(
+      /^Bij een trainingscyclus volgt de groep drie sessies/
+    );
   });
 
   /**
@@ -640,5 +701,111 @@ describe('km en reistijd bij genereren', () => {
   it('telt een ontbrekende route als iets wat nog opgelost moet worden', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
     expect(isNotDecided(data.reis)).toBe(true);
+  });
+});
+
+describe('composeBriefing — het cyclusdocument', () => {
+  const sessie = (itemId: string, datum: string, over: Record<string, string> = {}) => ({
+    itemId,
+    boardId: '2026',
+    gearchiveerd: false,
+    datum,
+    tijden: '13:15 - 17:15',
+    locatie: 'Overtoom 283, 1054 HW Amsterdam',
+    groepsgrootte: '20 tot 25',
+    duur: '4 uur',
+    ieCode: '260546',
+    zonderThema: false,
+    ...over,
+  });
+  /** Reade: twee sessies, 4 + 3 uur, elk een eigen IE-code, dezelfde plek. */
+  const READE: BriefingTraining = {
+    ...PROBIBLIO,
+    datum: '2026-06-16',
+    itemId: '2',
+    duur: '3 uur',
+    opdrachten: { trainingCycle: true, homework: true, preparatoryAssignment: false },
+    cyclus: {
+      anker: '1',
+      sessies: [
+        sessie('1', '2026-05-19'),
+        sessie('2', '2026-06-16', { tijden: '09:00 - 12:00', duur: '3 uur', ieCode: '260691' }),
+      ],
+    },
+  };
+  const rit = { roundTripKm: 108, roundTripMinutes: 85, thresholdMinutes: 45 };
+
+  it("vult de tabel zoals Dirkje's Reade-voorbeeld, vanaf welke sessie ook", () => {
+    const data = composeBriefing(
+      READE,
+      { ...EMPTY_CHECKLIST, trainingCycle: true },
+      {
+        reis: rit,
+        reisPerSessie: () => rit,
+      }
+    );
+    expect(data.duur).toBe('4 + 3 uur');
+    expect(data.datumTijd).toBe(
+      'Sessie 1: 19 mei 2026; 13:15 - 17:15 uur\nSessie 2: 16 juni 2026; 09:00 - 12:00 uur'
+    );
+    expect(data.locatie).toBe('Overtoom 283, 1054 HW Amsterdam');
+    expect(data.groepsgrootte).toBe('20 tot 25 deelnemers');
+    expect(data.iecode).toBe('Sessie 1: 260546\nSessie 2: 260691');
+    expect(data.reis).toBe(
+      'Per sessie: 108 km. / 85 min. (40 min. factureren)\n' +
+        'Totaal: 216 km. / 170 min. (80 min. factureren)'
+    );
+    // De deadline hoort bij sessie 1, ook al drukt sessie 2 op de knop.
+    expect(data.materialenDeadline).toMatch(/^14 mei 2026/);
+    // En de cyclustekst draagt de cijfers.
+    const cyclus = data.blokken.find((b) => b.titel.includes('cyclus'));
+    expect(cyclus?.regels[0]?.tekst).toContain('van 4 + 3 uur volgt de groep twee sessies');
+  });
+
+  it('een sessie zonder route houdt de tabel open, en een ongeplande sessie leent sessie 1', () => {
+    const open = composeBriefing(READE, EMPTY_CHECKLIST, {
+      reisPerSessie: (id) => (id === '1' ? rit : undefined),
+    });
+    expect(open.reis).toContain('nog niet bepaald');
+
+    const alleen = composeBriefing(
+      {
+        ...PROBIBLIO,
+        opdrachten: { ...PROBIBLIO.opdrachten, trainingCycle: true },
+        cyclusVariant: '2x4u',
+      },
+      EMPTY_CHECKLIST,
+      { reis: rit }
+    );
+    expect(alleen.datumTijd).toBe('Sessie 1: 24 maart 2026; 09:30 - 12:30 uur\nSessie 2: N.O.T.K.');
+    // Sessie 1 is 3 uur volgens Duur; de variant vult alleen sessie 2 aan.
+    expect(alleen.duur).toBe('3 + 4 uur');
+    expect(alleen.reis).toBe(
+      'Per sessie: 108 km. / 85 min. (40 min. factureren)\n' +
+        'Totaal: 216 km. / 170 min. (80 min. factureren)'
+    );
+  });
+
+  /** Gezien op COA: alleen het cycluslabel, en de per-sessie-lookup kent alleen andere sessies. */
+  it('valt voor de training zelf terug op `reis` als de per-sessie-lookup niets weet', () => {
+    const data = composeBriefing(
+      {
+        ...PROBIBLIO,
+        opdrachten: { ...PROBIBLIO.opdrachten, trainingCycle: true },
+        cyclusVariant: '2x4u',
+      },
+      EMPTY_CHECKLIST,
+      { reis: rit, reisPerSessie: () => undefined }
+    );
+    expect(data.reis).toBe(
+      'Per sessie: 108 km. / 85 min. (40 min. factureren)\n' +
+        'Totaal: 216 km. / 170 min. (80 min. factureren)'
+    );
+  });
+
+  it('een gewone training verandert niet', () => {
+    const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST, { reis: rit });
+    expect(data.datumTijd).toBe('24 maart 2026; 09:30 - 12:30 uur');
+    expect(data.reis).toBe('Totaal: 108 km. / Totaal: 85 min. (40 min. factureren)');
   });
 });

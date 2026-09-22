@@ -24,6 +24,8 @@ const BORD_2026: CyclusBoard = {
     dup__of_workshop: 'text',
     tekst7: 'text',
     deelnemersaantal__1: 'text',
+    dup__of_tijden: 'text',
+    tekst_mkn58pt6: 'text',
     thema26: 'board_relation',
     lead26: 'board_relation',
     itg_cotrainers: 'board_relation',
@@ -59,6 +61,8 @@ const itemVoor = (bord: CyclusBoard, item: Item) => ({
     { id: 'dup__of_workshop', text: '09:00 - 13:00' },
     { id: 'tekst7', text: 'Almere' },
     { id: 'deelnemersaantal__1', text: '12' },
+    { id: 'dup__of_tijden', text: '4 uur' },
+    { id: 'tekst_mkn58pt6', text: '260546' },
     { id: bord.themaRelation, text: null, linked_item_ids: ['t1'] },
     { id: bord.trainerRelation, text: null, linked_item_ids: item.lead ?? ['lead'] },
     ...(bord.coTrainerRelation === undefined

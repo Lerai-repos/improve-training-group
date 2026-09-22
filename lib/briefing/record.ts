@@ -22,8 +22,13 @@ const ROL_LABEL: Record<RecipientRole, string> = {
 };
 
 export interface BriefingRow {
-  /** Het agenda-item waar deze briefing bij hoort; vult ook de drie spiegelkolommen. */
-  readonly trainingItemId: string;
+  /**
+   * De agenda-items waar deze briefing bij hoort; vullen ook de drie spiegelkolommen.
+   *
+   * Eén item, of bij een trainingscyclus élke sessie: het document gaat over allemaal, en
+   * wie op sessie 2 kijkt hoort daar te zien dat de briefing er al ligt.
+   */
+  readonly trainingItemIds: readonly string[];
   readonly filename: string;
   readonly ontvanger: string;
   readonly role: RecipientRole;
@@ -33,7 +38,8 @@ export interface BriefingRow {
 }
 
 export interface BriefingRecorder {
-  setBrie(itemId: string, status: BrieStatus): Promise<void>;
+  /** `boardId` voor een sessie op een ander agendabord; zonder is het het bord van de training. */
+  setBrie(itemId: string, status: BrieStatus, boardId?: string): Promise<void>;
   addRow(row: BriefingRow): Promise<string>;
 }
 
@@ -65,7 +71,7 @@ export function createBriefingRecorder(
   agendaBoardId: string
 ): BriefingRecorder {
   return {
-    async setBrie(itemId, status) {
+    async setBrie(itemId, status, boardId = agendaBoardId) {
       /**
        * `change_simple_column_value` met de labeltekst, niet met een index.
        *
@@ -74,7 +80,7 @@ export function createBriefingRecorder(
        * wijzigen. De tekst is wat zij zien en wat het procesdeck noemt.
        */
       await client.mutate(SET_STATUS, {
-        board: agendaBoardId,
+        board: boardId,
         item: itemId,
         column: BRIEFING_AGENDA_COLUMNS.brie,
         value: status,
@@ -83,7 +89,7 @@ export function createBriefingRecorder(
 
     async addRow(row) {
       const values = {
-        [BRIEFINGS_COLUMNS.training]: { item_ids: [Number(row.trainingItemId)] },
+        [BRIEFINGS_COLUMNS.training]: { item_ids: row.trainingItemIds.map(Number) },
         [BRIEFINGS_COLUMNS.ontvanger]: row.ontvanger,
         [BRIEFINGS_COLUMNS.rol]: { label: ROL_LABEL[row.role] },
         /**
@@ -114,7 +120,7 @@ export function createBriefingRecorder(
          * en die twee moeten uit elkaar te houden zijn. De naam alleen zou bovendien botsen
          * met een tweede generatie op een andere dag.
          */
-        { idempotencyKey: `briefing-row:${row.trainingItemId}:${row.url}` }
+        { idempotencyKey: `briefing-row:${row.trainingItemIds[0] ?? ''}:${row.url}` }
       );
       return data.create_item.id;
     },
@@ -124,9 +130,22 @@ export function createBriefingRecorder(
 /** De enige groep op het Briefings-bord. */
 const BRIEFINGS_GROUP = 'topics';
 
+/** Eén andere sessie van de cyclus, en of er op haar bord nog geschreven mag worden. */
+export interface RecordSessie {
+  readonly itemId: string;
+  readonly boardId: string;
+  /** Een gearchiveerde jaargang wordt gelezen, maar krijgt geen `Brie` meer. */
+  readonly schrijfbaar: boolean;
+}
+
 export interface RecordInput {
   readonly trainingItemId: string;
-  readonly rows: readonly Omit<BriefingRow, 'trainingItemId' | 'gegenereerdOp'>[];
+  /**
+   * De sessies van de bevestigde cyclus, de training zelf inbegrepen of niet — allemaal krijgen
+   * ze de rij en `Brie`, want het document gaat over allemaal.
+   */
+  readonly sessies: readonly RecordSessie[];
+  readonly rows: readonly Omit<BriefingRow, 'trainingItemIds' | 'gegenereerdOp'>[];
   /** True als er velden ontbraken die als zichtbare regel in het document landen. */
   readonly incompleet: boolean;
   readonly vandaag: string;
@@ -142,6 +161,8 @@ export interface RecordInput {
  */
 export function recordInputFor(input: {
   readonly trainingItemId: string;
+  /** De sessies van de cyclus; leeg bij een losse training. */
+  readonly sessies?: readonly RecordSessie[];
   /** Wat er gerenderd is: draagt de naam en de rol per ontvanger. */
   readonly documents: readonly {
     trainerNaam: string;
@@ -163,6 +184,7 @@ export function recordInputFor(input: {
   const deels = input.written.length < input.documents.length;
   return {
     trainingItemId: input.trainingItemId,
+    sessies: input.sessies ?? [],
     rows: input.written.map((bestand, index) => ({
       filename: bestand.file.name,
       ontvanger: input.documents[index].trainerNaam,
@@ -211,6 +233,23 @@ export async function recordGeneration(
   input: RecordInput
 ): Promise<RecordOutcome> {
   const problemen: string[] = [];
+  /**
+   * Alleen de sessies op het bord van de training zelf in de relatie.
+   *
+   * `itg_training` op het Briefings-bord is aangemaakt voor één agendabord
+   * (`scripts/briefings-create.ts`: `boardIds: [agendaBoardId()]`). Een item van een andere
+   * jaargang erin zetten laat `create_item` mislukken, en dan is het document nergens
+   * geregistreerd. Die sessies krijgen wél hun `Brie`; de rij hangt aan wat te koppelen is.
+   */
+  const eigenBord = input.sessies.find((sessie) => sessie.itemId === input.trainingItemId)?.boardId;
+  const itemIds = [
+    ...new Set([
+      input.trainingItemId,
+      ...input.sessies
+        .filter((sessie) => eigenBord === undefined || sessie.boardId === eigenBord)
+        .map((sessie) => sessie.itemId),
+    ]),
+  ];
 
   /**
    * Eén rij per document, ook bij opnieuw genereren.
@@ -222,7 +261,7 @@ export async function recordGeneration(
     try {
       await recorder.addRow({
         ...rij,
-        trainingItemId: input.trainingItemId,
+        trainingItemIds: itemIds,
         gegenereerdOp: input.vandaag,
       });
     } catch (error) {
@@ -233,12 +272,25 @@ export async function recordGeneration(
   }
 
   const brie: BrieStatus = input.incompleet ? 'Begonnen, niet klaar' : 'Staat klaar';
-  try {
-    await recorder.setBrie(input.trainingItemId, brie);
-  } catch (error) {
-    problemen.push(
-      `Brie niet op "${brie}" gezet: ${error instanceof Error ? error.message : String(error)}`
-    );
+  /**
+   * `Brie` op elke sessie van de cyclus, elk op haar eigen bord — een 2027-item bijwerken met
+   * het bord-id van 2026 mislukt. Een sessie op een gearchiveerd bord wordt overgeslagen.
+   */
+  const doelen: readonly { itemId: string; boardId?: string }[] = [
+    { itemId: input.trainingItemId },
+    ...input.sessies
+      .filter((sessie) => sessie.schrijfbaar && sessie.itemId !== input.trainingItemId)
+      .map((sessie) => ({ itemId: sessie.itemId, boardId: sessie.boardId })),
+  ];
+  for (const doel of doelen) {
+    try {
+      await recorder.setBrie(doel.itemId, brie, doel.boardId);
+    } catch (error) {
+      const waar = doel.itemId === input.trainingItemId ? '' : ` op sessie ${doel.itemId}`;
+      problemen.push(
+        `Brie niet op "${brie}" gezet${waar}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   return { brie, problemen };

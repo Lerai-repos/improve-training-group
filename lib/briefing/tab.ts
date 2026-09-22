@@ -11,6 +11,7 @@
  */
 
 import { BRIEFING_AGENDA_COLUMNS, OPPORTUNITY_COLUMNS } from './columns';
+import { ankerItemId } from './cyclus';
 import { BRIEFING_REQUIRED_FIELDS } from './required';
 import {
   ACHTERGROND_LEEG,
@@ -22,14 +23,13 @@ import {
 } from './compose';
 import { describeOpenIssue, isNotDecided, splitOpenIssue } from './open-issues';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
-import { ankerItemId } from './cyclus';
 import { conceptLines, resolveConceptInhoud } from './concept';
 import { formatDutchDate } from './deadline';
 import { resolveRecipientRoles, type RecipientRole } from './recipients';
 import { metEigenAchtergrond } from './achtergrond';
 import { EMPTY_SAVED, type SavedChecklist } from './answers';
 
-import type { BriefingTraining, BriefingTrainer, CyclusKeuze } from './types';
+import type { BriefingSessie, BriefingTraining, BriefingTrainer, CyclusKeuze } from './types';
 
 /** Eén gekoppelde persoon, zoals de tab hem toont bij de acteurvraag. */
 export interface TabPerson {
@@ -404,16 +404,34 @@ function controlesVoor(input: {
   }
   const elders = genereertElders(training);
   if (elders !== null) {
-    lijst.push({ key: 'cyclus-anker', label: 'Genereren vanaf sessie 1', status: 'blokkeert', uitleg: elders });
+    lijst.push({
+      key: 'cyclus-anker',
+      label: 'Genereren vanaf sessie 1',
+      status: 'blokkeert',
+      uitleg: elders,
+    });
   }
   const vraag = openstaandeCyclusvraag(training);
   if (vraag !== null) {
-    lijst.push({ key: 'cyclus-vraag', label: 'Cyclus bevestigen', status: 'ontbreekt', uitleg: vraag });
+    lijst.push({
+      key: 'cyclus-vraag',
+      label: 'Cyclus bevestigen',
+      status: 'ontbreekt',
+      uitleg: vraag,
+    });
   }
   themaloos(training).forEach((tekst, index) => {
     lijst.push({
       key: `cyclus-thema-${index}`,
       label: 'Thema ontbreekt',
+      status: 'ontbreekt',
+      uitleg: tekst,
+    });
+  });
+  sessiesOnvolledig(training).forEach((tekst, index) => {
+    lijst.push({
+      key: `cyclus-sessie-${index}`,
+      label: 'Sessie onvolledig',
       status: 'ontbreekt',
       uitleg: tekst,
     });
@@ -475,12 +493,44 @@ function themaloos(training: BriefingTraining): string[] {
 }
 
 /**
+ * Lege velden op de ÁNDERE sessies van de bevestigde cyclus.
+ *
+ * `legeVelden` kijkt alleen naar deze training. Mist sessie 2 haar locatie of tijden, dan
+ * staat er "Sessie 2:" met niets erachter in de tabel — en zonder deze melding zou de briefing
+ * toch op `Staat klaar` komen. Dezelfde velden als `BRIEFING_REQUIRED_FIELDS` voor de training
+ * zelf: de IE-code en het deelnemersaantal horen er niet bij, want die zijn daar ook niet
+ * verplicht — een sessie mag niet strenger beoordeeld worden dan haar anker.
+ */
+function sessiesOnvolledig(training: BriefingTraining): string[] {
+  const velden: readonly [keyof BriefingSessie, string][] = [
+    ['datum', 'Datum'],
+    ['tijden', 'Tijden'],
+    ['locatie', 'Locatie'],
+    ['duur', 'Duur'],
+  ];
+  return (training.cyclus?.sessies ?? [])
+    .filter((sessie) => sessie.itemId !== training.itemId)
+    .flatMap((sessie) => {
+      const leeg = velden
+        .filter(([veld]) => String(sessie[veld]).trim() === '')
+        .map(([, label]) => label);
+      return leeg.length === 0
+        ? []
+        : [
+            `De sessie van ${sessieDatum(sessie.datum)} hoort bij deze cyclus maar mist ` +
+              `${leeg.join(', ')}. Vul dat in Monday in.`,
+          ];
+    });
+}
+
+/**
  * Deze sessie hoort bij een bevestigde cyclus, maar is niet de sessie die de briefing maakt.
  *
- * Zolang het document nog per sessie wordt gemaakt (zie het geheugen `itg-briefing-cyclus-groep`,
- * deel 2 wacht op ITG's voorbeeld) zou genereren vanaf sessie 2 een tweede briefing opleveren —
- * met een andere datum, een andere bestandsnaam en een eigen map — voor een cyclus die er al een
- * heeft. Eén sessie maakt hem dus, en dat is dezelfde sessie waar de antwoorden onder staan.
+ * Het document is één bestand onder de naam van sessie 1, maar de INHOUD komt van de sessie
+ * die op Genereren drukt: klanttitel ("… II"), contactpersoon, en — na een handmatige
+ * bevestiging — mogelijk andere trainers. Vanaf sessie 2 zou dus een ander document met
+ * andere ontvangers ontstaan, terwijl elke sessie op `Staat klaar` staat. Daarom maakt de
+ * sessie waar de antwoorden onder staan hem, en niemand anders.
  */
 function genereertElders(training: BriefingTraining): string | null {
   const sessies = training.cyclus?.sessies ?? [];
@@ -667,7 +717,11 @@ export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist 
     ...(cyclusvraag === null
       ? []
       : [{ kind: 'cyclus' as const, tekst: cyclusvraag, blokkeert: false }]),
-    ...themaloos(training).map((tekst) => ({ kind: 'cyclus' as const, tekst, blokkeert: false }))
+    ...[...themaloos(training), ...sessiesOnvolledig(training)].map((tekst) => ({
+      kind: 'cyclus' as const,
+      tekst,
+      blokkeert: false,
+    }))
   );
   const regels = onbepaaldeRegels(training, checklist, antwoorden.actorItemIds);
   issues.push(

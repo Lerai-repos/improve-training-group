@@ -52,6 +52,7 @@ const trainingVoor = (itemId: string, over: Partial<BriefingTraining> = {}): Bri
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
   ...over,
 });
@@ -198,6 +199,8 @@ describe('useBriefingView', () => {
       tijden: '09:00 - 13:00',
       locatie: 'Almere',
       groepsgrootte: '12',
+      duur: '',
+      ieCode: '',
       zonderThema: false,
     });
     const monday = fakeMonday(CTX('900'));
@@ -206,7 +209,10 @@ describe('useBriefingView', () => {
         '900': payloadVoor('900', {
           training: {
             ...trainingVoor('900'),
-            cyclus: { sessies: [sessie('800', '2026-09-22'), sessie('900', '2027-01-04')], anker: '800' },
+            cyclus: {
+              sessies: [sessie('800', '2026-09-22'), sessie('900', '2027-01-04')],
+              anker: '800',
+            },
           },
         }),
       },

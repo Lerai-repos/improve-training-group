@@ -46,6 +46,7 @@ const TRAINING: BriefingTraining = {
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
 };
 
@@ -433,6 +434,8 @@ describe('buildTabView', () => {
         tijden: '09:00 - 13:00',
         locatie: 'Almere',
         groepsgrootte: '12',
+        duur: '4 uur',
+        ieCode: '',
         zonderThema,
       });
       const optie = (itemId: string, huidig: boolean, aangevinkt: boolean) => ({
@@ -451,8 +454,14 @@ describe('buildTabView', () => {
           {
             ...KLAAR,
             itemId: '900',
-            cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04')], anker: '900' },
-            cyclusKeuze: { opties: [optie('900', true, true), optie('901', false, true)], openstaand: false },
+            cyclus: {
+              sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04')],
+              anker: '900',
+            },
+            cyclusKeuze: {
+              opties: [optie('900', true, true), optie('901', false, true)],
+              openstaand: false,
+            },
           },
           opgeslagen()
         );
@@ -471,7 +480,10 @@ describe('buildTabView', () => {
           {
             ...KLAAR,
             itemId: '900',
-            cyclusKeuze: { opties: [optie('900', true, true), optie('901', false, true)], openstaand: true },
+            cyclusKeuze: {
+              opties: [optie('900', true, true), optie('901', false, true)],
+              openstaand: true,
+            },
           },
           opgeslagen()
         );
@@ -484,10 +496,10 @@ describe('buildTabView', () => {
       });
 
       /**
-       * Zolang het document per sessie gemaakt wordt, maakt één sessie hem — anders staan er twee
-       * briefings voor dezelfde cyclus in de klantmap.
+       * De inhoud komt van de sessie die op de knop drukt (klanttitel, trainers na een handmatige
+       * bevestiging), dus één sessie maakt het document — die waar de antwoorden onder staan.
        */
-      it('laat alleen de eerste sessie genereren', () => {
+      it('laat alleen de ankersessie genereren', () => {
         const cyclus = {
           sessies: [sessie('800', '2026-09-22'), sessie('900', '2027-01-04')],
           anker: '800',
@@ -500,7 +512,6 @@ describe('buildTabView', () => {
         expect(controle(tweede, 'Genereren vanaf sessie 1')?.uitleg).toMatch(
           /sessie van 22 september 2026/
         );
-
         const eerste = buildTabView(
           { ...KLAAR, itemId: '800', cyclus, cyclusKeuze: null },
           opgeslagen()
@@ -508,13 +519,40 @@ describe('buildTabView', () => {
         expect(eerste.kanGenereren).toBe(true);
       });
 
+      /** Een andere sessie zonder locatie of tijden: de tabel toont een gat, dus niet compleet. */
+      it('meldt een bevestigde sessie met lege velden als onvolledig', () => {
+        const kaal = { ...sessie('901', '2027-01-04'), locatie: '', tijden: '', duur: '4 uur' };
+        const uit = buildTabView(
+          {
+            ...KLAAR,
+            itemId: '900',
+            cyclus: { sessies: [sessie('900', '2026-09-22'), kaal], anker: '900' },
+            cyclusKeuze: null,
+          },
+          opgeslagen()
+        );
+        expect(controle(uit, 'Sessie onvolledig')?.uitleg).toMatch(
+          /4 januari 2027 .* mist Tijden, Locatie/
+        );
+        expect(
+          uit.issues.some((i) => i.kind === 'cyclus' && /mist Tijden, Locatie/.test(i.tekst))
+        ).toBe(true);
+        expect(uit.kanGenereren).toBe(true);
+      });
+
       it('meldt een bevestigde sessie zonder thema als ontbrekend', () => {
         const uit = buildTabView(
           {
             ...KLAAR,
             itemId: '900',
-            cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04', true)], anker: '900' },
-            cyclusKeuze: { opties: [optie('900', true, true), optie('901', false, true)], openstaand: false },
+            cyclus: {
+              sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04', true)],
+              anker: '900',
+            },
+            cyclusKeuze: {
+              opties: [optie('900', true, true), optie('901', false, true)],
+              openstaand: false,
+            },
           },
           opgeslagen()
         );

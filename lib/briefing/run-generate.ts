@@ -309,6 +309,11 @@ export async function runGenerate(
     deps.recorder,
     recordInputFor({
       trainingItemId: input.itemId,
+      sessies: (training.cyclus?.sessies ?? []).map((sessie) => ({
+        itemId: sessie.itemId,
+        boardId: sessie.boardId,
+        schrijfbaar: !sessie.gearchiveerd,
+      })),
       documents: gemaakt.documents,
       written: geschreven.written,
       /**

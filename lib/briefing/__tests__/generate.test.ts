@@ -50,6 +50,7 @@ const TRAINING: BriefingTraining = {
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
 };
 

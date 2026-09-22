@@ -56,10 +56,10 @@ MANIFEST = (
     "Elke trainer traint een eigen groep.",
     "Jullie trainen samen de gehele groep,",
     "Voor deze klant hebben we meerdere sessies",
-    "Deze opdracht betreft een trainingscyclus",
-    "Vóór de eerste sessie ontvangen deelnemers",
-    "Aan het einde van elke sessie, of tijdens de laatste sessie",
-    "Grofweg zie de cyclus ziet er als onderstaand uit.",
+    # Het cyclusblok staat hier NIET meer. Sinds 22-Sep-2026 zijn dat Dirkje's eigen woorden
+    # uit haar Reade-cyclusbriefing, met de cijfers van de cyclus erin ("van 4 + 3 uur",
+    # "twee sessies"), dus geen letterlijke kopie van dit bronbestand. De unit-test
+    # `cyclustekst` in lib/briefing/__tests__/compose.test.ts bewaakt die tekst.
     "In overeenstemming met de klant verzorgen wij een huiswerkopdracht",
     "De opdracht dient deelnemers te helpen",
     "Zorg er zo veel mogelijk voor dat de opdracht",

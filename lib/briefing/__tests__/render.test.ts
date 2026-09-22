@@ -54,6 +54,7 @@ const TRAINING: BriefingTraining = {
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
+  cyclusVariant: '',
   missing: [],
 };
 
@@ -176,7 +177,7 @@ describe('renderBriefing', () => {
     expect(mediaEntries(met).length).toBe(mediaEntries(zonder).length + 1);
 
     const xml = documentXml(met).replace(/<[^>]+>/g, '');
-    expect(xml).toContain('Grofweg zie de cyclus ziet er als onderstaand uit');
+    expect(xml).toContain('De cyclus ziet er dus als volgt uit');
   });
 
   /**

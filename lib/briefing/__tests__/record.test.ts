@@ -44,6 +44,7 @@ function recorder(
 
 const INVOER = {
   trainingItemId: '900',
+  sessies: [],
   rows: [
     {
       filename: 'Briefing Calduran - Feedback - 09-10-2026 - Frank.docx',
@@ -88,7 +89,7 @@ describe('createBriefingRecorder', () => {
     const client = mutatieClient();
 
     const id = await createBriefingRecorder(client, '5087396949').addRow({
-      trainingItemId: '900',
+      trainingItemIds: ['900'],
       filename: 'Briefing.docx',
       ontvanger: 'Frank Paats',
       role: 'lead',
@@ -242,7 +243,7 @@ describe('recordGeneration', () => {
       ['Richard Roling', 'co'],
     ]);
     // De relatie draagt de betekenis; de drie spiegelkolommen vullen zichzelf.
-    expect(r.rijen[0].trainingItemId).toBe('900');
+    expect(r.rijen[0].trainingItemIds).toEqual(['900']);
     expect(r.rijen[0].gegenereerdOp).toBe('2026-08-26');
     expect(r.brie).toEqual(['Staat klaar']);
   });
@@ -313,5 +314,58 @@ describe('recordGeneration', () => {
     expect(r.rijen).toHaveLength(3);
     expect(r.rijen[2].filename).toContain('(v2)');
     expect(r.rijen[2].gegenereerdOp).toBe('2026-08-27');
+  });
+});
+
+describe('recordGeneration bij een trainingscyclus', () => {
+  const SESSIES = [
+    { itemId: '900', boardId: '2026', schrijfbaar: true },
+    { itemId: '901', boardId: '2027', schrijfbaar: true },
+    { itemId: '899', boardId: '2025', schrijfbaar: false },
+  ];
+
+  it('koppelt elke rij aan alle sessies en zet Brie op elke schrijfbare sessie op haar eigen bord', async () => {
+    const gezet: [string, string, string | undefined][] = [];
+    const r = recorder();
+    const uit = await recordGeneration(
+      {
+        ...r,
+        setBrie: (itemId, status, boardId) => {
+          gezet.push([itemId, status, boardId]);
+          return Promise.resolve();
+        },
+      },
+      { ...INVOER, sessies: SESSIES }
+    );
+    expect(uit.problemen).toEqual([]);
+    // De relatie kent maar één agendabord: alleen de sessies op het bord van de training.
+    expect(r.rijen.map((rij) => rij.trainingItemIds)).toEqual([['900'], ['900']]);
+    // De training zelf op het standaardbord, de andere sessie op háár bord, de gearchiveerde niet.
+    expect(gezet).toEqual([
+      ['900', 'Staat klaar', undefined],
+      ['901', 'Staat klaar', '2027'],
+    ]);
+    const zelfdeBord = recorder();
+    await recordGeneration(zelfdeBord, {
+      ...INVOER,
+      sessies: [
+        { itemId: '900', boardId: '2026', schrijfbaar: true },
+        { itemId: '901', boardId: '2026', schrijfbaar: true },
+      ],
+    });
+    expect(zelfdeBord.rijen[0]?.trainingItemIds).toEqual(['900', '901']);
+  });
+
+  it('meldt per sessie welke Brie niet gezet kon worden, en gaat door', async () => {
+    const r = recorder();
+    const uit = await recordGeneration(
+      {
+        ...r,
+        setBrie: (itemId) =>
+          itemId === '901' ? Promise.reject(new Error('bord weg')) : Promise.resolve(),
+      },
+      { ...INVOER, sessies: SESSIES }
+    );
+    expect(uit.problemen).toEqual(['Brie niet op "Staat klaar" gezet op sessie 901: bord weg']);
   });
 });

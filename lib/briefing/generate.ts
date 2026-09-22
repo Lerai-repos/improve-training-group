@@ -42,8 +42,13 @@ export interface GenerateContext {
   readonly historie: readonly HistoryRow[];
   /** De gemarkeerde updates van het agenda-item en de Opportunity. */
   readonly extraInfo: readonly string[];
-  /** Km en reistijd per trainer-itemId. */
+  /** Km en reistijd per trainer-itemId, naar de locatie van deze training. */
   readonly reis: ReadonlyMap<string, TravelInput>;
+  /**
+   * Bij een bevestigde cyclus: per sessie-itemId de km en reistijd per trainer. Een sessie die
+   * hier ontbreekt heeft geen route, en dan blijft `Km. / Reistijd` een openstaande regel.
+   */
+  readonly reisSessies?: ReadonlyMap<string, ReadonlyMap<string, TravelInput>>;
   /** Door de adviseur aangewezen acteurs. */
   readonly actorItemIds: readonly string[];
 }
@@ -107,10 +112,15 @@ export async function generateBriefings(
 
   const documents: GeneratedDocument[] = [];
   for (const ontvanger of rollen.recipients) {
+    const trainerId = ontvanger.trainer.itemId;
     const eigen = composeBriefing(training, checklist, {
       ...gedeeld,
       recipient: ontvanger,
-      reis: context.reis.get(ontvanger.trainer.itemId),
+      reis: context.reis.get(trainerId),
+      reisPerSessie:
+        context.reisSessies === undefined
+          ? undefined
+          : (sessieId) => context.reisSessies?.get(sessieId)?.get(trainerId),
     });
     documents.push({
       trainerItemId: ontvanger.trainer.itemId,

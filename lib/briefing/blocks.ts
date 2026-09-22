@@ -22,6 +22,7 @@
  * zonder te weten voor wie is een geldige tussenstap, en gokken is dat niet.
  */
 
+import { aantalWoord, type CyclusFeiten } from './cyclus-document';
 import { notConnected, notDecided } from './open-issues';
 
 import { nameList } from './recipients';
@@ -309,14 +310,6 @@ export function prefillTrainingActor(
   return (acteuraantal !== null && acteuraantal > 0) || linkedActorCount > 0;
 }
 
-/** Zichtbare regel wanneer de geneste alinea naar een kopje verwijst dat niet is aangevinkt. */
-function danglingHomeworkReference(): string {
-  return notDecided(
-    'verwijzing naar het kopje Huiswerkopdracht',
-    'de geneste cyclusalinea verwijst ernaar, maar de huiswerkopdracht staat niet aan'
-  );
-}
-
 /**
  * Wat er van het agendabord komt in plaats van uit de checklist.
  *
@@ -412,60 +405,53 @@ const SAME_GROUP: BriefingBlock = {
 };
 
 /**
- * De vier alinea's van het cyclusblok, waarvan de tweede **genest** is.
+ * Het cyclusblok, met de cijfers van déze cyclus erin.
  *
- * `06-briefing.md` beschrijft die nesting bij de checklistvraag over de voorbereidende
- * opdracht: *"Ja → tekstblok. **En dan komt de cyclus-tekst er ook bij** (geneste regel)"*,
- * en de acceptatiecriteria vragen om precies dat verschil te kunnen aantonen:
+ * ITG's brontekst noemde de cyclus "in dit voorbeeld 2 x 4 uur", en dat stond ook in een
+ * briefing over een cyclus van 4 + 3 uur. Dirkje schreef het in haar eigen cyclusbriefing
+ * (Reade, 22-Sep-2026) daarom om met de echte cijfers; Tim, 22-Sep-2026: die formulering is
+ * de standaard, en de cijfers komen uit de sessies (`cyclus-document.ts`). Dit zijn dus
+ * Dirkje's woorden met twee gaten erin, en niet meer letterlijk de bron —
+ * `tools/briefing-templates/verify-blocks.py` slaat deze alinea's daarom over; de unit-test
+ * `cyclustekst` legt ze naast haar Reade-tekst.
  *
- * > 2. Genereer een briefing met een trainingscyclus **én** een voorbereidende opdracht. De
- * >    geneste alinea verschijnt en de afbeelding staat goed.
- * > 3. Genereer dezelfde briefing zonder de voorbereidende opdracht. Die alinea is weg.
- *
- * Alinea 2 is de enige die over een voorbereidende opdracht gaat, dus dat is de geneste. Een
- * cyclus zónder voorbereidende opdracht is dus een geldige, in de acceptatiecriteria
- * gevraagde toestand, en niet iets om te weigeren.
+ * De tweede alinea is **genest**: `06-briefing.md` — *"Ja → tekstblok. En dan komt de
+ * cyclus-tekst er ook bij (geneste regel)"* — en de acceptatiecriteria vragen om precies dat
+ * verschil te kunnen aantonen (mét en zónder voorbereidende opdracht). Een cyclus zonder
+ * voorbereidende opdracht is dus een gevraagde toestand, geen fout.
  */
-const CYCLE_INTRO =
-  'Deze opdracht betreft een trainingscyclus van meerdere, op elkaar verdiepende sessies. ' +
-  'Hierdoor komen deelnemers meerdere keren in contact met de lesstof. Dit heeft een grote ' +
-  'positieve invloed op het leerrendement.';
+function cycleIntro(cyclus: CyclusFeiten | null, homework: boolean): string {
+  const van = cyclus === null || cyclus.duur === '' ? '' : ` van ${cyclus.duur}`;
+  const sessies = cyclus === null || cyclus.aantal < 2 ? 'meerdere' : aantalWoord(cyclus.aantal);
+  return (
+    `Bij een trainingscyclus${van} volgt de groep ${sessies} sessies over één thema. Tussen de ` +
+    'sessies zit een oefen- en integratieperiode van zo’n 2 à 3 weken, of langer indien ' +
+    'gewenst, waarin deelnemers bezig zijn met een huiswerkopdracht.' +
+    /** Alleen verwijzen naar een kopje dat er ook staat; de huiswerkopdracht is apart aanvinken. */
+    (homework ? ' Voor instructies over de huiswerkopdracht, zie kopje ‘Huiswerkopdracht’.' : '')
+  );
+}
 
 /** De geneste alinea: staat er alleen bij een voorbereidende opdracht. */
 const CYCLE_NESTED =
-  'Vóór de eerste sessie ontvangen deelnemers een voorbereidende reflectieopdracht. Tussen ' +
-  'de sessies zit een oefen- en integratieperiode (meestal van zo’n 2 à 3 weken), waarin ' +
-  'deelnemers bezig zijn met een huiswerkopdracht. Voor instructies over de huiswerkopdracht, ' +
-  'zie kopje ‘Huiswerkopdracht’.';
+  'Vóór de eerste sessie ontvangen deelnemers een voorbereidende reflectieopdracht.';
 
 const CYCLE_NEXT_STEP =
-  'Aan het einde van elke sessie, of tijdens de laatste sessie definiëren deelnemers hun eigen ' +
-  'Next Step. Dit is een concrete vervolgstap waar ze na de training zelfstandig mee verder ' +
-  'kunnen. Deze Next Step kan eventueel worden opgenomen in de ontwikkelgesprekken tussen ' +
-  'manager en medewerker.';
+  'Tijdens de laatste sessie definiëren deelnemers hun eigen Next Step. Dit is een concrete ' +
+  'vervolgstap waar ze na de training zelfstandig mee verder kunnen. Deze Next Step kan ' +
+  'eventueel worden opgenomen in de ontwikkelgesprekken tussen manager en medewerker.';
 
 const CYCLE_DIAGRAM_INTRO =
-  'Grofweg zie de cyclus ziet er als onderstaand uit. Het betreft in dit voorbeeld een cyclus ' +
-  'van 2 x 4 uur, maar we hebben soms ook cycli van meerdere of langere sessies. Hieronder ' +
-  'staat een grove opzet qua programma, maar meestal zijn er inhoudelijk al meer kaders ' +
-  'gegeven (als dat zo is, vind je die in deze briefing).';
+  'Door deze cyclus komen deelnemers meerdere keren in contact met de lesstof. Dit heeft een ' +
+  'grote positieve invloed op het leerrendement. De cyclus ziet er dus als volgt uit:';
 
-/**
- * Het cyclusblok, met of zonder de geneste alinea.
- *
- * De geneste alinea verwijst óók naar het kopje `Huiswerkopdracht`. Staat die alinea erin
- * terwijl de huiswerkopdracht níet is aangevinkt, dan verwijst de briefing naar een kopje dat
- * er niet is. Dat is geen reden om te weigeren — `06-briefing.md` zegt uitdrukkelijk dat de
- * huiswerkopdracht *"apart aanvinken"* is — maar het moet wel zichtbaar zijn, want de trainer
- * gaat anders zoeken naar instructies die nergens staan.
- */
-function trainingCycleBlock(checklist: BriefingChecklist): BriefingBlock {
-  const regels: string[] = [CYCLE_INTRO];
+function trainingCycleBlock(
+  checklist: BriefingChecklist,
+  cyclus: CyclusFeiten | null
+): BriefingBlock {
+  const regels: string[] = [cycleIntro(cyclus, checklist.homework)];
   if (checklist.preparatoryAssignment) {
     regels.push(CYCLE_NESTED);
-    if (!checklist.homework) {
-      regels.push(danglingHomeworkReference());
-    }
   }
   regels.push(CYCLE_NEXT_STEP, CYCLE_DIAGRAM_INTRO);
   return {
@@ -732,9 +718,10 @@ export function splitBlocks(
   recipient?: {
     readonly recipient: Recipient;
     readonly format: (naam: string, telefoon: string) => string;
-  }
+  },
+  cyclus: CyclusFeiten | null = null
 ): { readonly rolblokken: BriefingBlock[]; readonly blokken: BriefingBlock[] } {
-  const alle = selectBlocks(checklist, historie, session, recipient);
+  const alle = selectBlocks(checklist, historie, session, recipient, cyclus);
   const rol = new Set<string>(rolBlockTitels(checklist, session, recipient));
   return {
     rolblokken: alle.filter((b) => rol.has(b.titel)),
@@ -769,7 +756,9 @@ export function selectBlocks(
   recipient?: {
     readonly recipient: Recipient;
     readonly format: (naam: string, telefoon: string) => string;
-  }
+  },
+  /** De cijfers van de cyclus voor het cyclusblok; `null` als die (nog) niet bekend zijn. */
+  cyclus: CyclusFeiten | null = null
 ): BriefingBlock[] {
   if (checklist.ownGroup && checklist.sameGroup) {
     throw new Error(
@@ -792,7 +781,7 @@ export function selectBlocks(
     blocks.push(recurring);
   }
   if (checklist.trainingCycle) {
-    blocks.push(trainingCycleBlock(checklist));
+    blocks.push(trainingCycleBlock(checklist, cyclus));
   }
   /**
    * Huiswerk en de voorbereidende opdracht gaan over het MAKEN van de inhoud, dus niet naar

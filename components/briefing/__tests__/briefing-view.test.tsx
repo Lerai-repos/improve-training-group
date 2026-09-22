@@ -28,6 +28,8 @@ const sessie = (itemId: string, datum: string) => ({
   tijden: '09:00 - 13:00',
   locatie: 'Almere',
   groepsgrootte: '12',
+  duur: '',
+  ieCode: '',
   zonderThema: false,
 });
 
@@ -72,13 +74,14 @@ const TRAINING: BriefingTraining = {
   opdrachten: { trainingCycle: true, homework: false, preparatoryAssignment: false },
   cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04')], anker: '900' },
   cyclusKeuze: { opties: [optie('900', true), optie('901', false)], openstaand: false },
+  cyclusVariant: '',
   missing: [],
 };
 
-function stel(over: {
-  cyclus?: UseBriefingView['cyclus'];
-  generate?: GenerateState;
-}): { view: UseBriefingView; generate: Parameters<typeof BriefingView>[0]['generate'] } {
+function stel(over: { cyclus?: UseBriefingView['cyclus']; generate?: GenerateState }): {
+  view: UseBriefingView;
+  generate: Parameters<typeof BriefingView>[0]['generate'];
+} {
   const view: UseBriefingView = {
     itemId: '900',
     theme: 'light',

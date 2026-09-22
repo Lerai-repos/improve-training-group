@@ -170,27 +170,67 @@ export async function buildGenerateContext(
     {
       bedrijf: training.opdrachtgever,
       /**
-       * Alleen de training zelf — nog niet de andere sessies van de cyclus.
-       *
-       * Die uit de tabel halen hoort bij het cyclusdocument, dat ze zelf opsomt. Zolang het
-       * document nog per sessie wordt gemaakt zouden ze nergens meer staan: niet in de tabel,
-       * niet in de tekst. Zodra deel 2 er is wordt dit `cyclus.sessies`.
+       * De training zelf én de andere sessies van haar cyclus: die staan al in de tabel van
+       * het cyclusdocument. Dirkje, 17-Sep-2026, over CNV: *"Die staan dan ook in die tabel.
+       * Terwijl eigenlijk gaat die briefing in theorie ook over die opdrachten."*
        */
-      excludeItemIds: [training.itemId],
+      excludeItemIds: cyclusItemIds(training),
       limit: input.historieLimit,
     },
     (await loadAgendaBoards(client)).boards
   );
 
   const reis = await resolveReis(client, training, input.trainerItemIds, notes);
+  const reisSessies = await resolveReisSessies(client, training, input.trainerItemIds, reis, notes);
 
   return {
     context: {
       historie,
       extraInfo: extraInfo.lines,
       reis,
+      reisSessies,
       actorItemIds: input.actorItemIds,
     },
     notes,
   };
+}
+
+/** De training en de sessies van haar bevestigde cyclus. */
+export function cyclusItemIds(training: BriefingTraining): readonly string[] {
+  return [...new Set([training.itemId, ...(training.cyclus?.sessies ?? []).map((s) => s.itemId)])];
+}
+
+/**
+ * Km en reistijd per sessie van de cyclus, voor de tabel die per sessie en in totaal telt.
+ *
+ * Eén route per LOCATIE, niet per sessie: een cyclus is bijna altijd op één plek, en dan is
+ * dit dezelfde route als `reis` en kost het niets extra's. Alleen een sessie elders krijgt
+ * een eigen berekening. Een sessie zonder locatie krijgt niets, en dan is de tabel niet af —
+ * dezelfde regel als bij één sessie.
+ */
+async function resolveReisSessies(
+  client: MondayGraphQLClient,
+  training: BriefingTraining,
+  itemIds: readonly string[],
+  eigen: ReadonlyMap<string, TravelInput>,
+  notes: ContextNote[]
+): Promise<ReadonlyMap<string, ReadonlyMap<string, TravelInput>>> {
+  const sessies = training.cyclus?.sessies ?? [];
+  const perSessie = new Map<string, ReadonlyMap<string, TravelInput>>();
+  const perLocatie = new Map<string, ReadonlyMap<string, TravelInput>>([
+    [training.locatie.trim(), eigen],
+  ]);
+  for (const sessie of sessies) {
+    const locatie = sessie.locatie.trim();
+    if (locatie === '') {
+      continue;
+    }
+    let route = perLocatie.get(locatie);
+    if (route === undefined) {
+      route = await resolveReis(client, { ...training, locatie }, itemIds, notes);
+      perLocatie.set(locatie, route);
+    }
+    perSessie.set(sessie.itemId, route);
+  }
+  return perSessie;
 }

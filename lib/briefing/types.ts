@@ -80,6 +80,10 @@ export interface BriefingSessie {
   readonly tijden: string;
   readonly locatie: string;
   readonly groepsgrootte: string;
+  /** De kolom `Duur` als tekst ("4 uur"); het cyclusdocument telt de sessies hieruit op. */
+  readonly duur: string;
+  /** Elke sessie heeft haar eigen IE-code: Reade heeft 260546 en 260691 in één cyclus. */
+  readonly ieCode: string;
   /** Geen thema ingevuld. Doet wel mee, maar de tab meldt het. */
   readonly zonderThema: boolean;
 }
@@ -193,6 +197,13 @@ export interface BriefingTraining {
   readonly cyclus: BriefingCyclus | null;
   /** De vraag met de vinkjes, of `null` als er geen andere sessies onder de opdracht staan. */
   readonly cyclusKeuze: CyclusKeuze | null;
+  /**
+   * `Trainingscyclus?` op de Opportunity, als tekst: `2x4u`, `4+8u`, `3x4u`, `Nee` of leeg.
+   *
+   * Zegt hoeveel sessies de cyclus hóórt te hebben. Een sessie die nog niet in Monday staat
+   * (Reade: "Sessie 2: N.O.T.K." toen de briefing werd gemaakt) komt zo toch in het document.
+   */
+  readonly cyclusVariant: string;
 
   /** Lege verplichte velden. Leeg betekent: klaar om te genereren. */
   readonly missing: readonly MissingField[];

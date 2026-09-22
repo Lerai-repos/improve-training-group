@@ -77,6 +77,8 @@ interface FakeOpts {
   oppAchtergrondType?: string;
   /** De tekst in `itg_achtergrond`; leeg is de begintoestand van die kolom. */
   achtergrond?: string;
+  /** `Trainingscyclus?` op de Opportunity, als labeltekst. */
+  cyclusVariant?: string;
 }
 
 /** Een bord dat aan alle verwachtingen voldoet, tenzij de test iets omzet. */
@@ -134,6 +136,7 @@ function client(item: unknown, opts: FakeOpts = {}) {
                 id: 'itg_achtergrond',
                 text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.',
               },
+              { id: 'color_mm724vqh', text: opts.cyclusVariant ?? '' },
             ],
           },
         ],
@@ -221,6 +224,12 @@ function client(item: unknown, opts: FakeOpts = {}) {
                     id: 'itg_achtergrond',
                     title: 'Achtergrondinformatie',
                     type: opts.oppAchtergrondType ?? 'long_text',
+                    settings_str: '{}',
+                  },
+                  {
+                    id: 'color_mm724vqh',
+                    title: 'Trainingscyclus?',
+                    type: 'status',
                     settings_str: '{}',
                   },
                 ],
@@ -658,6 +667,16 @@ describe('readBriefingTraining', () => {
     const t = await readBriefingTraining(client(agendaItem(), { achtergrond: '' }), '1');
     expect(t.achtergrond).toBe('');
     expect(t.missing.map((m) => m.label)).toContain('Achtergrondinformatie');
+  });
+
+  it('reads the cycle variant from the linked Opportunity, empty without one', async () => {
+    const met = await readBriefingTraining(client(agendaItem(), { cyclusVariant: '4+8u' }), '1');
+    expect(met.cyclusVariant).toBe('4+8u');
+    const zonder = await readBriefingTraining(
+      client(agendaItem({ [C.opportunity]: { linked_item_ids: [] } })),
+      '1'
+    );
+    expect(zonder.cyclusVariant).toBe('');
   });
 
   it('reads the achtergrond text from the linked Opportunity', async () => {
