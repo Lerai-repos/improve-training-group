@@ -16,11 +16,30 @@ const DEFAULT_BASE_DELAY_MS = 500;
 const DEFAULT_TIMEOUT_MS = 15000;
 const BACKOFF_BASE = 2;
 const TOO_MANY_REQUESTS = 429;
+/**
+ * Azure OpenAI answers a request that waited too long in its queue with 408, and documents it
+ * as retryable. Without it a single queue timeout became a terminal FOUT.
+ */
+const REQUEST_TIMEOUT = 408;
 // A provider's Retry-After is honored but capped, so an over-long window can't blow
 // the route budget (it just retries at the cap, then FOUTs if still limited).
 const MAX_RETRY_AFTER_MS = 30000;
 const SECONDS_TO_MS = 1000;
-const RETRYABLE_STATUS = new Set([TOO_MANY_REQUESTS, 500, 502, 503, 504]);
+const RETRYABLE_STATUS = new Set([REQUEST_TIMEOUT, TOO_MANY_REQUESTS, 500, 502, 503, 504]);
+
+/**
+ * How long a throttled response asks us to wait, in ms, or null.
+ *
+ * Azure sends `retry-after-ms` (milliseconds, more precise) next to or instead of the standard
+ * `Retry-After`; the ms variant wins when it is a valid number.
+ */
+export function retryDelayFromHeaders(headers: Headers, now: number = Date.now()): number | null {
+  const ms = Number(headers.get('retry-after-ms'));
+  if (headers.has('retry-after-ms') && Number.isFinite(ms) && ms >= 0) {
+    return ms;
+  }
+  return parseRetryAfter(headers.get('retry-after'), now);
+}
 
 /** Parse an HTTP `Retry-After` header (delta-seconds or an HTTP date) to ms, or null. */
 export function parseRetryAfter(value: string | null, now: number = Date.now()): number | null {
@@ -98,7 +117,7 @@ export async function fetchWithRetry(
       // Retryable, not the last attempt → prefer a valid Retry-After on a 429
       // (capped), else exponential backoff.
       const retryAfter =
-        res.status === TOO_MANY_REQUESTS ? parseRetryAfter(res.headers.get('retry-after')) : null;
+        res.status === TOO_MANY_REQUESTS ? retryDelayFromHeaders(res.headers) : null;
       nextDelayMs =
         retryAfter !== null
           ? Math.min(retryAfter, MAX_RETRY_AFTER_MS)

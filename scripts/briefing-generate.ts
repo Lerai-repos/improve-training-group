@@ -33,7 +33,11 @@ import { readExtraInfo } from '@lib/briefing/updates';
 import { readTrainerAddresses, resolveBriefingTravel } from '@lib/briefing/reis';
 import type { TravelInput } from '@lib/briefing/format';
 import { createAddressFormatter } from '@lib/recommend/address';
-import { createAnthropicCompletion } from '@lib/recommend/completion';
+import {
+  AZURE_OPENAI_ENV_VARS,
+  azureOpenAIConfigFromEnv,
+  createAzureOpenAICompletion,
+} from '@lib/recommend/completion';
 import { createRoutesProvider, createGoogleRoutesTransport } from '@lib/recommend/travel';
 import {
   createTravelCache,
@@ -203,7 +207,7 @@ async function resolveReis(
   training: Awaited<ReturnType<typeof readBriefingTraining>>,
   itemIds: readonly string[]
 ): Promise<ReadonlyMap<string, TravelInput>> {
-  const nodig = ['ANTHROPIC_API_KEY', 'GOOGLE_MAPS_API_KEY'];
+  const nodig = [...AZURE_OPENAI_ENV_VARS, 'GOOGLE_MAPS_API_KEY'];
   const missend = nodig.filter((naam) => (process.env[naam] ?? '') === '');
   if (missend.length > 0) {
     console.log(`  Km/reistijd overgeslagen: ${missend.join(', ')} ontbreekt in .env.local.`);
@@ -235,9 +239,7 @@ async function resolveReis(
   const adressen = await readTrainerAddresses(client, itemIds);
   const travel = await resolveBriefingTravel(
     {
-      formatter: createAddressFormatter(
-        createAnthropicCompletion(process.env.ANTHROPIC_API_KEY ?? '')
-      ),
+      formatter: createAddressFormatter(createAzureOpenAICompletion(azureOpenAIConfigFromEnv())),
       cache: createTravelCache(store),
       provider: createRoutesProvider(
         createGoogleRoutesTransport(process.env.GOOGLE_MAPS_API_KEY ?? '')

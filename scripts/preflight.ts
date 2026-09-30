@@ -379,7 +379,9 @@ function checkPlainVars(): void {
     ['CRON_SECRET', 'guards the publish-pending sweep'],
     ['ADDRESS_HASH_KEY', 'keyed address fingerprints'],
     ['GOOGLE_MAPS_API_KEY', 'travel'],
-    ['ANTHROPIC_API_KEY', 'address cleanup'],
+    ['AZURE_OPENAI_ENDPOINT', 'address cleanup (Azure OpenAI)'],
+    ['AZURE_OPENAI_API_KEY', 'address cleanup (Azure OpenAI)'],
+    ['AZURE_OPENAI_DEPLOYMENT', 'address cleanup (Azure OpenAI)'],
   ];
   for (const [name, why] of required) {
     record(name, present(name) ? 'ok' : 'fail', why);

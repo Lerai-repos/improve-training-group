@@ -45,7 +45,13 @@ export interface AddressFormatter {
 /** A single classification call: given system+user text, return the model's raw text. */
 export type Completion = (prompt: { system: string; user: string }) => Promise<string>;
 
-export const ADDRESS_MODEL = 'claude-haiku-4-5';
+/**
+ * The model behind the Azure deployment (`AZURE_OPENAI_DEPLOYMENT`), recorded in each
+ * recommendation's audit trail. The deployment NAME is free; this must match the MODEL it
+ * serves. Since 30-Sep-2026 (GA 22-Sep-2026, retirement ~March 2028); before that
+ * `claude-haiku-4-5` via Anthropic.
+ */
+export const ADDRESS_MODEL = 'gpt-6-luna';
 /**
  * `v2` added `city`. `v3` added `city_only`, which changes what the same input means.
  *

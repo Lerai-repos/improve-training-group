@@ -12,7 +12,9 @@ import {
   createGoogleRoutesTransport,
   createMemoryTravelCacheStore,
   createMondayReader,
-  createAnthropicCompletion,
+  azureOpenAIConfigFromEnv,
+  AZURE_OPENAI_ENV_VARS,
+  createAzureOpenAICompletion,
   createRoutesProvider,
   createStubAddressFormatter,
   createStubTravelProvider,
@@ -35,7 +37,7 @@ import { join } from 'node:path';
  * database left to persist to, so the result is printed and discarded.
  *
  * Travel/address stub to "online" (fee-only) when GOOGLE_MAPS_API_KEY /
- * ANTHROPIC_API_KEY are absent, so it runs with just the Monday token.
+ * the AZURE_OPENAI_* variables are absent, so it runs with just the Monday token.
  *
  *   pnpm recommend:once [mondayItemId]
  */
@@ -59,9 +61,9 @@ async function main(): Promise<void> {
   }
 
   const hasMaps = Boolean(process.env.GOOGLE_MAPS_API_KEY);
-  const hasLlm = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasLlm = AZURE_OPENAI_ENV_VARS.every((name) => Boolean(process.env[name]));
   console.log(
-    `Providers → address: ${hasLlm ? 'Anthropic' : 'STUB (online)'}, travel: ${hasMaps ? 'Google Routes' : 'STUB'}`
+    `Providers → address: ${hasLlm ? 'Azure OpenAI' : 'STUB (online)'}, travel: ${hasMaps ? 'Google Routes' : 'STUB'}`
   );
 
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
@@ -89,7 +91,7 @@ async function main(): Promise<void> {
     // the nightly job wrote, so the two runs can be diffed to approve the ranking change.
     evaluations,
     addressFormatter: hasLlm
-      ? createAddressFormatter(createAnthropicCompletion(process.env.ANTHROPIC_API_KEY ?? ''))
+      ? createAddressFormatter(createAzureOpenAICompletion(azureOpenAIConfigFromEnv()))
       : createStubAddressFormatter({ kind: 'no_travel_confirmed', reason: 'online' }),
     travelProvider: hasMaps
       ? createRoutesProvider(createGoogleRoutesTransport(process.env.GOOGLE_MAPS_API_KEY ?? ''))

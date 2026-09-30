@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runWithDeadline } from '../deadline';
-import { fetchWithRetry, parseRetryAfter } from '../http';
+import { fetchWithRetry, parseRetryAfter, retryDelayFromHeaders } from '../http';
 
 const NO_DELAY = { baseDelayMs: 0 };
 
@@ -61,6 +61,42 @@ describe('fetchWithRetry', () => {
 
     const res = await fetchWithRetry('https://x', {}, NO_DELAY);
     expect(await res.json()).toEqual({ ok: true });
+  });
+
+  /** Azure's queue timeout: retryable per its own guidance. */
+  it('retries a 408 then returns the eventual success', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(408))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await fetchWithRetry('https://x', {}, NO_DELAY);
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits the retry-after-ms of a 429 instead of the exponential backoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response('rate', { status: 429, headers: { 'retry-after-ms': '1500' } })
+        )
+        .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      // Backoff alone would wait 1 ms; the header asks for 1500.
+      const pending = fetchWithRetry('https://x', {}, { attempts: 2, baseDelayMs: 1 });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(600);
+      expect((await pending).status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('honors a Retry-After (delta-seconds) on a 429, then succeeds', async () => {
@@ -133,5 +169,20 @@ describe('parseRetryAfter', () => {
   it('returns null for a missing or unparseable value', () => {
     expect(parseRetryAfter(null, NOW)).toBeNull();
     expect(parseRetryAfter('soon', NOW)).toBeNull();
+  });
+});
+
+describe('retryDelayFromHeaders', () => {
+  const NOW = 1_000_000;
+
+  it('prefers retry-after-ms and falls back to Retry-After', () => {
+    expect(
+      retryDelayFromHeaders(new Headers({ 'retry-after-ms': '250', 'retry-after': '9' }), NOW)
+    ).toBe(250);
+    expect(retryDelayFromHeaders(new Headers({ 'retry-after': '2' }), NOW)).toBe(2000);
+    expect(
+      retryDelayFromHeaders(new Headers({ 'retry-after-ms': 'soon', 'retry-after': '1' }), NOW)
+    ).toBe(1000);
+    expect(retryDelayFromHeaders(new Headers(), NOW)).toBeNull();
   });
 });

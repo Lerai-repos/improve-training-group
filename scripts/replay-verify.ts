@@ -103,7 +103,11 @@ function sortAuditArrays(value: unknown): unknown {
  * Adding one here is a decision; a version absent from it fails the comparison.
  */
 const FOLDED_PROMPT_VERSIONS = new Set(['v1', 'v2', 'v3']);
-const FOLDED_ADDRESS_MODELS = new Set(['anthropic/claude-haiku-4.5', 'claude-haiku-4-5']);
+const FOLDED_ADDRESS_MODELS = new Set([
+  'anthropic/claude-haiku-4.5',
+  'claude-haiku-4-5',
+  'gpt-6-luna',
+]);
 
 function stripIntentional(artifact: Record<string, unknown>): unknown {
   const trainers = Array.isArray(artifact.trainers) ? artifact.trainers : [];
@@ -135,7 +139,9 @@ function stripIntentional(artifact: Record<string, unknown>): unknown {
         : enrichment.promptVersion,
       /**
        * The same Haiku model, first named by its OpenRouter id and, since 17-Sep-2026, by
-       * Anthropic's own. Listed explicitly for the same reason as the prompt versions.
+       * Anthropic's own; since 30-Sep-2026 `gpt-6-luna` on Azure. Foldable for the same
+       * reason as the prompt versions: the formatter here is stubbed with each baseline's
+       * recorded decision, so only the name differs. Listed explicitly all the same.
        */
       model: FOLDED_ADDRESS_MODELS.has(String(enrichment.model))
         ? 'anthropic/claude-haiku-4.5'
