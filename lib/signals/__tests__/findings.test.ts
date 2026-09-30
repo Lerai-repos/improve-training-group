@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { labelFindings, themaFindings, unusableLabelFields } from '../findings';
+import {
+  briefingtekstFindings,
+  labelFindings,
+  themaFindings,
+  unusableLabelFields,
+} from '../findings';
+import { findingDetail, findingName, findingOnderdeel } from '../text';
+import { findingKey } from '../types';
+import { VOLLEDIG_BORD } from './helpers';
 import { isChecked } from '../read';
 
 import type { LabelCode } from '@lib/labels';
@@ -227,3 +235,42 @@ describe('unusableLabelFields — een kleur die geen kleur is', () => {
     expect(unusableLabelFields(record({ kleur: '#0A2B58' }))).toEqual([]);
   });
 });
+
+describe('briefingtekstFindings', () => {
+  it('meldt niets bij een compleet bord', () => {
+    expect(briefingtekstFindings(VOLLEDIG_BORD)).toEqual([]);
+  });
+
+  /** Een lege tekst is een keuze van ITG; de Status op het bord laat hem al zien. */
+  it('meldt een leeggemaakte tekst niet', () => {
+    const bord = VOLLEDIG_BORD.map((r) => (r.sleutel === 'groep.eigen' ? { ...r, tekst: '' } : r));
+    expect(briefingtekstFindings(bord)).toEqual([]);
+  });
+
+  it('meldt een verwijderd item, op sleutel', () => {
+    const bord = VOLLEDIG_BORD.filter((r) => r.sleutel !== 'vaste-klant');
+    const vondsten = briefingtekstFindings(bord);
+    expect(vondsten).toEqual([
+      { kind: 'briefingtekst-ontbreekt', sleutel: 'vaste-klant', naam: 'Vaste klant' },
+    ]);
+    expect(findingKey(vondsten[0]!)).toBe('briefingtekst-ontbreekt:vaste-klant');
+  });
+
+  it('meldt een fout, met de reden in de naam', () => {
+    const bord = VOLLEDIG_BORD.map((r) =>
+      r.sleutel === 'algemeen.vlag' ? { ...r, tekst: 'Namens {mrek}.' } : r
+    );
+    const [vondst] = briefingtekstFindings(bord);
+    expect(vondst).toMatchObject({ kind: 'briefingtekst-fout', sleutel: 'algemeen.vlag' });
+    expect(findingName(vondst!)).toContain('{mrek}');
+    expect(findingOnderdeel(vondst!)).toBe('Briefingteksten');
+    expect(findingDetail(vondst!)).toContain('Status');
+  });
+
+  /** "Dupliceren" in Monday: twee items, één probleem, dus één melding. */
+  it('meldt een dubbele sleutel één keer', () => {
+    const kopie = { ...VOLLEDIG_BORD[0]!, itemId: 'kopie' };
+    expect(briefingtekstFindings([...VOLLEDIG_BORD, kopie])).toHaveLength(1);
+  });
+});
+

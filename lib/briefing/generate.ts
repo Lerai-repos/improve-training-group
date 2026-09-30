@@ -2,6 +2,7 @@ import { composeBriefing, openIssues, sessionFacts } from './compose';
 import { resolveRecipientRoles, type Recipient } from './recipients';
 import { briefingFilename, renderBriefing } from './render';
 
+import type { BriefingTeksten } from '@lib/briefingteksten/types';
 import type { BriefingChecklist, HistoryRow } from './blocks';
 import type { TravelInput } from './format';
 import type { BriefingTraining } from './types';
@@ -51,6 +52,13 @@ export interface GenerateContext {
   readonly reisSessies?: ReadonlyMap<string, ReadonlyMap<string, TravelInput>>;
   /** Door de adviseur aangewezen acteurs. */
   readonly actorItemIds: readonly string[];
+  /**
+   * De teksten van het bord Briefingteksten, voor dit label.
+   *
+   * Verplicht, en met opzet: een document dat naar een trainer gaat hoort ITG's actuele tekst
+   * te dragen. Zonder dit veld viel `composeBriefing` stil terug op de beginteksten.
+   */
+  readonly teksten: BriefingTeksten;
 }
 
 export interface GeneratedDocument {
@@ -107,6 +115,7 @@ export async function generateBriefings(
   const gedeeld = {
     historie: context.historie,
     extraInfo: context.extraInfo,
+    teksten: context.teksten,
     roles: sessionFacts(training, checklist, { actorItemIds: context.actorItemIds }),
   };
 

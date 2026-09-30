@@ -60,3 +60,27 @@ herschrijving opent Word het correct, zónder meldt Word schade.
 
 **Controleer output in Word, niet in de VS Code-preview.** Die toont geen zwevende
 afbeeldingen, dus elk voorblad lijkt te ontbreken — ook in ITG's eigen onbewerkte sjabloon.
+
+## Stap drie: de teksten naar het bord (30-Sep-2026)
+
+Sinds 30-Sep-2026 beheert ITG elke tekst in de briefing zelf, op het Monday-bord
+Briefingteksten (`lib/briefingteksten/`). `teksten.py` haalt die teksten uit de sjablonen en zet
+er lussen voor in de plaats: de algemene tekst onder `Algemeen.`, de cyaan Monday
+Challenges-regel, kop en inleiding van `Concept inhoud` en `Inventarisatie klant`, en de zin
+voor een niet ingevuld formulier. Elke bloktitel komt achter een `IF`, want ITG mag een kop
+leegmaken.
+
+```bash
+python3 tools/briefing-templates/teksten.py
+```
+
+Draait op de **bestaande** sjablonen, niet op ITG's `.dotx`: de grijze labelcellen en de links
+uitgelijnde tabel (22-Sep-2026) zijn met de hand in die bestanden gezet. Genereer je de
+sjablonen ooit opnieuw met `convert.py` + `body.py`, zet die twee dingen dan terug en draai
+daarna `teksten.py`. Een sjabloon dat al is omgezet slaat hij over.
+
+De ruimte onder de kopband `Algemeen.` (1,9 cm) staat op een eigen, 1 pt hoge alinea vóór de
+lus, niet meer op de inleiding: die kan ITG leegmaken.
+
+`verify-blocks.py` is daarbij vervallen. Die legde de blokteksten in `blocks.ts` naast ITG's
+bronbestand; die teksten zijn nu de beginwaarden van het bord, en daarna zijn ze van ITG.

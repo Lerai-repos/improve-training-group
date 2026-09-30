@@ -75,6 +75,7 @@ __pycache__/
 .briefings-create.json
 .labels-create.json
 .systeem-create.json
+.briefingteksten-create.json
 
 # Chromium-binaries, neergezet door scripts/copy-chromium.mjs vóór elke build
 .chromium-bin/

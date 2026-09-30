@@ -38,6 +38,12 @@ const baseURL = `http://localhost:${PORT}`;
  */
 export const TEST_CRON_SECRET = 'playwright-cron-secret-not-a-real-one';
 
+/**
+ * Het webhookgeheim van de testserver, vastgezet om dezelfde reden als `TEST_CRON_SECRET`:
+ * anders beslist het echte geheim uit `.env.local` of een test slaagt.
+ */
+export const TEST_WEBHOOK_TOKEN = 'playwright-webhook-token-not-a-real-one';
+
 export const TEST_AUTH = {
   clientSecret: 'playwright-session-secret-not-a-real-one',
   accountId: '12345678',
@@ -181,6 +187,12 @@ export default defineConfig({
       MONDAY_APP_CLIENT_SECRET: TEST_AUTH.clientSecret,
       MONDAY_ACCOUNT_ID: TEST_AUTH.accountId,
       CRON_SECRET: TEST_CRON_SECRET,
+      MONDAY_WEBHOOK_TOKEN: TEST_WEBHOOK_TOKEN,
+      /**
+       * Een bord waar niets op staat, zodat de webhooktests nooit een echt bord keuren: een
+       * event van elk ander bord wordt genegeerd vóór er iets gelezen wordt.
+       */
+      MONDAY_BRIEFINGTEKSTEN_BOARD_ID: '0',
       /**
        * Pinned EMPTY, and this is load-bearing rather than tidy.
        *

@@ -9,6 +9,11 @@ import { resolveRecipientRoles } from '../recipients';
 import { renderBriefing, TEMPLATES_DIR } from '../render';
 import { zipReadText } from './zip-reader';
 
+import { SECTIES } from '@lib/briefingteksten/catalog';
+import { tekstenUit } from '@lib/briefingteksten/teksten';
+
+import type { TekstRij } from '@lib/briefingteksten/beoordeel';
+import type { BriefingTeksten, TekstSleutel } from '@lib/briefingteksten/types';
 import type { BriefingChecklist, HistoryRow } from '../blocks';
 import type { BriefingTraining } from '../types';
 
@@ -41,9 +46,8 @@ const BLOCK_TITLE = '+++$blk.titel+++';
 /**
  * ITG's aansporing over de Monday Challenges — op het STAARTJE, niet op de hele zin.
  *
- * Word knipt de zin op in runs (de spellingcontrole zet `Monday` in een eigen run), dus de
- * volledige tekst staat nergens aaneengesloten in de XML. `aan te bieden` overleeft dat en
- * komt verder in geen enkel sjabloon voor.
+ * Sinds 30-Sep-2026 staat die zin op het bord Briefingteksten en niet meer in het sjabloon;
+ * de tests controleren dat hij daar wég is en in het gerenderde document wél staat.
  */
 const MC_BANNER = 'aan te bieden';
 
@@ -139,32 +143,73 @@ describe.each(LABELS)('sjabloon %s', (label) => {
    * achtergrondinformatie zette. Tim, 28-Aug-2026: *"the cyan one and the one in the table
    * are correct"*.
    *
-   * Deze telling is de enige bewaking daarop. De tekst is in alle drie de gevallen dezelfde,
-   * dus een sjabloon dat opnieuw gegenereerd wordt met een oudere `body.py` levert een
-   * document op dat prima opent en waarin niets kapot lijkt — er staat alleen twee keer
-   * hetzelfde.
+   * Sinds 30-Sep-2026 staat de tekst van de cyaan regel op het bord Briefingteksten; het
+   * sjabloon heeft er één lus voor, en de zin zelf staat er niet meer in.
    */
   it('heeft één losse Monday Challenges-regel, naast de tabelrij', () => {
     const xml = templateXml(label);
-    const banners = xml.split(MC_BANNER).length - 1;
 
-    expect(banners).toBe(1);
-    // En de tabelkolom staat er los van; die hoort er wél te zijn.
+    expect(xml.split('+++FOR m IN mondayChallenges+++').length - 1).toBe(1);
+    expect(xml).not.toContain(MC_BANNER);
     expect(xml).toContain('+++trainingscodeMc+++');
   });
 
   /**
    * De regel is ONVOORWAARDELIJK, en dat is een keuze.
    *
-   * Hij komt uit ITG's eigen brondocument en staat er dus op elke briefing, ook zonder
-   * Monday Challenge. De conditionele variant is vervallen samen met het vinkje; stond hij
-   * hier weer achter een `IF`, dan verwijst dat naar een veld dat niemand meer vult en
-   * verdwijnt de regel stilletjes uit élke briefing.
+   * Hij staat op elke briefing, ook zonder Monday Challenge. De conditionele variant is
+   * vervallen samen met het vinkje; weg is hij alleen als ITG de tekst op het bord leegmaakt.
    */
   it('zet de Monday Challenges-regel niet achter een IF', () => {
-    const xml = templateXml(label);
+    expect(templateXml(label)).not.toMatch(/\+\+\+IF[^+]*mondayChallenge/);
+  });
 
-    expect(xml).not.toContain('mondayChallenge');
+  /** De cyaan markering zit op de lusregel zelf, anders is ITG's tekst gewone tekst. */
+  it('geeft de Monday Challenges-regel de cyaan markering', () => {
+    const xml = templateXml(label);
+    expect(paragraphAt(xml, positionOf(xml, '+++$m+++'))).toMatch(highlight('cyan'));
+  });
+
+  /**
+   * Geen enkele vaste tekst meer in het sjabloon: elke zin komt van het bord.
+   *
+   * Stond er nog een, dan zou ITG hem op het bord aanpassen en hem in het document
+   * ongewijzigd terugzien — of twee keer, de oude en de nieuwe.
+   */
+  it('bevat geen van de teksten die nu op het bord staan', () => {
+    const xml = templateXml(label);
+    for (const zin of [
+      'Binnenkort organiseer je namens',
+      'Behoefte aan vervolg',
+      'Vragen? We horen het graag!',
+      'Het volgende concept programma',
+      'Onderstaande informatie komt uit',
+      'Het inventarisatieformulier is (nog) niet ingevuld',
+    ]) {
+      expect(xml, zin).not.toContain(zin);
+    }
+  });
+
+  /**
+   * De ruimte onder de kopband `Algemeen.` hoort bij het sjabloon, niet bij de inleiding.
+   *
+   * Stond hij op de eerste alinea van de algemene tekst, dan schoof de rest omhoog onder de
+   * kopband zodra ITG die inleiding leegmaakt.
+   */
+  it('houdt de ruimte onder Algemeen. vast, vóór de lus', () => {
+    const xml = templateXml(label);
+    const lus = positionOf(xml, '+++FOR s IN algemeen+++');
+    const ruimte = xml.lastIndexOf('w:before="1077"', lus);
+    expect(ruimte).toBeGreaterThan(-1);
+    expect(lus - ruimte).toBeLessThan(400);
+    expect(lus).toBeLessThan(positionOf(xml, TABLE_MARKER));
+  });
+
+  /** Een lege kop mag: dan hoort er geen lege kopregel te blijven staan. */
+  it('zet elke kop die ITG kan leegmaken achter een IF', () => {
+    const xml = templateXml(label);
+    expect(xml.split('+++IF $blk.titel+++').length - 1).toBe(2);
+    expect(xml.split('+++IF $s.kop+++').length - 1).toBe(4);
   });
 
   /**
@@ -175,12 +220,20 @@ describe.each(LABELS)('sjabloon %s', (label) => {
    * opdracht` gewone tekst, in hetzelfde document. Zichtbaar zodra je het opent, en door
    * geen enkele test gedekt: de tekst was immers hetzelfde.
    */
-  it('geeft de titel van élk blok de kopstijl', () => {
+  it('geeft de titel van élk blok en elke sectie de kopstijl', () => {
     const xml = templateXml(label);
-    const eerste = positionOf(xml, BLOCK_TITLE);
-    const tweede = positionOf(xml.slice(eerste + 1), BLOCK_TITLE) + eerste + 1;
+    const posities = [BLOCK_TITLE, '+++$s.kop+++'].flatMap((needle) => {
+      const gevonden: number[] = [];
+      let at = xml.indexOf(needle);
+      while (at !== -1) {
+        gevonden.push(at);
+        at = xml.indexOf(needle, at + needle.length);
+      }
+      return gevonden;
+    });
+    expect(posities).toHaveLength(6);
 
-    for (const at of [eerste, tweede]) {
+    for (const at of posities) {
       // Met of zonder spatie vóór de sluitende schuine streep; beide zijn geldige XML.
       expect(paragraphAt(xml, at)).toMatch(/<w:pStyle[^>]*w:val="Kop1"/);
     }
@@ -212,15 +265,17 @@ describe.each(LABELS)('sjabloon %s', (label) => {
       posities.push(at);
       at = xml.indexOf(BLOCK_LINE, at + BLOCK_LINE.length);
     }
-    // Zes: de drie varianten staan in beide lussen — rolblokken én de overige blokken.
-    expect(posities).toHaveLength(6);
+    // De drie varianten staan in zes lussen: rolblokken, overige blokken, en de vier
+    // sectielussen voor de teksten van het bord (algemeen, concept, inventarisatie ×2).
+    expect(posities).toHaveLength(18);
 
     const niveaus = posities.map((pos) => {
       const alinea = paragraphAt(xml, pos);
       const match = /<w:ilvl w:val="(\d)"/.exec(alinea);
       return alinea.includes('<w:numPr>') ? (match?.[1] ?? '?') : 'geen';
     });
-    expect(niveaus.sort()).toEqual(['0', '0', '1', '1', 'geen', 'geen']);
+    const telling = (waarde: string): number => niveaus.filter((n) => n === waarde).length;
+    expect([telling('0'), telling('1'), telling('geen')]).toEqual([6, 6, 6]);
   });
 
   /**
@@ -230,7 +285,7 @@ describe.each(LABELS)('sjabloon %s', (label) => {
   it('zet de rolblokken boven Concept inhoud en de rest eronder', () => {
     const xml = templateXml(label);
     const rol = positionOf(xml, '+++FOR blk IN rolblokken+++');
-    const kop = positionOf(xml, 'Concept inhoud');
+    const kop = positionOf(xml, '+++FOR s IN concept+++');
     const rest = positionOf(xml, '+++FOR blk IN blokken+++');
     expect(rol).toBeLessThan(kop);
     expect(kop).toBeLessThan(rest);
@@ -531,5 +586,109 @@ describe.each(LABELS)('witruimte tussen de secties, sjabloon %s', (label) => {
     ]) {
       expect({ kop, wit: blanksBefore(xml, kop) }).toEqual({ kop, wit: 1 });
     }
+  });
+});
+
+/** Het bord zoals het er na `briefingteksten:create` uitziet, met één of meer items aangepast. */
+function bordMet(
+  wijzigingen: Partial<Record<TekstSleutel, { kop?: string; tekst?: string }>>
+): BriefingTeksten {
+  const rijen: TekstRij[] = SECTIES.map((s, i) => ({
+    itemId: String(i),
+    naam: s.naam,
+    sleutel: s.sleutel,
+    kop: wijzigingen[s.sleutel]?.kop ?? s.kop,
+    tekst: wijzigingen[s.sleutel]?.tekst ?? s.tekst,
+    status: '',
+    melding: '',
+  }));
+  return tekstenUit(rijen, { merk: 'Incompany Trainer', term: 'Training' });
+}
+
+async function renderBord(teksten: BriefingTeksten, checklist = EMPTY_CHECKLIST): Promise<string> {
+  const rollen = resolveRecipientRoles(TRAINING, checklist);
+  if (rollen.kind !== 'resolved') {
+    throw new Error(`fixture levert geen ontvangers op: ${rollen.kind}`);
+  }
+  const lead = rollen.recipients.find((r) => r.role === 'lead');
+  if (lead === undefined) {
+    throw new Error('fixture levert geen leadtrainer op');
+  }
+  const bytes = await renderBriefing(
+    'IT',
+    composeBriefing(TRAINING, checklist, { historie: [], recipient: lead, teksten })
+  );
+  return zipReadText(bytes, 'word/document.xml');
+}
+
+/** Alinea's met de kopstijl maar zonder tekst: een lege kopregel in het document. */
+function legeKoppen(xml: string): number {
+  const paragraphs = xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
+  return paragraphs.filter(
+    (p) => /w:val="Kop1"/.test(p) && !/<w:t[^>]*>[^<]*\S[^<]*<\/w:t>/.test(p) && !/<w:drawing/.test(p)
+  ).length;
+}
+
+/**
+ * Wat ITG op het bord kan doen, in het document dat een trainer opent.
+ *
+ * Tim, 30-Sep-2026: leeg is een keuze en dan verdwijnt de sectie; een fout wordt zichtbaar.
+ */
+describe('teksten van het bord Briefingteksten', () => {
+  it('neemt een aangepaste tekst over, met opsommingen', async () => {
+    const xml = await renderBord(
+      bordMet({ 'algemeen.materialen': { tekst: 'Eigen zin.\n- Eerste punt\n-- Dieper punt' } })
+    );
+    expect(xml).toContain('Eigen zin.');
+    expect(paragraphAt(xml, positionOf(xml, 'Eerste punt'))).toMatch(/<w:ilvl w:val="0"/);
+    expect(paragraphAt(xml, positionOf(xml, 'Dieper punt'))).toMatch(/<w:ilvl w:val="1"/);
+    expect(xml).not.toContain('professioneel en uniform');
+  });
+
+  it('vult {merk} en {term} in, ook in een kop', async () => {
+    const xml = await renderBord(bordMet({}));
+    expect(xml).toContain('Onder de vlag van Incompany Trainer');
+    expect(xml).toContain('Inhoud training');
+  });
+
+  it('laat een leeggemaakte sectie met kop en al verdwijnen', async () => {
+    const xml = await renderBord(
+      bordMet({ 'algemeen.vervolg': { tekst: '' }, 'concept.inleiding': { tekst: '' } })
+    );
+    expect(xml).not.toContain('Behoefte aan vervolg');
+    expect(xml).not.toContain('Concept inhoud');
+    // De bullets van het thema blijven: die komen niet van dit bord.
+    expect(xml).toContain('Plenaire opening.');
+    expect(blanksBefore(xml, 'Materialen')).toBe(1);
+  });
+
+  it('laat geen lege kopregel achter als ITG een kop leegmaakt', async () => {
+    const xml = await renderBord(
+      bordMet({ 'opdracht.huiswerk': { kop: '' }, 'algemeen.vlag': { kop: '' } }),
+      { ...EMPTY_CHECKLIST, homework: true }
+    );
+    expect(xml).toContain('In overeenstemming met de klant');
+    expect(xml).not.toContain('Onder de vlag van');
+    expect(legeKoppen(xml)).toBe(0);
+  });
+
+  it('begint zonder witregel als de inleiding leeg is', async () => {
+    const xml = await renderBord(bordMet({ 'algemeen.inleiding': { tekst: '' } }));
+    expect(xml).not.toContain('Binnenkort organiseer');
+    // Alleen de vaste ruimte onder de kopband, geen witregel van een sectie erbij.
+    expect(blanksBefore(xml, 'Onder de vlag van Incompany Trainer')).toBe(1);
+  });
+
+  it('maakt van een fout een zichtbare regel in plaats van de kapotte tekst', async () => {
+    const xml = await renderBord(bordMet({ 'algemeen.vlag': { tekst: 'Trainer van {mrek}.' } }));
+    // De melding noemt `{mrek}` wél, zodat de adviseur ziet wat er mis is; de zin zelf niet.
+    expect(xml).not.toContain('Trainer van {mrek}.');
+    expect(xml).toContain('nog niet bepaald: de briefingtekst');
+  });
+
+  it('laat de Monday Challenges-regel weg als ITG hem leegmaakt', async () => {
+    const xml = await renderBord(bordMet({ 'algemeen.monday-challenges': { tekst: '' } }));
+    expect(xml).not.toContain('aan te bieden');
+    expect(xml).not.toMatch(/<w:t[^>]*>\+\+\+/);
   });
 });

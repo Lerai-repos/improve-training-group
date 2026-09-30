@@ -11,7 +11,10 @@ import {
   createMemoryTravelCacheStore,
   createTravelCache,
 } from '@lib/recommend/travel-cache';
+import { briefingtekstenBoardId } from '@lib/briefingteksten/board';
+import { readBriefingTeksten } from '@lib/briefingteksten/read';
 import { loadAgendaBoards } from '@lib/evaluations';
+import { labelsBoardId } from '@lib/labels';
 import { loadSettingsOnce } from '@lib/settings/load';
 
 import { readHistorie } from './historie';
@@ -185,8 +188,20 @@ export async function buildGenerateContext(
   const reis = await resolveReis(client, training, input.trainerItemIds, notes);
   const reisSessies = await resolveReisSessies(client, training, input.trainerItemIds, reis, notes);
 
+  /**
+   * Werpt als het bord onleesbaar is, en dan komt er géén briefing. Terugvallen op de
+   * beginteksten zou ITG's aanpassingen stil negeren, en een ontbrekend item als "leeg"
+   * lezen zou secties laten verdwijnen die er gewoon staan.
+   */
+  const teksten = await readBriefingTeksten(client, {
+    boardId: briefingtekstenBoardId(),
+    labelsBoardId: labelsBoardId(),
+    label: training.label,
+  });
+
   return {
     context: {
+      teksten,
       historie,
       extraInfo: extraInfo.lines,
       reis,

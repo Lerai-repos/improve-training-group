@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { EMPTY_CHECKLIST } from '../blocks';
 import { generateBriefings, plannedFilenames } from '../generate';
+import { standaardTekstenVoor } from '../teksten';
 
 import type { BriefingTraining } from '../types';
 
@@ -59,6 +60,7 @@ const CONTEXT = {
   extraInfo: [],
   reis: new Map(),
   actorItemIds: [],
+  teksten: standaardTekstenVoor('JE'),
 };
 
 describe('generateBriefings', () => {

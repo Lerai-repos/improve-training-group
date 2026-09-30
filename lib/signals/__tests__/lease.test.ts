@@ -5,10 +5,11 @@ import { createMemoryKvStore } from '@lib/recommend/kv';
 import { withBoardLease } from '../lease';
 import { runDailyCheckExclusive } from '../run';
 
-import { GROUPS, usage } from './helpers';
+import { GROUPS, VOLLEDIG_BORD, usage } from './helpers';
 
 import type { KvStore } from '@lib/recommend/kv';
 import type { DailyCheckDeps } from '../run';
+
 
 const leaseWith = (kv: KvStore, token: string, now?: () => number) => ({
   kv,
@@ -110,6 +111,7 @@ describe('runDailyCheckExclusive', () => {
     readAgendaUsage: async () => usage({ labels: new Map(), themas: new Map() }),
     readLabels: async () => new Map(),
     readThemas: async () => new Map(),
+    readBriefingteksten: async () => VOLLEDIG_BORD,
     readMailFailures: async () => [],
     readTrainers: async () => new Set(),
     writer,

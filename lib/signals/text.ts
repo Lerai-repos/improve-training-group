@@ -99,6 +99,11 @@ export function findingName(finding: Finding): string {
       return `Agendabord "${finding.naam}" krijgt geen aanbevelingen — ${finding.reden}`;
     case 'kolommen-ontbreken':
       return `Agendabord "${finding.naam}" mist kolommen van Lerai: ${finding.kolommen.map((k) => k.titel).join(', ')}`;
+    case 'briefingtekst-ontbreekt':
+      return `Briefingtekst "${finding.naam}" staat niet meer op het bord Briefingteksten`;
+    // De melding in de naam, zodat een andere fout de rij bijwerkt.
+    case 'briefingtekst-fout':
+      return `Briefingtekst "${finding.naam}" bevat een fout — ${finding.melding}`;
   }
 }
 
@@ -236,6 +241,26 @@ export function findingDetail(finding: Finding): string {
           `als op Agenda 2026. Opdracht(en): ${[...new Set(finding.kolommen.map((k) => k.script))].join(', ')}.`,
         'Is dit een afgesloten jaar? Archiveer het bord, dan verdwijnt deze melding.',
       ].join('\n\n');
+
+    case 'briefingtekst-ontbreekt':
+      return [
+        `Het item "${finding.naam}" (Sleutel ${finding.sleutel}) staat niet meer op het bord ` +
+          'Briefingteksten. Waarschijnlijk is het verwijderd, of is de Sleutel aangepast.',
+        'Gevolg: deze sectie staat in geen enkele briefing meer.',
+        'Was dat per ongeluk? Zet het item terug via de prullenbak van Monday, of laat Lerai ' +
+          'het opnieuw aanmaken. Bewust weggehaald? ' +
+          AFVINKEN,
+      ].join('\n\n');
+
+    case 'briefingtekst-fout':
+      return [
+        `De tekst "${finding.naam}" op het bord Briefingteksten kan niet gebruikt worden: ` +
+          finding.melding,
+        'Gevolg: in elke briefing met deze sectie staat op die plek een regel «nog niet ' +
+          'bepaald: de briefingtekst …» in plaats van de tekst, en de briefing telt als niet af.',
+        'Pas de tekst aan op het bord. De kolom Status daar wordt groen zodra het klopt, en ' +
+          'deze melding verdwijnt bij de volgende controle.',
+      ].join('\n\n');
   }
 }
 
@@ -260,6 +285,9 @@ export function findingOnderdeel(finding: Finding): string {
       return 'Aanbevelingen';
     case 'kolommen-ontbreken':
       return 'Agendaborden';
+    case 'briefingtekst-ontbreekt':
+    case 'briefingtekst-fout':
+      return 'Briefingteksten';
   }
 }
 

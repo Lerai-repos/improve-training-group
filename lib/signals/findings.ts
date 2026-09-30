@@ -1,3 +1,5 @@
+import { beoordeelAlle } from '@lib/briefingteksten/beoordeel';
+import { SECTIES } from '@lib/briefingteksten/catalog';
 import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
 import { EVAL_COLUMNS } from '@lib/report/record';
 import { KNOWN_AGENDA_BOARD_IDS, liveAgendaBoards } from '@lib/evaluations';
@@ -5,6 +7,7 @@ import { engineBoardProblem, type EngineBoardRules } from '@lib/recommend/engine
 import { LABEL_CODES, resolveLabelCode } from '@lib/labels';
 import { normaliseHex } from '@lib/labels/validate';
 
+import type { TekstRij } from '@lib/briefingteksten/beoordeel';
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { AgendaBoard, AgendaBoardSet, RejectedAgendaBoard } from '@lib/evaluations';
@@ -327,3 +330,30 @@ export function agendaBoardFindings(
     ...zonderKolommen,
   ];
 }
+
+/**
+ * Wat er mis is op het bord Briefingteksten: secties die er niet meer staan, en teksten met een
+ * fout. Een lege tekst is een keuze van ITG en wordt niet gemeld.
+ */
+export function briefingtekstFindings(rijen: readonly TekstRij[]): readonly Finding[] {
+  const aanwezig = new Set(rijen.map((r) => r.sleutel.trim()));
+  const ontbrekend: Finding[] = SECTIES.filter((s) => !aanwezig.has(s.sleutel)).map((s) => ({
+    kind: 'briefingtekst-ontbreekt',
+    sleutel: s.sleutel,
+    naam: s.naam,
+  }));
+  const fouten = new Map<string, Finding>();
+  for (const { oordeel } of beoordeelAlle(rijen)) {
+    if (oordeel.status === 'Fout' && oordeel.definitie !== null) {
+      // Een dubbele sleutel is één probleem, ook al staat hij op twee items.
+      fouten.set(oordeel.definitie.sleutel, {
+        kind: 'briefingtekst-fout',
+        sleutel: oordeel.definitie.sleutel,
+        naam: oordeel.definitie.naam,
+        melding: oordeel.melding,
+      });
+    }
+  }
+  return [...ontbrekend, ...fouten.values()];
+}
+

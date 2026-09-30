@@ -6,6 +6,7 @@ import { ACHTERGROND_LEEG } from '../compose';
 import { plannedFilenames } from '../generate';
 import { ankerItemId } from '../cyclus';
 import { runGenerate, UPLOAD_BUDGET_MS, type RunGenerateDeps } from '../run-generate';
+import { standaardTekstenVoor } from '../teksten';
 
 import type { SavedChecklist } from '../answers';
 import type { BriefingRecorder, BriefingRow, BrieStatus } from '../record';
@@ -126,6 +127,7 @@ function bouw(over: Partial<RunGenerateDeps> & { bestanden?: readonly string[] }
           extraInfo: [],
           reis: new Map(),
           actorItemIds: [],
+          teksten: standaardTekstenVoor('JE'),
         },
         notes: [],
       }),

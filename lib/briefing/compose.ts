@@ -54,8 +54,10 @@ import {
 } from './cyclus-document';
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
 import { resolveConceptInhoud } from './concept';
+import { gevuldeSectie, standaardTekstenVoor, type GevuldeSectie } from './teksten';
 
 import { classify, type Recipient, type RoleOverrides } from './recipients';
+import type { BriefingTeksten, TekstSleutel } from '@lib/briefingteksten/types';
 import type { BriefingTrainer, BriefingTraining } from './types';
 
 /** Eén vraag en antwoord uit het inventarisatieformulier. */
@@ -117,10 +119,33 @@ export interface BriefingExtras {
    * rolblokken een zichtbare `«…»`-regel in plaats van een gok.
    */
   readonly recipient?: Recipient;
+  /**
+   * De teksten van het bord Briefingteksten.
+   *
+   * Zonder dit gelden de beginteksten — goed voor de voorvertoning in de tab, die geen
+   * document verstuurt. Wat naar een trainer gaat, krijgt ze altijd van het bord mee; zie
+   * `GenerateContext.teksten`.
+   */
+  readonly teksten?: BriefingTeksten;
+}
+
+/**
+ * Een sectie van het bord zoals het sjabloon hem rendert: optionele kop, regels, en of er een
+ * witregel boven hoort.
+ *
+ * Elke vaste sectie is een LIJST van nul of één, zodat een door ITG leeggemaakte sectie met
+ * kop en witregel en al verdwijnt in plaats van een lege kop achter te laten.
+ */
+export interface DocumentSectie extends GevuldeSectie {
+  readonly witregel: boolean;
 }
 
 /** Precies de velden die de negen sjablonen aanroepen. */
 export interface BriefingDocumentData {
+  /** De algemene tekst bovenaan, onder de kopband `Algemeen.`. */
+  readonly algemeen: readonly DocumentSectie[];
+  /** De cyaan regel(s) boven de gegevenstabel. */
+  readonly mondayChallenges: readonly string[];
   readonly opdrachtgever: string;
   readonly thema: string;
   readonly klanttitel: string;
@@ -149,7 +174,47 @@ export interface BriefingDocumentData {
    */
   readonly rolblokken: readonly BriefingBlock[];
   readonly blokken: readonly BriefingBlock[];
+  /** Kop en inleiding boven de concept-bullets. */
+  readonly concept: readonly DocumentSectie[];
+  /** Kop en inleiding boven de antwoorden van het inventarisatieformulier. */
+  readonly inventarisatieIntro: readonly DocumentSectie[];
+  /** Wat er staat als het formulier niet is ingevuld. */
+  readonly inventarisatieLeeg: readonly DocumentSectie[];
   readonly inventarisatie: readonly InventoryAnswer[];
+}
+
+/** De secties van de algemene tekst, in documentvolgorde. */
+const ALGEMEEN: readonly TekstSleutel[] = [
+  'algemeen.inleiding',
+  'algemeen.vlag',
+  'algemeen.vervolg',
+  'algemeen.materialen',
+  'algemeen.inhoud',
+  'algemeen.afsluiting',
+];
+
+/**
+ * De algemene tekst, met een witregel tussen de secties en niet erboven.
+ *
+ * De witregel hoort bij de sectie die er NA komt, en de eerste krijgt er geen: de ruimte onder
+ * de kopband zit in het sjabloon. Pas tellen ná het weglaten van de lege secties, anders begint
+ * de tekst met een witregel zodra ITG de inleiding leegmaakt.
+ */
+function algemeneSecties(teksten: BriefingTeksten): readonly DocumentSectie[] {
+  return ALGEMEEN.flatMap((sleutel) => {
+    const sectie = gevuldeSectie(teksten, sleutel);
+    return sectie === null ? [] : [sectie];
+  }).map((sectie, index) => ({ ...sectie, witregel: index > 0 }));
+}
+
+/** Eén vaste sectie als lijst van nul of één. */
+function losseSectie(
+  teksten: BriefingTeksten,
+  sleutel: TekstSleutel,
+  witregel: boolean
+): readonly DocumentSectie[] {
+  const sectie = gevuldeSectie(teksten, sleutel);
+  return sectie === null ? [] : [{ ...sectie, witregel }];
 }
 
 const MISSING = {
@@ -236,8 +301,13 @@ export function composeBriefing(
     : extras.reis === undefined
       ? null
       : formatTravel(extras.reis);
+  const teksten = extras.teksten ?? standaardTekstenVoor(training.label);
 
   return {
+    algemeen: algemeneSecties(teksten),
+    mondayChallenges: (gevuldeSectie(teksten, 'algemeen.monday-challenges')?.regels ?? []).map(
+      (regel) => regel.tekst
+    ),
     opdrachtgever: training.opdrachtgever.trim(),
     thema: training.themas.join(' & '),
     klanttitel: training.klanttitel.trim(),
@@ -291,8 +361,12 @@ export function composeBriefing(
       extras.recipient === undefined
         ? undefined
         : { recipient: extras.recipient, format: formatContact },
-      cyclusFeiten(sessies)
+      cyclusFeiten(sessies),
+      teksten
     ),
+    concept: losseSectie(teksten, 'concept.inleiding', true),
+    inventarisatieIntro: losseSectie(teksten, 'inventarisatie.inleiding', true),
+    inventarisatieLeeg: losseSectie(teksten, 'inventarisatie.leeg', false),
     inventarisatie: extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
   };
 }
@@ -383,7 +457,15 @@ export function sessionFacts(
  * QR-kolom die op `0. NOTK` staat.
  */
 export function openIssues(data: BriefingDocumentData): string[] {
+  const secties = [
+    ...data.algemeen,
+    ...data.concept,
+    ...data.inventarisatieIntro,
+    ...data.inventarisatieLeeg,
+  ];
   const texts = [
+    ...data.mondayChallenges,
+    ...secties.flatMap((sectie) => sectie.regels.map((regel) => regel.tekst)),
     data.reis,
     data.trainingscodeMc,
     data.evaluatie,

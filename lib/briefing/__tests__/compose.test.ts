@@ -6,6 +6,7 @@ import {
   prefillTrainingActor,
   recurringClientBlock,
   selectBlocks,
+  type BriefingChecklist,
   type HistoryRow,
   type SessionFacts,
 } from '../blocks';
@@ -282,8 +283,14 @@ describe('nesting in de acteurblokken', () => {
     expect(taken.map((r) => r.tekst)).toContain('Het tot leven brengen van de praktijk');
   });
 
-  /** De lead- en co-blokken zijn vlak; nesting daar zou van ITG's bron afwijken. */
-  it('houdt het leadblok vlak', () => {
+  /**
+   * In het leadblok is alleen de uitleg onder "Afstemmen met de co-trainer(s)" ingesprongen.
+   *
+   * In ITG's bron was dat een regelafbreking bínnen de opsommingsregel. Monday kent alleen
+   * "nieuwe regel", dus sinds de teksten op het bord staan (30-Sep-2026) is het een subregel;
+   * met Tim afgesproken. De taken zelf blijven op niveau 0.
+   */
+  it('springt in het leadblok alleen de uitleg bij het afstemmen in', () => {
     const lead = {
       recipient: {
         trainer: { itemId: '1', naam: 'A', telefoon: '06-1', isActeur: false, isCoTrainer: false },
@@ -300,7 +307,11 @@ describe('nesting in de acteurblokken', () => {
       (b) => b.titel === 'Leadtrainer'
     );
 
-    expect(blok?.regels.every((r) => r.niveau === 0)).toBe(true);
+    const regels = blok?.regels ?? [];
+    const dieper = regels.filter((r) => r.niveau === 1);
+    expect(dieper).toHaveLength(1);
+    expect(dieper[0]?.tekst).toMatch(/^Alle trainers \(jij en de co-trainers\)/);
+    expect(regels[regels.indexOf(dieper[0]!) - 1]?.tekst).toBe('Afstemmen met de co-trainer(s)');
   });
 });
 
@@ -476,17 +487,20 @@ describe('selectBlocks', () => {
    * huiswerk komt voor — en dan hoort de trainer niet naar instructies te zoeken die er niet zijn.
    */
   it('verwijst alleen naar het kopje Huiswerkopdracht als dat is aangevinkt', () => {
-    const zie = 'zie kopje ‘Huiswerkopdracht’';
-    const zonder = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true }, [], SOLO);
-    expect(zonder.find((b) => b.titel.includes('cyclus'))?.regels[0]?.tekst).not.toContain(zie);
-    const met = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true, homework: true }, [], SOLO);
-    expect(met.find((b) => b.titel.includes('cyclus'))?.regels[0]?.tekst).toContain(zie);
+    const zie = 'Voor instructies over de huiswerkopdracht, zie kopje ‘Huiswerkopdracht’.';
+    const teksten = (checklist: BriefingChecklist): string[] =>
+      selectBlocks(checklist, [], SOLO)
+        .find((b) => b.titel.includes('cyclus'))
+        ?.regels.map((r) => r.tekst) ?? [];
+    expect(teksten({ ...EMPTY_CHECKLIST, trainingCycle: true })).not.toContain(zie);
+    // Sinds de teksten op het bord staan een eigen alinea, direct onder de cyclustekst.
+    expect(teksten({ ...EMPTY_CHECKLIST, trainingCycle: true, homework: true })[1]).toBe(zie);
   });
 
   /**
    * De cyclustekst zoals Dirkje hem zelf schreef in haar Reade-briefing (22-Sep-2026), met de
    * cijfers van die cyclus erin. Tim: haar formulering is de standaard. Letterlijk vergeleken,
-   * omdat `verify-blocks.py` deze alinea's niet meer tegen ITG's bron kan houden.
+   * omdat dit de begintekst van het bord Briefingteksten is (`lib/briefingteksten/catalog.ts`).
    */
   it("cyclustekst: Dirkje's Reade-formulering met de cijfers van de cyclus", () => {
     const blocks = selectBlocks({ ...EMPTY_CHECKLIST, trainingCycle: true }, [], SOLO, undefined, {

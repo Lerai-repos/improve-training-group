@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { briefingtekstenBoardId } from '@lib/briefingteksten/board';
+import { readTekstRijen } from '@lib/briefingteksten/read';
 import { loadAgendaBoards } from '@lib/evaluations';
 import { labelsBoardId } from '@lib/labels';
 import { createFailureStore } from '@lib/mail';
@@ -91,6 +93,7 @@ export function buildDailyCheckDeps(options: {
        * niet verstuurd zijn, zodat er één schrijver op het Systeem-bord blijft.
        */
       readMailFailures: () => createFailureStore(createUpstashKvStore(createRedisClient())).list(),
+      readBriefingteksten: () => readTekstRijen(client, briefingtekstenBoardId()),
       writer: options.dryRun ? null : createSignalWriter(write, boardId, runId, now),
       groups: options.groups,
       now,

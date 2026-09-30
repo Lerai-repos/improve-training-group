@@ -3,6 +3,7 @@ import { engineBoardProblem } from '@lib/recommend/engine-boards';
 
 import {
   agendaBoardFindings,
+  briefingtekstFindings,
   labelFindings,
   mailFindings,
   themaFindings,
@@ -17,6 +18,7 @@ import { findingKey } from './types';
 
 import type { AgendaBoard, AgendaBoardSet } from '@lib/evaluations';
 import type { EngineBoardRules } from '@lib/recommend/engine-boards';
+import type { TekstRij } from '@lib/briefingteksten/beoordeel';
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { MailFailure } from '@lib/mail';
@@ -36,6 +38,10 @@ const LABEL_KINDS: readonly FindingKind[] = [
 const THEMA_KINDS: readonly FindingKind[] = ['thema-ontbreekt', 'thema-zonder-inhoud'];
 const TRAINER_KINDS: readonly FindingKind[] = ['trainer-ontbreekt'];
 const MAIL_KINDS: readonly FindingKind[] = ['mail-mislukt'];
+const BRIEFINGTEKST_KINDS: readonly FindingKind[] = [
+  'briefingtekst-ontbreekt',
+  'briefingtekst-fout',
+];
 const AGENDABORD_KINDS: readonly FindingKind[] = [
   'agendabord-nieuw',
   'agendabord-onbruikbaar',
@@ -62,6 +68,8 @@ export interface DailyCheckDeps {
    * één schrijver op het Systeem-bord blijft.
    */
   readonly readMailFailures: () => Promise<readonly MailFailure[]>;
+  /** De items van het bord Briefingteksten. */
+  readonly readBriefingteksten: () => Promise<readonly TekstRij[]>;
   /** `null` in een droogloop: dan wordt er niets geschreven, ook niet de samenvatting. */
   readonly writer: SignalWriter | null;
   readonly groups: SignalGroupIds;
@@ -204,6 +212,12 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
 
   results.push(
     await attempt('mails', MAIL_KINDS, async () => mailFindings(await deps.readMailFailures()))
+  );
+  // Hangt ook niet aan de agenda: het bord Briefingteksten staat op zichzelf.
+  results.push(
+    await attempt('briefingteksten', BRIEFINGTEKST_KINDS, async () =>
+      briefingtekstFindings(await deps.readBriefingteksten())
+    )
   );
 
   const findings = results.flatMap((r) => r.findings);

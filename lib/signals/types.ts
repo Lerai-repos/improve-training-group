@@ -107,6 +107,21 @@ export type Finding =
       readonly klanttitel: string;
       readonly datum: string;
       readonly reden: string;
+    }
+  /**
+   * Een sectie van de briefing die op het bord Briefingteksten ontbreekt.
+   *
+   * Een verwijderd item betekent hetzelfde als een lege tekst: de sectie staat niet meer in de
+   * briefing. Leeg maken zie je op het bord (Status Leeg); verwijderen niet, dus meldt de
+   * controle het één keer.
+   */
+  | { readonly kind: 'briefingtekst-ontbreekt'; readonly sleutel: string; readonly naam: string }
+  /** Een tekst op het bord met een fout: in de briefing staat dan een `«…»`-regel. */
+  | {
+      readonly kind: 'briefingtekst-fout';
+      readonly sleutel: string;
+      readonly naam: string;
+      readonly melding: string;
     };
 
 /**
@@ -164,6 +179,11 @@ export function findingKey(finding: Finding): string {
       return `aanbevelingen-niet-aangesloten:${finding.boardId}`;
     case 'kolommen-ontbreken':
       return `kolommen-ontbreken:${finding.boardId}`;
+    // Op sleutel en niet op itemnaam: ITG mag items hernoemen.
+    case 'briefingtekst-ontbreekt':
+      return `briefingtekst-ontbreekt:${finding.sleutel}`;
+    case 'briefingtekst-fout':
+      return `briefingtekst-fout:${finding.sleutel}`;
   }
 }
 

@@ -1,15 +1,13 @@
 /**
  * De conditionele blokken: welke erin komen, en met welke tekst.
  *
- * De teksten hieronder staan **letterlijk** zoals ITG ze heeft aangeleverd in
- * `ITG Briefingteksten bij bijzonderheden.docx`. Dat document is de gesloten lijst waar
- * `06-briefing.md` over schrijft:
+ * **Wélke** blokken erin komen beslist dit bestand. **Wat** er staat beslist ITG, op het bord
+ * Briefingteksten (sinds 30-Sep-2026; zie `@lib/briefingteksten`). De teksten die hier eerder
+ * letterlijk stonden, uit `ITG Briefingteksten bij bijzonderheden.docx`, zijn de beginwaarden
+ * van dat bord geworden en staan nu in `lib/briefingteksten/catalog.ts`.
  *
- * > *De blokkenbibliotheek is een afgesloten lijst. Wat ITG heeft aangeleverd, bouwen we.
- * > Wat er niet in zit, doen zij met de hand, zoals nu.*
- *
- * Dus: hier niets bijschrijven, en niets herformuleren. Wijzigt ITG een tekst, dan wijzigt
- * dit bestand mee — met de bron erbij, niet uit het hoofd.
+ * Een sectie die ITG leeg laat verdwijnt uit het document; een sectie met een fout erin wordt
+ * een zichtbare `«…»`-regel. De blokkeuze zelf verandert daar niet door.
  *
  * ## De rolafhankelijke blokken
  *
@@ -24,9 +22,11 @@
 
 import { aantalWoord, type CyclusFeiten } from './cyclus-document';
 import { notConnected, notDecided } from './open-issues';
+import { gevuldeSectie, standaardTekstenVoor, type Waarden } from './teksten';
 
 import { nameList } from './recipients';
 
+import type { BriefingTeksten, TekstSleutel } from '@lib/briefingteksten/types';
 import type { Recipient } from './recipients';
 
 /**
@@ -58,14 +58,8 @@ export interface BlockLine {
   readonly niveau: 0 | 1;
 }
 
-/** Een gewone alinea. */
+/** Een gewone alinea; voor de `«…»`-regels die niet van het bord komen. */
 const prose = (tekst: string): BlockLine => ({ tekst, bullet: false, niveau: 0 });
-/** Een opsommingsregel. */
-const bullet = (tekst: string): BlockLine => ({ tekst, bullet: true, niveau: 0 });
-const bullets = (...regels: readonly string[]): BlockLine[] => regels.map(bullet);
-/** Een opsommingsregel één niveau dieper, onder de regel erboven. */
-const subBullet = (tekst: string): BlockLine => ({ tekst, bullet: true, niveau: 1 });
-const subBullets = (...regels: readonly string[]): BlockLine[] => regels.map(subBullet);
 
 export interface BriefingBlock {
   readonly titel: string;
@@ -92,169 +86,36 @@ export interface BriefingBlock {
 const CYCLE_DIAGRAM = 'cyclusschema.png';
 
 /**
- * De vier rolafhankelijke teksten, uit `ITG Briefingteksten bij bijzonderheden.docx`.
+ * Een blok uit één sectie van het bord, of `null` als ITG hem leeg liet.
+ *
+ * De kop van de sectie wordt de titel van het blok. Een lege kop mag: dan staat de tekst er
+ * zonder kop, en het sjabloon laat de kopregel weg.
+ */
+function sectieBlok(
+  teksten: BriefingTeksten,
+  sleutel: TekstSleutel,
+  waarden: Waarden = {}
+): BriefingBlock | null {
+  const gevuld = gevuldeSectie(teksten, sleutel, waarden);
+  return gevuld === null ? null : { titel: gevuld.kop, regels: gevuld.regels };
+}
+
+/** Het blok als lijst: leeg als ITG de sectie leeg liet. */
+const alsLijst = (blok: BriefingBlock | null): BriefingBlock[] => (blok === null ? [] : [blok]);
+
+/**
+ * De vier rolafhankelijke teksten.
  *
  * Twee paren, en binnen elk paar beweren de varianten het **tegenovergestelde** over wie het
  * klantcontact doet. De verkeerde variant sturen is daarom geen schoonheidsfoutje: dan leest
  * een co-trainer dat híj de klant belt terwijl de lead dat ook denkt, of leest niemand het.
  *
- * De alinea's staan hier **exact zoals ITG ze schreef**, inclusief hun plaatshouder
- * `Naam (tel nr)` en inclusief het ontbrekende spatie na de punt. Dat is met opzet: zo kan
- * `verify-blocks.py` juist de zinnen die ertoe doen letterlijk vergelijken met hun document.
- * De namen worden er bij het samenstellen ingezet.
- *
- * **Twee typefouten zijn wél gecorrigeerd**, omdat `06-briefing.md` dat uitdrukkelijk
- * voorschrijft: *"in de brontekst staan twee typefouten (`Kantcontact` in plaats van
- * Klantcontact, en `trainingscacteur`). Neem ze **niet** over — meld ze aan Dirkje en gebruik
- * de correcte spelling."* Ze staan als bewuste afwijking in `CORRECTIONS` in de verifier, dus
- * ze blijven bewaakt in plaats van een gat te slaan.
+ * De namen komen in `{trainers}` en `{acteurs}`, met telefoonnummer.
  */
-
-/** ITG's eigen plaatshouder voor meerdere personen, letterlijk uit hun bronbestand. */
-const TWO_NAMES = 'Naam (tel nr), Naam (tel nr)';
-/** Idem voor één persoon. */
-const ONE_NAME = 'Naam (tel nr)';
-
-/**
- * De `\n` is ITG's eigen regelafbreking, geen opmaakkeuze van ons.
- *
- * In `ITG Briefingteksten bij bijzonderheden.docx` staat in deze alinea's een echte
- * `<w:br/>`: na "Naam (tel nr)." en na "co-trainer(s)". Bij het overnemen naar dit bestand
- * zijn die weggevallen, en dan plakt de tekst aan elkaar — "co-trainer(s)Alle trainers" en
- * "(06-14884896).Jij bent". Gezien in een gegenereerde briefing, 24-Aug-2026.
- *
- * `docx-templates` zet `\n` om in een `<w:br/>` (`processLineBreaks`, standaard aan), dus
- * dit levert exact ITG's alinea op. `verify-blocks.py` leest de bron nu ook mét die
- * afbrekingen, zodat de vergelijking blijft kloppen in plaats van er omheen te werken.
- */
-const LEAD_INTRO =
-  'Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), ' +
-  'Naam (tel nr).\nJij bent de leadtrainer en dus verantwoordelijk voor:';
-
-const CO_INTRO =
-  'Naast jou zijn er ook andere trainers ingedeeld op deze opdracht: Naam (tel nr), ' +
-  'Naam (tel nr).\nJij bent ingedeeld als co-trainer. De leadtrainer is verantwoordelijk voor:';
-
-const LEAD_ALIGN =
-  'Afstemmen met de co-trainer(s)\nAlle trainers (jij en de co-trainers) krijgen deze briefing, ' +
-  'maar jij bent verantwoordelijk voor het duidelijk briefen van de trainers over de ' +
-  'definitieve opzet en uitvoering van de training.';
-
-const CO_ALIGN =
-  'Afstemmen met de co-trainer(s)\nAlle trainers (jij en de lead trainer) krijgen deze briefing, ' +
-  'maar de lead trainer is verantwoordelijk voor het duidelijk briefen van de co-trainer(s) ' +
-  'over de definitieve opzet en uitvoering van de training.';
-
-const WITH_ACTOR_INTRO =
-  'Voor deze opdracht werk je met een trainingsacteur: Naam (tel nr). Om een zo hoog mogelijk ' +
-  'leerrendement te realiseren is er een duidelijke taakverdeling binnen de samenwerking met ' +
-  'de (lead) trainer en trainingsacteur.';
-
-const AS_ACTOR_INTRO =
-  'Voor deze opdracht word je ingezet als trainingsacteur, naast de (lead) trainer: ' +
-  'Naam (tel nr). Om een zo hoog mogelijk leerrendement te realiseren is er een duidelijke ' +
-  'taakverdeling binnen de samenwerking met de (lead) trainer en trainingsacteur.';
-
-/**
- * Staat in álle vier de blokken. Eén constante en geen vier kopieën, want een gedupliceerde
- * regel verstopt een wijziging: `verify-blocks.py` vraagt of er *een* alinea met deze tekst
- * bestaat, dus met twee kopieën blijft één gewijzigde kopie onzichtbaar. Gemeten.
- *
- * `Klantcontact` is hier de **gecorrigeerde** spelling; ITG's bron schrijft in de
- * acteurblokken `Kantcontact`. Zie `CORRECTIONS` in de verifier.
- */
-const CLIENT_CONTACT = 'Klantcontact vooraf via Teams/telefonisch';
-
-/**
- * De waarschuwing die beide acteurblokken openen. Lopende tekst en geen opsommingsregel:
- * zo staat hij in ITG's bron, en hij hoort ook niet in het rijtje taken eronder.
- */
-const ACTOR_IMPORTANT =
-  'Belangrijk: de trainingsacteur is geen co-trainer of inhoudsdeskundige, tenzij dit ' +
-  'specifiek is afgesproken. De trainer blijft eindverantwoordelijk.';
-
-/** Gedeeld door beide acteurblokken; bij ITG allemaal opsommingsregels. */
-/** De kop van het eerste niveau; de vier regels eronder zijn zijn taken. */
-const ACTOR_LEAD_HEADING = 'De (lead) trainer is verantwoordelijk voor';
-
-const ACTOR_LEAD_TASKS: readonly string[] = [
-  CLIENT_CONTACT,
-  'Ontwikkelen van inhoud van de training',
-  'Afstemmen met de trainingsacteur en evt. co-trainer(s) over de definitieve opzet en ' +
-    'uitvoering van de training',
-  'De aansturing van de inzet van de acteur, inclusief duidelijke instructies over het ' +
-    'gewenste gedrag of de context waarin de acteur acteert',
-];
-
-const ACTOR_TASKS: readonly string[] = [
-  'Het tot leven brengen van de praktijk',
-  'Het afstemmen van zijn/haar spel op het niveau van de deelnemer & het leerdoel. Dit ' +
-    'gebeurt in overleg met de trainer, al dan niet op aanvraag van de deelnemer',
-];
-
-const LEAD_DUTIES: readonly string[] = [CLIENT_CONTACT, 'Ontwikkelen van training'];
-
-const LEAD_CLOSING = 'De terugkoppeling en nabespreking met de klant en mij';
-
-/** De tekst voor de ontvanger die leadtrainer is. */
-function leadTrainerBlock(anderen: string): BriefingBlock {
-  return {
-    titel: 'Leadtrainer',
-    regels: [
-      prose(LEAD_INTRO.replace(TWO_NAMES, anderen)),
-      ...bullets(...LEAD_DUTIES, LEAD_ALIGN, LEAD_CLOSING),
-    ],
-  };
-}
-
-/** De tekst voor de ontvanger die co-trainer is. */
-function coTrainerBlock(anderen: string): BriefingBlock {
-  return {
-    titel: 'Co-trainer',
-    regels: [
-      prose(CO_INTRO.replace(TWO_NAMES, anderen)),
-      ...bullets(...LEAD_DUTIES, CO_ALIGN, LEAD_CLOSING),
-      // Bij ITG geen opsommingsregel: het is een afsluitende zin, geen taak in het rijtje.
-      prose('Als je wilt, kun je alvast contact opnemen met de leadtrainer.'),
-    ],
-  };
-}
-
-/** De tekst voor een trainer die mét een acteur werkt. */
-function withActorBlock(acteurs: string): BriefingBlock {
-  return {
-    titel: 'Werken met een trainingsacteur',
-    regels: [
-      prose(WITH_ACTOR_INTRO.replace(ONE_NAME, acteurs)),
-      prose(ACTOR_IMPORTANT),
-      bullet(ACTOR_LEAD_HEADING),
-      ...subBullets(...ACTOR_LEAD_TASKS),
-      bullet('De trainingsacteur is verantwoordelijk het'),
-      ...subBullets(
-        ...ACTOR_TASKS,
-        'Geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)'
-      ),
-    ],
-  };
-}
-
-/** De tekst voor de ontvanger die zélf de acteur is. */
-function asActorBlock(trainers: string): BriefingBlock {
-  return {
-    titel: 'Werken als trainingsacteur',
-    regels: [
-      prose(AS_ACTOR_INTRO.replace(ONE_NAME, trainers)),
-      prose(ACTOR_IMPORTANT),
-      bullet(ACTOR_LEAD_HEADING),
-      ...subBullets(...ACTOR_LEAD_TASKS),
-      bullet('De trainingsacteur is verantwoordelijk voor'),
-      ...subBullets(
-        ...ACTOR_TASKS,
-        'Het geven van feedback vanuit de rol (o.b.v. gedrag) én als observator (verbaal)'
-      ),
-    ],
-  };
-}
+const ROLTEKST: Readonly<Record<'lead' | 'co', TekstSleutel>> = {
+  lead: 'rol.leadtrainer',
+  co: 'rol.co-trainer',
+};
 
 /**
  * Wat de training zélf zegt over wie er voor de groep staat.
@@ -382,124 +243,54 @@ export const EMPTY_CHECKLIST: BriefingChecklist = {
   trainingActor: false,
 };
 
-const OWN_GROUP: BriefingBlock = {
-  titel: 'Ieder een eigen groep',
-  regels: [
-    prose(
-      'Elke trainer traint een eigen groep. Het is belangrijk dat dit zo veel mogelijk op ' +
-        'dezelfde manier gebeurt. Gebruik bijvoorbeeld dezelfde opzet en (soort) werkvormen.'
-    ),
-  ],
-};
-
-const SAME_GROUP: BriefingBlock = {
-  titel: 'Lead- en co-trainer(s) op dezelfde groep',
-  regels: [
-    prose(
-      'Jullie trainen samen de gehele groep, deze wordt dus niet opgesplitst over meerdere ' +
-        'locaties. Zorg daarom voor een goede afstemming. Houd er rekening mee dat de klant ' +
-        'extra betaalt voor de co-trainer(s). Het is daarom belangrijk dat alle trainers een ' +
-        'actieve en duidelijke rol hebben tijdens de sessie(s).'
-    ),
-  ],
-};
-
 /**
  * Het cyclusblok, met de cijfers van déze cyclus erin.
  *
- * ITG's brontekst noemde de cyclus "in dit voorbeeld 2 x 4 uur", en dat stond ook in een
- * briefing over een cyclus van 4 + 3 uur. Dirkje schreef het in haar eigen cyclusbriefing
- * (Reade, 22-Sep-2026) daarom om met de echte cijfers; Tim, 22-Sep-2026: die formulering is
- * de standaard, en de cijfers komen uit de sessies (`cyclus-document.ts`). Dit zijn dus
- * Dirkje's woorden met twee gaten erin, en niet meer letterlijk de bron —
- * `tools/briefing-templates/verify-blocks.py` slaat deze alinea's daarom over; de unit-test
- * `cyclustekst` legt ze naast haar Reade-tekst.
+ * Vier secties van het bord onder één kop, met het cyclusschema eronder. Dirkje's formulering
+ * uit haar Reade-cyclusbriefing (22-Sep-2026) is de beginwaarde: `{duur}` en `{aantal}` komen
+ * uit de sessies (`cyclus-document.ts`).
  *
- * De tweede alinea is **genest**: `06-briefing.md` — *"Ja → tekstblok. En dan komt de
- * cyclus-tekst er ook bij (geneste regel)"* — en de acceptatiecriteria vragen om precies dat
- * verschil te kunnen aantonen (mét en zónder voorbereidende opdracht). Een cyclus zonder
- * voorbereidende opdracht is dus een gevraagde toestand, geen fout.
+ * De huiswerkverwijzing en de voorbereidende opdracht staan er alleen bij als ze ook echt
+ * gelden: verwijzen naar een kopje dat er niet staat stuurt de trainer het document door op
+ * zoek naar niets. Een cyclus zonder voorbereidende opdracht is een gevraagde toestand
+ * (`06-briefing.md`, acceptatiecriteria), geen fout.
+ *
+ * Is de duur niet bekend — een sessie met een Duur die niet op te tellen is — dan valt
+ * "van {duur}" weg: "Bij een trainingscyclus volgt de groep twee sessies". Beter niets dan
+ * een half getal, zoals de tekst dat vóór het bord ook deed.
  */
-function cycleIntro(cyclus: CyclusFeiten | null, homework: boolean): string {
-  const van = cyclus === null || cyclus.duur === '' ? '' : ` van ${cyclus.duur}`;
-  const sessies = cyclus === null || cyclus.aantal < 2 ? 'meerdere' : aantalWoord(cyclus.aantal);
-  return (
-    `Bij een trainingscyclus${van} volgt de groep ${sessies} sessies over één thema. Tussen de ` +
-    'sessies zit een oefen- en integratieperiode van zo’n 2 à 3 weken, of langer indien ' +
-    'gewenst, waarin deelnemers bezig zijn met een huiswerkopdracht.' +
-    /** Alleen verwijzen naar een kopje dat er ook staat; de huiswerkopdracht is apart aanvinken. */
-    (homework ? ' Voor instructies over de huiswerkopdracht, zie kopje ‘Huiswerkopdracht’.' : '')
-  );
+/** "van {duur}" of een losse `{duur}` weg, met de spatie ervoor. */
+function zonderDuur(tekst: string): string {
+  return tekst.replace(/\s*\bvan\s+\{\s*duur\s*\}/gi, '').replace(/\s*\{\s*duur\s*\}/gi, '');
 }
-
-/** De geneste alinea: staat er alleen bij een voorbereidende opdracht. */
-const CYCLE_NESTED =
-  'Vóór de eerste sessie ontvangen deelnemers een voorbereidende reflectieopdracht.';
-
-const CYCLE_NEXT_STEP =
-  'Tijdens de laatste sessie definiëren deelnemers hun eigen Next Step. Dit is een concrete ' +
-  'vervolgstap waar ze na de training zelfstandig mee verder kunnen. Deze Next Step kan ' +
-  'eventueel worden opgenomen in de ontwikkelgesprekken tussen manager en medewerker.';
-
-const CYCLE_DIAGRAM_INTRO =
-  'Door deze cyclus komen deelnemers meerdere keren in contact met de lesstof. Dit heeft een ' +
-  'grote positieve invloed op het leerrendement. De cyclus ziet er dus als volgt uit:';
 
 function trainingCycleBlock(
   checklist: BriefingChecklist,
-  cyclus: CyclusFeiten | null
-): BriefingBlock {
-  const regels: string[] = [cycleIntro(cyclus, checklist.homework)];
-  if (checklist.preparatoryAssignment) {
-    regels.push(CYCLE_NESTED);
+  cyclus: CyclusFeiten | null,
+  teksten: BriefingTeksten
+): BriefingBlock | null {
+  const duur = cyclus?.duur ?? '';
+  const inleiding = gevuldeSectie(
+    teksten,
+    'cyclus.inleiding',
+    {
+      duur,
+      aantal: cyclus === null || cyclus.aantal < 2 ? 'meerdere' : aantalWoord(cyclus.aantal),
+    },
+    (tekst) => (duur === '' ? zonderDuur(tekst) : tekst)
+  );
+  const delen = [
+    inleiding,
+    checklist.homework ? gevuldeSectie(teksten, 'cyclus.huiswerk') : null,
+    checklist.preparatoryAssignment ? gevuldeSectie(teksten, 'cyclus.voorbereiding') : null,
+    gevuldeSectie(teksten, 'cyclus.afsluiting'),
+  ];
+  const regels = delen.flatMap((deel) => deel?.regels ?? []);
+  if (regels.length === 0) {
+    return null;
   }
-  regels.push(CYCLE_NEXT_STEP, CYCLE_DIAGRAM_INTRO);
-  return {
-    titel: 'Trainings/workshop/teambuilding cyclus',
-    regels: regels.map(prose),
-    afbeelding: CYCLE_DIAGRAM,
-  };
+  return { titel: inleiding?.kop ?? '', regels, afbeelding: CYCLE_DIAGRAM };
 }
-
-const HOMEWORK: BriefingBlock = {
-  titel: 'Huiswerkopdracht',
-  regels: [
-    prose(
-      'In overeenstemming met de klant verzorgen wij een huiswerkopdracht voor de deelnemers. Jij ' +
-        'geeft deze vorm, afgestemd op de opdracht en groep. Denk alsjeblieft aan de volgende zaken:'
-    ),
-    ...bullets(
-      'De opdracht dient deelnemers te helpen om de inhoud van de training direct in de praktijk toe ' +
-        'te passen, inzichten op te doen en eventuele knelpunten of vragen zichtbaar te maken.',
-      'Zorg er zo veel mogelijk voor dat de opdracht als onderdeel van het werk kan worden ' +
-        'uitgevoerd, in plaats van dat het de deelnemers extra tijd kost.',
-      'Is de huiswerkopdracht niet onderdeel van een trainingscyclus (dus meerdere opvolgende ' +
-        'sessies vanuit ons)? Spreek dan met de groep af of en hoe ze de uitvoer van de opdracht ' +
-        'borgen.'
-    ),
-  ],
-};
-
-const PREPARATORY_ASSIGNMENT: BriefingBlock = {
-  titel: 'Voorbereidende opdracht',
-  regels: [
-    'Voor deze opdracht werken we met een voorbereidende opdracht, zodat jij vooraf meer inzicht ' +
-      'krijgt in de situatie en leerdoelen van de deelnemers.',
-    'Ook kunnen de antwoorden inzicht geven of je aan het begin van de sessie de verwachtingen van ' +
-      'de deelnemers moet managen, omdat er bijvoorbeeld te uiteenlopende verwachtingen zijn van de ' +
-      'sessie. Mocht dit laatste gebeuren, laat mij dit dan alsjeblieft weten, zodat ik het met de ' +
-      'contactpersoon kan bespreken.',
-    'In de bijlage van de mail vind je een template met voorbeeldvragen. Zou je deze willen ' +
-      'aanpassen zodat deze aansluit op jouw sessie en vervolgens met mij delen? Dan zorg ik ervoor ' +
-      'dat deze bij de klant terechtkomt.',
-  ].map(prose),
-};
-
-/** De inleidende zin van het `Vaste klant`-blok; de tabel komt eronder. */
-const RECURRING_CLIENT_INTRO =
-  'Voor deze klant hebben we meerdere sessies georganiseerd staan (verleden en/of toekomst). Zie ' +
-  'hieronder een overzicht van de sessies die zijn geweest en/of nog gepland staan, inclusief alle ' +
-  'informatie die wij ervoor hebben.';
 
 /** Eén eerdere of komende sessie bij dezelfde klant. */
 export interface HistoryRow {
@@ -532,7 +323,8 @@ export interface HistoryRow {
  * zichtbaar anders dan bedoeld, en dat is beter dan stilletjes de helft weglaten.
  */
 export function recurringClientBlock(
-  rows: readonly HistoryRow[] | undefined
+  rows: readonly HistoryRow[] | undefined,
+  teksten: BriefingTeksten = standaardTekstenVoor('')
 ): BriefingBlock | null {
   if (rows === undefined) {
     return {
@@ -548,7 +340,9 @@ export function recurringClientBlock(
   if (rows.length === 0) {
     return null;
   }
-  return { titel: 'Vaste klant', regels: [prose(RECURRING_CLIENT_INTRO)], historie: rows };
+  // De tabel blijft staan als ITG de tekst leegmaakt: de sessies zijn geen tekst van hen.
+  const tekst = sectieBlok(teksten, 'vaste-klant');
+  return { titel: tekst?.titel ?? '', regels: tekst?.regels ?? [], historie: rows };
 }
 
 /**
@@ -588,16 +382,26 @@ export function recurringClientBlock(
 export function recipientBlocks(
   recipient: Recipient,
   checklist: BriefingChecklist,
-  format: (naam: string, telefoon: string) => string
+  format: (naam: string, telefoon: string) => string,
+  teksten: BriefingTeksten = standaardTekstenVoor('')
 ): BriefingBlock[] {
   if (recipient.role === 'acteur') {
-    return [asActorBlock(nameList(recipient.otherTrainers, format))];
+    return alsLijst(
+      sectieBlok(teksten, 'rol.als-acteur', {
+        trainers: nameList(recipient.otherTrainers, format),
+      })
+    );
   }
 
   const blocks: BriefingBlock[] = [];
   if (recipient.otherTrainers.length > 0) {
-    const anderen = nameList(recipient.otherTrainers, format);
-    blocks.push(recipient.role === 'lead' ? leadTrainerBlock(anderen) : coTrainerBlock(anderen));
+    blocks.push(
+      ...alsLijst(
+        sectieBlok(teksten, ROLTEKST[recipient.role], {
+          trainers: nameList(recipient.otherTrainers, format),
+        })
+      )
+    );
   }
 
   if (checklist.trainingActor) {
@@ -617,7 +421,11 @@ export function recipientBlocks(
         ].map(prose),
       });
     } else {
-      blocks.push(withActorBlock(nameList(recipient.actors, format)));
+      blocks.push(
+        ...alsLijst(
+          sectieBlok(teksten, 'rol.met-acteur', { acteurs: nameList(recipient.actors, format) })
+        )
+      );
     }
   }
   return blocks;
@@ -681,8 +489,29 @@ function roleBlocks(checklist: BriefingChecklist, session: SessionFacts): Briefi
   return blocks;
 }
 
+interface Ontvanger {
+  readonly recipient: Recipient;
+  readonly format: (naam: string, telefoon: string) => string;
+}
+
 /**
- * De blokken die bij deze training horen, in de volgorde van het bronbestand.
+ * De blokken die bóven `Concept inhoud` staan: wat de ontvanger zelf moet doen.
+ *
+ * Zonder ontvanger komen de rolblokken als zichtbare `«…»`-regel in plaats van als gok.
+ */
+function rolblokken(
+  checklist: BriefingChecklist,
+  session: SessionFacts,
+  recipient: Ontvanger | undefined,
+  teksten: BriefingTeksten
+): BriefingBlock[] {
+  return recipient === undefined
+    ? roleBlocks(checklist, session)
+    : recipientBlocks(recipient.recipient, checklist, recipient.format, teksten);
+}
+
+/**
+ * De overige blokken, in de volgorde van het bronbestand.
  *
  * `historie` mag `undefined` zijn: dat betekent "nog niet aangesloten" en levert een
  * zichtbaar blok op, terwijl `[]` betekent "gecontroleerd, deze klant heeft geen andere
@@ -694,9 +523,7 @@ function roleBlocks(checklist: BriefingChecklist, session: SessionFacts): Briefi
  *
  * Verder wordt hier niets geweigerd. De vinkjes zijn volgens `06-briefing.md` bewust
  * onafhankelijk — de huiswerkopdracht is *"apart aanvinken"* — en een cyclus zónder
- * voorbereidende opdracht is zelfs een van de acceptatiecriteria. Wat er scheef aan kan zijn,
- * zoals een verwijzing naar een kopje dat niet is aangevinkt, komt zichtbaar in het document
- * te staan in plaats van het genereren tegen te houden.
+ * voorbereidende opdracht is zelfs een van de acceptatiecriteria.
  *
  * **Openstaande vraag aan Dirkje.** `06-briefing.md` schrijft bij de voorbereidende opdracht
  * *"En dan komt de cyclus-tekst er ook bij (geneste regel)"*. Dat kan twee dingen betekenen:
@@ -704,84 +531,18 @@ function roleBlocks(checklist: BriefingChecklist, session: SessionFacts): Briefi
  * zelf niet is aangevinkt. De acceptatiecriteria beschrijven alleen het eerste, dus dat is
  * gebouwd; het tweede zou een blok toevoegen dat de adviseur niet heeft aangevinkt.
  */
-/**
- * Dezelfde blokken, maar gesplitst in de rolblokken en de rest.
- *
- * De rolblokken staan in het document bóven `Concept inhoud`; alle andere blokken staan
- * eronder. `selectBlocks` blijft de platte lijst geven, want die volgorde is nog steeds de
- * volgorde waarin de blokken gekozen worden.
- */
-export function splitBlocks(
+function overigeBlokken(
   checklist: BriefingChecklist,
   historie: readonly HistoryRow[] | undefined,
-  session: SessionFacts,
-  recipient?: {
-    readonly recipient: Recipient;
-    readonly format: (naam: string, telefoon: string) => string;
-  },
-  cyclus: CyclusFeiten | null = null
-): { readonly rolblokken: BriefingBlock[]; readonly blokken: BriefingBlock[] } {
-  const alle = selectBlocks(checklist, historie, session, recipient, cyclus);
-  const rol = new Set<string>(rolBlockTitels(checklist, session, recipient));
-  return {
-    rolblokken: alle.filter((b) => rol.has(b.titel)),
-    blokken: alle.filter((b) => !rol.has(b.titel)),
-  };
-}
-
-/** De titels die `selectBlocks` als rolblok toevoegt, in dezelfde tak als daar. */
-function rolBlockTitels(
-  checklist: BriefingChecklist,
-  session: SessionFacts,
-  recipient?: {
-    readonly recipient: Recipient;
-    readonly format: (naam: string, telefoon: string) => string;
-  }
-): string[] {
-  const blokken =
-    recipient === undefined
-      ? roleBlocks(checklist, session)
-      : recipientBlocks(recipient.recipient, checklist, recipient.format);
-  return blokken.map((b) => b.titel);
-}
-
-export function selectBlocks(
-  checklist: BriefingChecklist,
-  historie: readonly HistoryRow[] | undefined,
-  session: SessionFacts,
-  /**
-   * Voor wie dit document is, als de aanroeper dat weet. Zonder ontvanger komen de
-   * rolblokken als zichtbare `«…»`-regel in plaats van als gok.
-   */
-  recipient?: {
-    readonly recipient: Recipient;
-    readonly format: (naam: string, telefoon: string) => string;
-  },
-  /** De cijfers van de cyclus voor het cyclusblok; `null` als die (nog) niet bekend zijn. */
-  cyclus: CyclusFeiten | null = null
+  recipient: Ontvanger | undefined,
+  cyclus: CyclusFeiten | null,
+  teksten: BriefingTeksten
 ): BriefingBlock[] {
   if (checklist.ownGroup && checklist.sameGroup) {
     throw new Error(
       'Briefing: "ieder een eigen groep" en "lead- en co-trainer(s) op dezelfde groep" kunnen ' +
         'niet allebei aanstaan; dit zijn de twee antwoorden op dezelfde vraag.'
     );
-  }
-  const blocks: BriefingBlock[] =
-    recipient === undefined
-      ? [...roleBlocks(checklist, session)]
-      : [...recipientBlocks(recipient.recipient, checklist, recipient.format)];
-  if (checklist.ownGroup) {
-    blocks.push(OWN_GROUP);
-  }
-  if (checklist.sameGroup) {
-    blocks.push(SAME_GROUP);
-  }
-  const recurring = recurringClientBlock(historie);
-  if (recurring !== null) {
-    blocks.push(recurring);
-  }
-  if (checklist.trainingCycle) {
-    blocks.push(trainingCycleBlock(checklist, cyclus));
   }
   /**
    * Huiswerk en de voorbereidende opdracht gaan over het MAKEN van de inhoud, dus niet naar
@@ -797,11 +558,54 @@ export function selectBlocks(
    * bepaald persoon, en daar hoort te zien te zijn wat de checklist aanzet.
    */
   const naarMaker = recipient === undefined || recipient.recipient.role !== 'acteur';
-  if (checklist.homework && naarMaker) {
-    blocks.push(HOMEWORK);
-  }
-  if (checklist.preparatoryAssignment && naarMaker) {
-    blocks.push(PREPARATORY_ASSIGNMENT);
-  }
-  return blocks;
+  return [
+    checklist.ownGroup ? sectieBlok(teksten, 'groep.eigen') : null,
+    checklist.sameGroup ? sectieBlok(teksten, 'groep.samen') : null,
+    recurringClientBlock(historie, teksten),
+    checklist.trainingCycle ? trainingCycleBlock(checklist, cyclus, teksten) : null,
+    checklist.homework && naarMaker ? sectieBlok(teksten, 'opdracht.huiswerk') : null,
+    checklist.preparatoryAssignment && naarMaker
+      ? sectieBlok(teksten, 'opdracht.voorbereidend')
+      : null,
+  ].flatMap(alsLijst);
+}
+
+/**
+ * De blokken gesplitst in de rolblokken en de rest.
+ *
+ * De rolblokken staan in het document bóven `Concept inhoud`; alle andere blokken staan
+ * eronder. Gesplitst op herkomst en niet op titel: sinds ITG de koppen zelf schrijft kan een
+ * rolblok elke titel hebben, ook een lege of dezelfde als een ander blok.
+ */
+export function splitBlocks(
+  checklist: BriefingChecklist,
+  historie: readonly HistoryRow[] | undefined,
+  session: SessionFacts,
+  recipient?: Ontvanger,
+  cyclus: CyclusFeiten | null = null,
+  teksten: BriefingTeksten = standaardTekstenVoor('')
+): { readonly rolblokken: BriefingBlock[]; readonly blokken: BriefingBlock[] } {
+  const blokken = overigeBlokken(checklist, historie, recipient, cyclus, teksten);
+  return { rolblokken: rolblokken(checklist, session, recipient, teksten), blokken };
+}
+
+/** Alle blokken in één lijst: eerst de rolblokken, dan de rest. */
+export function selectBlocks(
+  checklist: BriefingChecklist,
+  historie: readonly HistoryRow[] | undefined,
+  session: SessionFacts,
+  recipient?: Ontvanger,
+  /** De cijfers van de cyclus voor het cyclusblok; `null` als die (nog) niet bekend zijn. */
+  cyclus: CyclusFeiten | null = null,
+  teksten: BriefingTeksten = standaardTekstenVoor('')
+): BriefingBlock[] {
+  const { rolblokken: rol, blokken } = splitBlocks(
+    checklist,
+    historie,
+    session,
+    recipient,
+    cyclus,
+    teksten
+  );
+  return [...rol, ...blokken];
 }

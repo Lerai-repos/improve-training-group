@@ -12,10 +12,11 @@ import type { AgendaUsage, ThemaRecord } from '../findings';
 import type { ExistingSignal } from '../reconcile';
 import { rowForFailure } from '../text';
 
-import { GROUPS, signal, usage } from './helpers';
+import { GROUPS, VOLLEDIG_BORD, signal, usage } from './helpers';
 
 import type { DailyCheckDeps } from '../run';
 import type { SignalWriter } from '../write';
+
 
 const NOW = new Date('2026-09-04T03:15:00.000Z');
 const asset = { id: 'a', name: 'n', publicUrl: 'https://x' };
@@ -98,6 +99,8 @@ function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
     readThemas: async (): Promise<ReadonlyMap<string, ThemaRecord>> =>
       new Map([['12', { naam: 'Boksen', conceptInhoud: '' }]]),
     readMailFailures: async () => [],
+    // Een compleet bord in orde: levert geen enkele melding op.
+    readBriefingteksten: async () => VOLLEDIG_BORD,
     readTrainers: async (): Promise<ReadonlySet<string>> => new Set(),
     writer: null,
     groups: GROUPS,
@@ -290,6 +293,40 @@ describe('niet-verstuurde evaluatiemails', () => {
       })
     );
     expect(report.failures.map((f) => f.check)).toContain('mails');
+  });
+});
+
+describe('het bord Briefingteksten', () => {
+  it('meldt een verwijderde tekst, ook als de agenda niet gelezen kan worden', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readAgendaUsage: async () => {
+          throw new Error('agenda weg');
+        },
+        readBriefingteksten: async () => VOLLEDIG_BORD.filter((r) => r.sleutel !== 'groep.eigen'),
+      })
+    );
+    expect(report.findings.filter((f) => f.kind === 'briefingtekst-ontbreekt')).toEqual([
+      { kind: 'briefingtekst-ontbreekt', sleutel: 'groep.eigen', naam: 'Ieder een eigen groep' },
+    ]);
+  });
+
+  /**
+   * Een onleesbaar bord is niet "alles staat er": dan zou de opruimstap elke openstaande
+   * melding over een ontbrekende tekst afvinken.
+   */
+  it('meldt een onleesbaar bord als mislukte controle', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readBriefingteksten: async () => {
+          throw new Error('bord weg');
+        },
+      })
+    );
+    expect(report.failures.map((f) => f.check)).toContain('briefingteksten');
+    expect(report.findings.some((f) => f.kind.startsWith('briefingtekst'))).toBe(false);
   });
 });
 

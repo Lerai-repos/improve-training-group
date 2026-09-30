@@ -48,6 +48,9 @@ import { createUpstashKvStore, createRedisClient } from '@lib/recommend/kv';
 import { loadSettingsOnce } from '@lib/settings/load';
 import { briefingFilename, renderBriefing } from '@lib/briefing/render';
 import { BRIE } from '@lib/briefing/types';
+import { briefingtekstenBoardId } from '@lib/briefingteksten/board';
+import { readBriefingTeksten } from '@lib/briefingteksten/read';
+import { labelsBoardId } from '@lib/labels';
 
 /**
  * De hele keten in één keer: Monday lezen, samenstellen, sjabloon invullen, bestand wegschrijven.
@@ -457,6 +460,12 @@ async function main(): Promise<void> {
     historie,
     extraInfo: extraInfo.lines,
     roles: sessionFacts(training, checklist, overrides),
+    // Van het bord, zoals de knop: het script hoort te laten zien wat een trainer krijgt.
+    teksten: await readBriefingTeksten(client, {
+      boardId: briefingtekstenBoardId(),
+      labelsBoardId: labelsBoardId(),
+      label: training.label,
+    }),
   };
   /**
    * De gegevenstabel is voor iedereen bijna gelijk, dus die wordt één keer getoond — met de

@@ -1,5 +1,8 @@
+import { SECTIES } from '@lib/briefingteksten/catalog';
+
 import { findingName } from '../text';
 
+import type { TekstRij } from '@lib/briefingteksten/beoordeel';
 import type { AgendaUsage } from '../findings';
 import type { ExistingSignal } from '../reconcile';
 import type { SignalGroupIds } from '../groups';
@@ -44,3 +47,14 @@ export const usage = (over: Partial<AgendaUsage> = {}): AgendaUsage => ({
   trainers: new Map(),
   ...over,
 });
+
+/** Het bord Briefingteksten zoals `briefingteksten:create` het neerzet: geen enkele melding. */
+export const VOLLEDIG_BORD: readonly TekstRij[] = SECTIES.map((s, i) => ({
+  itemId: String(i),
+  naam: s.naam,
+  sleutel: s.sleutel,
+  kop: s.kop,
+  tekst: s.tekst,
+  status: 'OK',
+  melding: '',
+}));

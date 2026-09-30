@@ -16,6 +16,11 @@ import { buildTabView } from '@lib/briefing/tab';
 import { prefillTrainingActor, EMPTY_CHECKLIST } from '@lib/briefing/blocks';
 import { countLinkedActors } from '@lib/briefing/compose';
 
+import { briefingtekstenBoardId } from '@lib/briefingteksten/board';
+import { readBriefingTeksten } from '@lib/briefingteksten/read';
+import { labelsBoardId } from '@lib/labels';
+
+import type { BriefingTeksten } from '@lib/briefingteksten/types';
 import type { BriefingTraining } from '@lib/briefing/types';
 
 /**
@@ -62,6 +67,22 @@ const agendaBoardsFor = (client: Client): Promise<readonly AgendaBoard[]> => {
   return agendaBoards;
 };
 
+/** De teksten per label, één keer gelezen: het bord verandert niet tijdens een audit. */
+const tekstenPerLabel = new Map<string, Promise<BriefingTeksten>>();
+const tekstenFor = (client: Client, label: string): Promise<BriefingTeksten> => {
+  const bekend = tekstenPerLabel.get(label);
+  if (bekend !== undefined) {
+    return bekend;
+  }
+  const gelezen = readBriefingTeksten(client, {
+    boardId: briefingtekstenBoardId(),
+    labelsBoardId: labelsBoardId(),
+    label,
+  });
+  tekstenPerLabel.set(label, gelezen);
+  return gelezen;
+};
+
 /**
  * Pass 2: het document ECHT bouwen, zonder reis.
  *
@@ -87,6 +108,7 @@ async function render(
       extraInfo: extraInfo.lines,
       reis: new Map(),
       actorItemIds: view.actorItemIds,
+      teksten: await tekstenFor(client, training.label),
     });
     if (uit.kind === 'refused') {
       return { fout: `geweigerd: ${uit.reason}`, openPerRol: [] };
