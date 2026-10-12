@@ -9,7 +9,7 @@ import type { KvStore } from '@lib/recommend/kv';
  * Via KV en niet rechtstreeks naar het bord, om dezelfde reden als bij de mislukte mails
  * (`lib/mail/failure-store.ts`): er is één schrijver op het Systeem-bord, en alleen die krijgt
  * het afvinken, heropenen en automatisch oplossen. Lukt een latere knopdruk wél, dan verdwijnt
- * de sleutel en bij de volgende controle de melding.
+ * de sleutel, en direct daarna de melding (`syncEvaluatieMeldingen`).
  *
  * Eén melding per training, en de laatste knopdruk wint: die zegt wat er nú mis is.
  *

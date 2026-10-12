@@ -6,7 +6,12 @@ export {
   SIGNAL_EXPECTED_COLUMNS,
   SOORT_LABELS,
 } from './columns';
-export { buildDailyCheckDeps, buildSignalLease, signalGroups } from './deps';
+export {
+  buildDailyCheckDeps,
+  buildSignalLease,
+  signalGroups,
+  syncEvaluatieMeldingen,
+} from './deps';
 export {
   LABEL_REQUIRED_FIELDS,
   labelFindings,

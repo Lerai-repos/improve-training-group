@@ -189,7 +189,7 @@ export function findingDetail(finding: Finding): string {
             'aanvragen@ en backoffice@. De status op het agendabord staat wél goed.',
         'Dit lost zichzelf niet op: de dagelijkse verwerking kijkt alleen naar de dag ervoor. ' +
           'Druk op de training op Eval Rapport om de mails opnieuw te versturen; lukt dat, dan ' +
-          'verdwijnt deze melding bij de volgende controle vanzelf.',
+          'verdwijnt deze melding vanzelf.',
       ].join('\n\n');
 
     case 'eval-knop':
@@ -199,7 +199,7 @@ export function findingDetail(finding: Finding): string {
         'Er is niets op het agendabord geschreven en er zijn geen mails verstuurd. Eval Status ' +
           'staat op "Zie Systeem-bord", en dezelfde reden staat als update op de training.',
         'Los de oorzaak op en druk opnieuw op Eval Rapport. Lukt het dan, dan verdwijnt deze ' +
-          'melding bij de volgende controle vanzelf.',
+          'melding vanzelf.',
       ].join('\n\n');
 
     case 'agendabord-nieuw':

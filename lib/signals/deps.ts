@@ -12,10 +12,12 @@ import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
 
 import { systeemBoardId } from './board';
+import { metGeduld, POGING_MS, runEvaluatieSyncExclusive } from './evaluatie-sync';
 import { SIGNAL_GROUPS } from './groups';
 import { readAgendaUsage, readLabelsForCheck, readSignals, readThemas, readTrainers } from './read';
 import { createSignalWriter } from './write';
 
+import type { EvaluatieSyncDeps, EvaluatieSyncOutcome } from './evaluatie-sync';
 import type { SignalGroupIds } from './groups';
 import type { LeaseDeps } from './lease';
 import type { DailyCheckDeps } from './run';
@@ -136,4 +138,59 @@ export async function signalGroups(
     open: find(SIGNAL_GROUPS.open),
     afgehandeld: find(SIGNAL_GROUPS.afgehandeld),
   };
+}
+
+/** Bij een bezette grendel: zo vaak en zo lang opnieuw proberen. */
+const SYNC_POGINGEN = 3;
+const SYNC_WACHT_MS = 10_000;
+
+/**
+ * De evaluatiemeldingen meteen bijwerken op het Systeem-bord: na een druk op Eval Rapport en
+ * na de evaluatiejob van 06:30. Zie `runEvaluatieSync`.
+ */
+export async function syncEvaluatieMeldingen(
+  /**
+   * Het ABSOLUTE tijdstip waarop de route klaar moet zijn. Verplicht: deze stap draait aan het
+   * eind van een route met een harde grens, nadat het eigenlijke werk al gelukt is. Zonder
+   * grens kapt Vercel hem af.
+   */
+  deadlineMs: number
+): Promise<EvaluatieSyncOutcome> {
+  const grens = (): number => deadlineMs;
+  if (deadlineMs - Date.now() < POGING_MS) {
+    return { kind: 'geen-tijd' };
+  }
+  const token = process.env.MONDAY_API_TOKEN;
+  if (!token) {
+    throw new Error('MONDAY_API_TOKEN is not configured');
+  }
+  const client = createMondayGraphQLClient({
+    token,
+    apiVersion: MONDAY_API_VERSION,
+    deadlineMs: grens,
+  });
+  const write = createMondayMutationClient({
+    token,
+    apiVersion: MONDAY_API_VERSION,
+    deadlineMs: grens,
+  });
+  const boardId = systeemBoardId();
+  const groups = await signalGroups(client, boardId);
+  const now = (): Date => new Date();
+  const kv = createUpstashKvStore(createRedisClient());
+
+  const deps: EvaluatieSyncDeps = {
+    readSignals: () => readSignals(client, boardId),
+    readMailFailures: () => createFailureStore(kv).list(),
+    readKnopProblemen: () => createKnopProbleemStore(kv).list(),
+    writer: createSignalWriter(write, boardId, `eval-${Date.now()}`, now),
+    groups,
+    now,
+  };
+  return metGeduld(() => runEvaluatieSyncExclusive(deps, buildSignalLease(), boardId), {
+    pogingen: SYNC_POGINGEN,
+    wachtMs: SYNC_WACHT_MS,
+    slaap: (ms) => new Promise((klaar) => setTimeout(klaar, ms)),
+    tijdOverMs: () => deadlineMs - Date.now(),
+  });
 }

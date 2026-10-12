@@ -13,7 +13,7 @@ import type { AgendaUsage, ThemaRecord } from '../findings';
 import type { ExistingSignal } from '../reconcile';
 import { rowForFailure } from '../text';
 
-import { GROUPS, VOLLEDIG_BORD, signal, usage } from './helpers';
+import { GROUPS, VOLLEDIG_BORD, signal, spyWriter, usage } from './helpers';
 
 import type { DailyCheckDeps } from '../run';
 import type { SignalWriter } from '../write';
@@ -36,57 +36,6 @@ const label = (over: Partial<LabelRecord> = {}): LabelRecord => ({
   achterblad: asset,
   ...over,
 });
-
-function spyWriter(): SignalWriter & {
-  created: Array<{ naam: string; sleutel: string; soort: string }>;
-  ticked: string[];
-  summaries: string[];
-  moved: Array<{ itemId: string; groupId: string }>;
-  updated: Array<{ itemId: string; naam: string }>;
-  reopened: Array<{ itemId: string; naam: string }>;
-  cleared: string[];
-} {
-  const created: Array<{ naam: string; sleutel: string; soort: string }> = [];
-  const ticked: string[] = [];
-  const summaries: string[] = [];
-  const moved: Array<{ itemId: string; groupId: string }> = [];
-  const updated: Array<{ itemId: string; naam: string }> = [];
-  const reopened: Array<{ itemId: string; naam: string }> = [];
-  const cleared: string[] = [];
-  return {
-    updated,
-    reopened,
-    cleared,
-    created,
-    ticked,
-    summaries,
-    moved,
-    create: async (f) => {
-      created.push({ naam: f.naam, sleutel: f.sleutel, soort: f.soort });
-      if (f.sleutel === SUMMARY_KEY) {
-        summaries.push(f.detail);
-      }
-    },
-    tick: async (s) => {
-      ticked.push(s.itemId);
-    },
-    updateSummary: async (_id, detail) => {
-      summaries.push(detail);
-    },
-    move: async (m) => {
-      moved.push({ itemId: m.itemId, groupId: m.groupId });
-    },
-    update: async (itemId, fields) => {
-      updated.push({ itemId, naam: fields.naam });
-    },
-    reopen: async (itemId, fields) => {
-      reopened.push({ itemId, naam: fields.naam });
-    },
-    clearClosedBy: async (itemId) => {
-      cleared.push(itemId);
-    },
-  };
-}
 
 function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
   return {

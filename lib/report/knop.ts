@@ -27,9 +27,9 @@ import type { TrainingForReport } from './training';
  * | al het andere | niets | niets | `Zie Systeem-bord` + update + melding |
  *
  * "Al het andere" bestond in legacy niet als uitkomst: daar liep zo'n training stil vast. Nu
- * staat de reden meteen als update op de training (waar degene die drukte kijkt) en de
- * volgende ochtend als melding op het Systeem-bord, die vanzelf verdwijnt zodra een volgende
- * knopdruk wél lukt.
+ * staat de reden meteen als update op de training (waar degene die drukte kijkt) en direct
+ * daarna als melding op het Systeem-bord (`syncEvaluatieMeldingen` in de route), die vanzelf
+ * verdwijnt zodra een volgende knopdruk wél lukt.
  */
 
 /** `Eval Status` op het agendabord; bestaat sinds legacy. */

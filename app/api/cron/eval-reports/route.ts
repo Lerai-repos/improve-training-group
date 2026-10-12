@@ -5,11 +5,17 @@ import { log } from '@lib/logger';
 import { authorizeBearer, currentDeadlineMs, runWithDeadline } from '@lib/recommend';
 import { amsterdamHour, previousDay, runDailyReports, shouldRunNow } from '@lib/report/daily';
 import { buildDailyReportDeps } from '@lib/report/deps';
+import { syncEvaluatieMeldingen } from '@lib/signals';
 
 export const runtime = 'nodejs';
 /** Zelfde ruimte als `eval-stats`: drie Google-documenten, twee agendaborden, dan per training een read. */
 export const maxDuration = 300;
 const RUN_DEADLINE_MS = 260_000;
+/**
+ * Waar de snelle Systeem-bordcontrole uiterlijk klaar moet zijn, gerekend vanaf de start van
+ * de route: ruim onder `maxDuration`, zodat hij nooit wordt afgekapt.
+ */
+const SYNC_DEADLINE_MS = 285_000;
 
 /**
  * GET /api/cron/eval-reports — de dagelijkse verwerking van gisteren.
@@ -116,6 +122,22 @@ export async function GET(request: Request): Promise<NextResponse> {
       totals: report.totals,
       durationMs,
     });
+
+    /**
+     * Mislukte (of alsnog gelukte) mails meteen op het Systeem-bord, en niet pas bij de
+     * controle van morgenochtend. Begrensd door de looptijd van deze route; is er geen tijd
+     * meer, dan neemt de nachtelijke controle het mee.
+     */
+    if (!dryRun && !noMail) {
+      try {
+        const sync = await syncEvaluatieMeldingen(startedMs + SYNC_DEADLINE_MS);
+        log.info('eval-reports Systeem-bord bijgewerkt', { uitkomst: sync.kind });
+      } catch (error) {
+        log.warn('eval-reports Systeem-bord niet bijgewerkt', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     /**
      * Een mislukte mail levert een 500, ook al is de bordkant gelukt.

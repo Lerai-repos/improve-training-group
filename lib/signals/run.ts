@@ -11,10 +11,11 @@ import {
   trainerFindings,
 } from './findings';
 import { withBoardLease } from './lease';
-import { groupMoves, staleClosedByMarkers } from './move';
+import { groupMoves } from './move';
+import { pasToe } from './apply';
 import { reconcile } from './reconcile';
 import { failureKey, rowForFailure, rowForFinding } from './text';
-import { applyActions, dutchDate, SUMMARY_KEY } from './write';
+import { dutchDate, SUMMARY_KEY } from './write';
 import { findingKey } from './types';
 
 import type { AgendaBoard, AgendaBoardSet } from '@lib/evaluations';
@@ -284,33 +285,11 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
     };
   }
 
-  const applied = await applyActions(deps.writer, actions, deps.groups.open);
-  await writeSummary(deps.writer, existing, summary, deps.groups.samenvatting);
-
-  /**
-   * Verplaatsen NA het afvinken, en met de ids die deze run zijn afgevinkt erbij.
-   *
-   * `existing` is gelezen vóór de mutaties, dus die rijen staan daar nog op `afgehandeld:
-   * false`. Zonder `resolvedIds` zou een melding die we net zelf hebben afgevinkt pas de
-   * volgende nacht verhuizen, en dan staat er een dag lang een afgevinkte regel tussen de
-   * openstaande.
-   */
-  const moves = groupMoves({
-    existing,
-    resolvedIds: applied.resolvedIds,
-    reopenedIds: applied.reopenedIds,
-    groups: deps.groups,
-  });
-  for (const move of moves) {
-    await deps.writer.move(move);
-  }
-
-  for (const itemId of staleClosedByMarkers(existing, {
-    reopenedIds: applied.reopenedIds,
-    resolvedIds: applied.resolvedIds,
-  })) {
-    await deps.writer.clearClosedBy(itemId);
-  }
+  /** De samenvatting vóór het verplaatsen, zoals altijd: hij staat in zijn eigen groep. */
+  const writer = deps.writer;
+  const { applied, moved } = await pasToe(writer, existing, actions, deps.groups, () =>
+    writeSummary(writer, existing, summary, deps.groups.samenvatting)
+  );
 
   return {
     dryRun,
@@ -319,7 +298,7 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
     updated: applied.updated,
     reopened: applied.reopened,
     resolved: applied.resolved,
-    moved: moves.length,
+    moved,
     failures,
     trainingen: totalTrainingen(usage),
     summary,
