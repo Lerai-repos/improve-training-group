@@ -90,7 +90,10 @@ export function findingName(finding: Finding): string {
       );
     // De reden in de naam, net als hierboven: een andere reden is een andere reparatie.
     case 'eval-knop':
-      return `Eval Rapport niet gelukt — ${finding.klanttitel} (${finding.datum}) — ${finding.reden}`;
+      return (
+        `Eval Rapport niet gelukt — ${finding.klanttitel} (${finding.datum}) — ` +
+        eersteZin(finding.reden)
+      );
     case 'agendabord-nieuw':
       return (
         `Agendabord "${finding.naam}" doet mee` +
@@ -343,10 +346,27 @@ export function rowForFailure(failure: { check: string; error: string }): Desire
 }
 
 /** De bordrij voor één vondst. */
+/**
+ * Monday weigert een itemnaam van 256 tekens of meer, en dan breekt de hele controle af.
+ * Altijd op dezelfde plek afkappen: de naam is de vingerafdruk van `reconcile`.
+ */
+export const MAX_NAAM = 255;
+
+function pastInMonday(naam: string): string {
+  const tekens = Array.from(naam);
+  return tekens.length <= MAX_NAAM ? naam : `${tekens.slice(0, MAX_NAAM - 1).join('')}…`;
+}
+
+/** De eerste zin: genoeg voor de naam, de hele reden staat in het detail. */
+function eersteZin(tekst: string): string {
+  const einde = tekst.search(/[.!?](\s|$)/);
+  return einde === -1 ? tekst : tekst.slice(0, einde + 1);
+}
+
 export function rowForFinding(finding: Finding): DesiredRow {
   return {
     key: findingKey(finding),
-    naam: findingName(finding),
+    naam: pastInMonday(findingName(finding)),
     detail: findingDetail(finding),
     onderdeel: findingOnderdeel(finding),
     soort: FINDING_SOORT,

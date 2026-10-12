@@ -96,9 +96,23 @@ async function main(): Promise<void> {
     const nieuw = String(gemaakt.create_webhook.id);
     console.log(`    aangemaakt: ${nieuw}`);
 
+    /**
+     * Een webhook die niet via onze sleutel is aangemaakt (n8n's, als automatisering in de
+     * Monday-UI gezet) mag deze sleutel niet verwijderen; Monday antwoordt dan met een
+     * "Internal server error". Overslaan en zeggen waar hij met de hand weg moet, in plaats van
+     * af te breken — afbreken liet bij een herhaling een tweede eigen webhook achter.
+     */
     for (const id of teVerwijderen(await lezen(), nieuw)) {
-      await write.mutate('mutation ($id: ID!) { delete_webhook(id: $id) { id } }', { id });
-      console.log(`    verwijderd: ${id}`);
+      try {
+        await write.mutate('mutation ($id: ID!) { delete_webhook(id: $id) { id } }', { id });
+        console.log(`    verwijderd: ${id}`);
+      } catch (error) {
+        console.log(
+          `    NIET verwijderd: ${id} (${error instanceof Error ? error.message : String(error)})` +
+            '\n      Niet door deze sleutel aangemaakt. Haal hem weg in Monday: bord → Integreren' +
+            ' → de automatisering "Eval Status → RUN → webhook" die naar n8n wijst.'
+        );
+      }
     }
     console.log('');
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { findingDetail, findingName } from '../text';
+import { findingDetail, findingName, rowForFinding } from '../text';
 
 import type { Finding } from '../types';
 
@@ -14,6 +14,23 @@ import type { Finding } from '../types';
  * veld bij, dan hoort hier een regel bij.
  */
 const paren: ReadonlyArray<readonly [string, Finding, Finding]> = [
+  [
+    'eval-knop / reden',
+    {
+      kind: 'eval-knop',
+      itemId: '1',
+      klanttitel: 'RSV',
+      datum: '2026-09-17',
+      reden: 'Er is geen trainer gekoppeld aan deze training.',
+    },
+    {
+      kind: 'eval-knop',
+      itemId: '1',
+      klanttitel: 'RSV',
+      datum: '2026-09-17',
+      reden: 'De training heeft geen datum.',
+    },
+  ],
   [
     'onbekend-label / aantal',
     { kind: 'onbekend-label', label: 'TMT', trainingen: 7 },
@@ -126,5 +143,44 @@ describe('findingName', () => {
     expect(findingName({ kind: 'onbekend-label', label: 'Email', trainingen: 1 })).toContain(
       '1 training'
     );
+  });
+});
+
+/**
+ * Monday weigert een itemnaam van 256 tekens of meer, en dan breekt de hele controle af —
+ * gemeten 12-Oct-2026 op de eerste melding van de knop Eval Rapport, waarvan de reden in de
+ * naam stond.
+ */
+describe('de naam van een melding past in Monday', () => {
+  const lang = {
+    kind: 'eval-knop' as const,
+    itemId: '2912597013',
+    klanttitel: 'RSV Breda e.o. VO (copy)',
+    datum: '2026-09-17',
+    reden:
+      'IE-code 260814 staat ook op een andere training (item 2802085605, 28-08-2026), en het ' +
+      'is niet te zien bij welke sessie de reacties horen. Haal de code weg op de training ' +
+      'waar hij niet hoort, of koppel op beide hetzelfde bedrijf als het één sessie is.',
+  };
+
+  it('neemt van de knopreden alleen de eerste zin in de naam op', () => {
+    const naam = rowForFinding(lang).naam;
+    expect(naam).toContain('IE-code 260814 staat ook op een andere training');
+    expect(naam).not.toContain('Haal de code weg');
+    // De hele reden staat in het detail.
+    expect(rowForFinding(lang).detail).toContain('Haal de code weg');
+  });
+
+  it('kapt elke naam af onder de grens van Monday', () => {
+    const enorm = { ...lang, klanttitel: 'x'.repeat(400) };
+    const naam = rowForFinding(enorm).naam;
+    expect(Array.from(naam).length).toBeLessThanOrEqual(255);
+    expect(naam.endsWith('…')).toBe(true);
+  });
+
+  /** Elke run dezelfde naam, anders ziet de verzoening er elke nacht een wijziging in. */
+  it('kapt elke keer op dezelfde plek af', () => {
+    const enorm = { ...lang, klanttitel: 'x'.repeat(400) };
+    expect(rowForFinding(enorm).naam).toBe(rowForFinding(enorm).naam);
   });
 });
