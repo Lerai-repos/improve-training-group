@@ -6,6 +6,7 @@ import { loadAgendaBoards } from '@lib/evaluations';
 import { labelsBoardId } from '@lib/labels';
 import { createFailureStore } from '@lib/mail';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
+import { createKnopProbleemStore } from '@lib/report/knop-store';
 import { MONDAY_API_VERSION, ourStatusColumnId, triggerGroupIds } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
@@ -93,6 +94,8 @@ export function buildDailyCheckDeps(options: {
        * niet verstuurd zijn, zodat er één schrijver op het Systeem-bord blijft.
        */
       readMailFailures: () => createFailureStore(createUpstashKvStore(createRedisClient())).list(),
+      readKnopProblemen: () =>
+        createKnopProbleemStore(createUpstashKvStore(createRedisClient())).list(),
       readBriefingteksten: () => readTekstRijen(client, briefingtekstenBoardId()),
       writer: options.dryRun ? null : createSignalWriter(write, boardId, runId, now),
       groups: options.groups,

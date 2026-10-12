@@ -4,6 +4,7 @@ import {
   CLAIM_TTL_MS,
   createSentGuard,
   deliveryNamespace,
+  LUA_FORCE_CLAIM,
   LUA_OWNED_WRITE,
   SENT_TTL_MS,
 } from '../sent-store';
@@ -37,9 +38,19 @@ function fakeRedis(): {
     async get(key) {
       return keys.get(key)?.value ?? null;
     },
-    async eval(_script, evalKeys, args) {
+    async eval(script, evalKeys, args) {
       evals.push({ keys: evalKeys, args });
       const [key] = evalKeys;
+      if (script === LUA_FORCE_CLAIM) {
+        // Bezet door een lopende verzending (geen `verstuurd:`-waarde): niet aanraken.
+        const [nieuw, verstuurdPrefix, claimTtl] = args;
+        const huidig = keys.get(key)?.value;
+        if (huidig !== undefined && !huidig.startsWith(verstuurdPrefix)) {
+          return 0;
+        }
+        keys.set(key, { value: nieuw, ttlMs: Number(claimTtl) });
+        return 1;
+      }
       const [token, waarde, ttl] = args;
       if (keys.get(key)?.value !== token) {
         return 0;
@@ -261,5 +272,53 @@ describe('deliveryNamespace', () => {
     const a = deliveryNamespace({ klant: 'a@x.nl', trainer: 'b@x.nl', redirected: true });
     const b = deliveryNamespace({ klant: 'b@x.nl', trainer: 'a@x.nl', redirected: true });
     expect(a).not.toBe(b);
+  });
+});
+
+/**
+ * De knop Eval Rapport stuurt ALTIJD, ook als de mail al eerder verstuurd is — zoals de knop
+ * in legacy. Wat hij níét mag: dwars door een verzending heen die op dit moment loopt, want
+ * dan gaan dezelfde twee mails twee keer tegelijk de deur uit (dubbelklik, of de dagjob die
+ * net op dezelfde training bezig is).
+ */
+describe('forceClaim', () => {
+  it('claimt een mail die al verstuurd is', async () => {
+    const { redis, keys } = fakeRedis();
+    const guard = createSentGuard(redis);
+    const token = await claimOf(guard, 'i1', 'met');
+    await guard.confirm('i1', 'met', token, 2);
+
+    const opnieuw = await guard.forceClaim('i1', 'met', 3);
+    expect(opnieuw.kind).toBe('claimed');
+    // Kort, net als een gewone claim: een afgebroken knopdruk herstelt binnen een kwartier.
+    expect(keys.get('evalmail:v1:i1:met')?.ttlMs).toBe(CLAIM_TTL_MS);
+  });
+
+  it('claimt een mail die nog nooit verstuurd is', async () => {
+    const guard = createSentGuard(fakeRedis().redis);
+    expect((await guard.forceClaim('i1', 'met', 1)).kind).toBe('claimed');
+  });
+
+  it('wacht op een verzending die nu loopt', async () => {
+    const guard = createSentGuard(fakeRedis().redis);
+    await claimOf(guard, 'i1', 'met');
+    expect(await guard.forceClaim('i1', 'met', 2)).toEqual({ kind: 'bezet', reden: 'bezig' });
+  });
+
+  it('levert een token op waarmee de verzending bevestigd kan worden', async () => {
+    const { redis, keys } = fakeRedis();
+    const guard = createSentGuard(redis);
+    const result = await guard.forceClaim('i1', 'met', 1);
+    if (result.kind !== 'claimed') {
+      throw new Error('verwachtte een geslaagde claim');
+    }
+    expect(await guard.confirm('i1', 'met', result.token, 5)).toBe('ok');
+    expect(keys.get('evalmail:v1:i1:met')?.value).toBe('verstuurd:5');
+  });
+
+  it('houdt de bestemmingsruimte aan', async () => {
+    const { redis, evals } = fakeRedis();
+    await createSentGuard(redis, 'test-abc:').forceClaim('i1', 'zonder', 1);
+    expect(evals[0].keys).toEqual(['evalmail:v1:test-abc:i1:zonder']);
   });
 });

@@ -5,6 +5,7 @@ import {
   agendaBoardFindings,
   briefingtekstFindings,
   labelFindings,
+  knopFindings,
   mailFindings,
   themaFindings,
   trainerFindings,
@@ -22,6 +23,7 @@ import type { TekstRij } from '@lib/briefingteksten/beoordeel';
 import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { MailFailure } from '@lib/mail';
+import type { KnopProbleem } from '@lib/report/knop-store';
 import type { AgendaUsage, ThemaRecord } from './findings';
 import type { SignalGroupIds } from './groups';
 import type { LeaseDeps } from './lease';
@@ -38,6 +40,7 @@ const LABEL_KINDS: readonly FindingKind[] = [
 const THEMA_KINDS: readonly FindingKind[] = ['thema-ontbreekt', 'thema-zonder-inhoud'];
 const TRAINER_KINDS: readonly FindingKind[] = ['trainer-ontbreekt'];
 const MAIL_KINDS: readonly FindingKind[] = ['mail-mislukt'];
+const KNOP_KINDS: readonly FindingKind[] = ['eval-knop'];
 const BRIEFINGTEKST_KINDS: readonly FindingKind[] = [
   'briefingtekst-ontbreekt',
   'briefingtekst-fout',
@@ -68,6 +71,8 @@ export interface DailyCheckDeps {
    * één schrijver op het Systeem-bord blijft.
    */
   readonly readMailFailures: () => Promise<readonly MailFailure[]>;
+  /** Waarom de knop Eval Rapport geen rapport kon maken, uit KV. Zelfde weg als de mails. */
+  readonly readKnopProblemen: () => Promise<readonly KnopProbleem[]>;
   /** De items van het bord Briefingteksten. */
   readonly readBriefingteksten: () => Promise<readonly TekstRij[]>;
   /** `null` in een droogloop: dan wordt er niets geschreven, ook niet de samenvatting. */
@@ -212,6 +217,11 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
 
   results.push(
     await attempt('mails', MAIL_KINDS, async () => mailFindings(await deps.readMailFailures()))
+  );
+  results.push(
+    await attempt('evaluatieknop', KNOP_KINDS, async () =>
+      knopFindings(await deps.readKnopProblemen())
+    )
   );
   // Hangt ook niet aan de agenda: het bord Briefingteksten staat op zichzelf.
   results.push(

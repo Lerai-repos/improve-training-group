@@ -88,6 +88,9 @@ export function findingName(finding: Finding): string {
       return (
         `Evaluatiemail niet verstuurd — ${finding.klanttitel} (${finding.datum}) — ` + finding.reden
       );
+    // De reden in de naam, net als hierboven: een andere reden is een andere reparatie.
+    case 'eval-knop':
+      return `Eval Rapport niet gelukt — ${finding.klanttitel} (${finding.datum}) — ${finding.reden}`;
     case 'agendabord-nieuw':
       return (
         `Agendabord "${finding.naam}" doet mee` +
@@ -182,8 +185,18 @@ export function findingDetail(finding: Finding): string {
           : 'Het gaat om de twee mails ZONDER rapport (geen reacties gevonden), naar ' +
             'aanvragen@ en backoffice@. De status op het agendabord staat wél goed.',
         'Dit lost zichzelf niet op: de dagelijkse verwerking kijkt alleen naar de dag ervoor. ' +
-          `Laat Lerai de verwerking van ${finding.datum} opnieuw draaien; alleen de ontbrekende ` +
-          'mails gaan dan alsnog weg, de rest wordt overgeslagen.',
+          'Druk op de training op Eval Rapport om de mails opnieuw te versturen; lukt dat, dan ' +
+          'verdwijnt deze melding bij de volgende controle vanzelf.',
+      ].join('\n\n');
+
+    case 'eval-knop':
+      return [
+        `Op "${finding.klanttitel}" (${finding.datum}) is op Eval Rapport gedrukt, maar er ` +
+          `kon geen rapport gemaakt worden. Reden: ${finding.reden}`,
+        'Er is niets op het agendabord geschreven en er zijn geen mails verstuurd. Eval Status ' +
+          'staat op "Zie Systeem-bord", en dezelfde reden staat als update op de training.',
+        'Los de oorzaak op en druk opnieuw op Eval Rapport. Lukt het dan, dan verdwijnt deze ' +
+          'melding bij de volgende controle vanzelf.',
       ].join('\n\n');
 
     case 'agendabord-nieuw':
@@ -277,6 +290,7 @@ export function findingOnderdeel(finding: Finding): string {
     case 'trainer-ontbreekt':
       return 'Trainers';
     case 'mail-mislukt':
+    case 'eval-knop':
       return 'Evaluatiemails';
     case 'agendabord-nieuw':
     case 'agendabord-onbruikbaar':

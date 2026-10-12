@@ -113,6 +113,7 @@ describe('runDailyCheckExclusive', () => {
     readThemas: async () => new Map(),
     readBriefingteksten: async () => VOLLEDIG_BORD,
     readMailFailures: async () => [],
+    readKnopProblemen: async () => [],
     readTrainers: async () => new Set(),
     writer,
     groups: GROUPS,

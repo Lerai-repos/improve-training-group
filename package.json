@@ -59,6 +59,7 @@
     "agenda:evalkolommen": "tsx scripts/agenda-eval-columns.ts",
     "agenda:huiswerk": "tsx scripts/agenda-huiswerk.ts",
     "eval:reports": "tsx scripts/eval-reports.ts",
+    "eval:knop-webhook": "tsx scripts/eval-knop-webhook.ts",
     "mail:preview": "tsx scripts/mail-preview.ts",
     "systeem:create": "tsx scripts/systeem-create.ts",
     "daily:check": "tsx scripts/daily-check.ts",

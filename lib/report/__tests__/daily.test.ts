@@ -424,6 +424,16 @@ describe('de mails vanuit de dagjob', () => {
           geclaimd.add(sleutel);
           return { kind: 'claimed', token: `token:${sleutel}` };
         },
+        forceClaim: async (itemId, variant) => {
+          const sleutel = `${itemId}:${variant}`;
+          // Alleen een lopende verzending houdt de knop tegen.
+          if (geclaimd.has(sleutel) && !bevestigd.has(sleutel)) {
+            return { kind: 'bezet', reden: 'bezig' };
+          }
+          geclaimd.add(sleutel);
+          bevestigd.delete(sleutel);
+          return { kind: 'claimed', token: `token:${sleutel}` };
+        },
         confirm: async (itemId, variant, token) => {
           const sleutel = `${itemId}:${variant}`;
           // Alleen de eigenaar mag bevestigen; een vreemd token hoort af te ketsen.
@@ -762,6 +772,7 @@ describe('de mails vanuit de dagjob', () => {
     const { mail, gemeld } = mailHarness();
     const blijftHangen: typeof mail.guard = {
       claim: async () => ({ kind: 'bezet', reden: 'bezig' }),
+      forceClaim: async () => ({ kind: 'bezet', reden: 'bezig' }),
       confirm: mail.guard.confirm,
       release: mail.guard.release,
     };

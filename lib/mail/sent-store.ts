@@ -126,6 +126,14 @@ export type OwnershipResult = 'ok' | 'verloren';
 export interface SentGuard {
   /** Claim het recht om te verzenden, met een token om het later te bewijzen. */
   claim(itemId: string, variant: MailVariant, nowMs: number): Promise<ClaimResult>;
+  /**
+   * Claimen óók als de mail al verstuurd is: voor de knop Eval Rapport, die altijd stuurt.
+   *
+   * Alleen een verzending die op dit moment loopt houdt hem tegen. Mislukt de verzending
+   * daarna, dan verwijdert `release` de sleutel — de oude `verstuurd`-markering is dan weg,
+   * en dat klopt: de laatste poging om deze mail te sturen is mislukt.
+   */
+  forceClaim(itemId: string, variant: MailVariant, nowMs: number): Promise<ClaimResult>;
   /** De verzending is gelukt; leg dat duurzaam vast, mits de claim nog van ons is. */
   confirm(
     itemId: string,
@@ -153,6 +161,22 @@ if ARGV[2] == '' then
 else
   redis.call('SET', KEYS[1], ARGV[2], 'PX', tonumber(ARGV[3]))
 end
+return 1
+`;
+
+/**
+ * Claim tenzij er een verzending loopt. Lezen en schrijven in één script, zodat een
+ * gelijktijdige gewone claim er niet tussen kan komen.
+ *
+ * `ARGV[1]` het nieuwe token, `ARGV[2]` het voorvoegsel van een bevestigde verzending,
+ * `ARGV[3]` de TTL van een claim.
+ */
+export const LUA_FORCE_CLAIM = `
+local huidig = redis.call('GET', KEYS[1])
+if huidig and string.sub(huidig, 1, string.len(ARGV[2])) ~= ARGV[2] then
+  return 0
+end
+redis.call('SET', KEYS[1], ARGV[1], 'PX', tonumber(ARGV[3]))
 return 1
 `;
 
@@ -201,6 +225,15 @@ export function createSentGuard(
         kind: 'bezet',
         reden: huidig !== null && huidig.startsWith(VERSTUURD) ? 'verstuurd' : 'bezig',
       };
+    },
+    async forceClaim(itemId, variant, nowMs) {
+      const token = `${nowMs}:${newToken()}`;
+      const res = await redis.eval(
+        LUA_FORCE_CLAIM,
+        [sleutel(itemId, variant)],
+        [token, VERSTUURD, String(CLAIM_TTL_MS)]
+      );
+      return res === 1 ? { kind: 'claimed', token } : { kind: 'bezet', reden: 'bezig' };
     },
     /**
      * Overschrijven en niet opnieuw claimen: de sleutel staat er al, van deze run zelf, en die

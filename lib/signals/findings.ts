@@ -12,6 +12,7 @@ import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { AgendaBoard, AgendaBoardSet, RejectedAgendaBoard } from '@lib/evaluations';
 import type { MailFailure } from '@lib/mail';
+import type { KnopProbleem } from '@lib/report/knop-store';
 import type { Finding, LabelFieldIssue, OntbrekendeKolom } from './types';
 
 /** Hoe vaak elke labelwaarde en elk thema-item op de agendaborden voorkomt. */
@@ -231,6 +232,17 @@ export function mailFindings(failures: readonly MailFailure[]): readonly Finding
     klanttitel: f.klanttitel,
     datum: f.datum,
     reden: f.reden,
+  }));
+}
+
+/** Waarom de knop Eval Rapport geen rapport kon maken; één melding per training. */
+export function knopFindings(problemen: readonly KnopProbleem[]): readonly Finding[] {
+  return problemen.map((p) => ({
+    kind: 'eval-knop',
+    itemId: p.itemId,
+    klanttitel: p.klanttitel,
+    datum: p.datum,
+    reden: p.reden,
   }));
 }
 

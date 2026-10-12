@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { runDailyCheck } from '../run';
+import { findingKey } from '../types';
 import { SUMMARY_KEY } from '../write';
 
 import { AGENDA_2026_HISTORY } from '@lib/evaluations';
@@ -99,6 +100,7 @@ function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
     readThemas: async (): Promise<ReadonlyMap<string, ThemaRecord>> =>
       new Map([['12', { naam: 'Boksen', conceptInhoud: '' }]]),
     readMailFailures: async () => [],
+    readKnopProblemen: async () => [],
     // Een compleet bord in orde: levert geen enkele melding op.
     readBriefingteksten: async () => VOLLEDIG_BORD,
     readTrainers: async (): Promise<ReadonlySet<string>> => new Set(),
@@ -293,6 +295,62 @@ describe('niet-verstuurde evaluatiemails', () => {
       })
     );
     expect(report.failures.map((f) => f.check)).toContain('mails');
+  });
+});
+
+/**
+ * De knop Eval Rapport laat in KV achter waarom hij geen rapport kon maken; de controle zet
+ * dat op het Systeem-bord, net als een mislukte mail.
+ */
+describe('de knop Eval Rapport', () => {
+  const probleem = {
+    itemId: '2912597013',
+    klanttitel: 'RSV Breda e.o. VO (copy)',
+    datum: '2026-09-17',
+    reden: 'IE-code 260814 staat ook op een andere training',
+    atMs: 1,
+  };
+
+  it('wordt een melding op het Systeem-bord, één per training', async () => {
+    const report = await runDailyCheck(
+      deps({ writer: null, readKnopProblemen: async () => [probleem] })
+    );
+    const gevonden = report.findings.filter((f) => f.kind === 'eval-knop');
+    expect(gevonden).toEqual([
+      {
+        kind: 'eval-knop',
+        itemId: '2912597013',
+        klanttitel: 'RSV Breda e.o. VO (copy)',
+        datum: '2026-09-17',
+        reden: 'IE-code 260814 staat ook op een andere training',
+      },
+    ]);
+    expect(findingKey(gevonden[0])).toBe('eval-knop:2912597013');
+  });
+
+  it('wordt óók gemeld als de agenda niet gelezen kan worden', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readAgendaUsage: async () => {
+          throw new Error('agenda weg');
+        },
+        readKnopProblemen: async () => [probleem],
+      })
+    );
+    expect(report.findings.some((f) => f.kind === 'eval-knop')).toBe(true);
+  });
+
+  it('meldt een storing in KV als mislukte controle, niet als "niets aan de hand"', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readKnopProblemen: async () => {
+          throw new Error('redis weg');
+        },
+      })
+    );
+    expect(report.failures.map((f) => f.check)).toContain('evaluatieknop');
   });
 });
 

@@ -283,7 +283,9 @@ async function mailForTraining(
   label: LabelRecord,
   responses: readonly EvaluationResponse[],
   variant: MailVariant,
-  dryRun: boolean
+  dryRun: boolean,
+  /** De knop Eval Rapport: ook versturen als het al eens gebeurd is. Zie `forceClaim`. */
+  force: boolean
 ): Promise<MailAttempt> {
   if (dryRun) {
     return {
@@ -294,7 +296,9 @@ async function mailForTraining(
     };
   }
 
-  const claim = await mail.guard.claim(training.itemId, variant, mail.nowMs());
+  const claim = force
+    ? await mail.guard.forceClaim(training.itemId, variant, mail.nowMs())
+    : await mail.guard.claim(training.itemId, variant, mail.nowMs());
   if (claim.kind === 'bezet') {
     if (claim.reden === 'bezig') {
       return {
@@ -504,6 +508,76 @@ function variantFor(kind: EvalResult['kind']): MailVariant | null {
   return null;
 }
 
+export interface VerwerkOptions {
+  readonly dryRun: boolean;
+  /** Ook mailen als dezelfde mail al eens verstuurd is: de knop Eval Rapport. */
+  readonly force: boolean;
+}
+
+export interface Verwerking {
+  readonly line: DailyLine;
+  readonly mailFailed: boolean;
+}
+
+/**
+ * Eén training afhandelen nadat de uitkomst bekend is: bord bijwerken, dan mailen.
+ *
+ * Gedeeld door de dagjob en de knop Eval Rapport, zodat die twee nooit verschillend beslissen
+ * wat er op het bord komt of welke mail er weggaat. Het enige verschil is `force`.
+ */
+export async function verwerkTraining(
+  deps: Pick<DailyDeps, 'writeColumns' | 'mail'>,
+  /** Het item zoals de agenda het kent; daar wordt naartoe geschreven. */
+  item: { readonly itemId: string; readonly boardId: string },
+  training: TrainingForReport,
+  label: LabelRecord | undefined,
+  mine: readonly EvaluationResponse[],
+  result: EvalResult,
+  options: VerwerkOptions
+): Promise<Verwerking> {
+  const write = evalWriteFor(result, { ieStatus: training.ieStatus });
+  const heeftWaarden = Object.keys(write.values).length > 0;
+
+  if (heeftWaarden && !options.dryRun) {
+    await deps.writeColumns(item.itemId, item.boardId, write.values);
+  }
+
+  /**
+   * Mailen NA het bijwerken van het bord.
+   *
+   * Beide mails verwijzen naar de status in Monday — de ZONDER-varianten zeggen zelfs
+   * letterlijk dat 'IE. Trainer' al op 'Onvindbaar' staat. Andersom zou die zin een tijd
+   * lang onwaar zijn, en bij een mislukte bordschrijving blijvend.
+   */
+  const variant = variantFor(result.kind);
+  const attempt =
+    deps.mail === undefined || variant === null || label === undefined
+      ? NIETS
+      : await mailForTraining(
+          deps.mail,
+          training,
+          label,
+          mine,
+          variant,
+          options.dryRun,
+          options.force
+        );
+
+  return {
+    mailFailed: attempt.failed,
+    line: {
+      itemId: item.itemId,
+      klanttitel: training.klanttitel,
+      result: result.kind,
+      summary: write.summary,
+      wrote: heeftWaarden && !options.dryRun,
+      mailed: attempt.mailed,
+      mailNote: attempt.note,
+      warnings: attempt.warnings,
+    },
+  };
+}
+
 export async function runDailyReports(
   deps: DailyDeps,
   options: DailyOptions
@@ -580,42 +654,25 @@ export async function runDailyReports(
     const label = training.labelCode === null ? undefined : labels.get(training.labelCode);
     const mine = attribution.responsesByTraining.get(item.trainingItemId) ?? [];
     const result = classify(training, label, mine, ambiguous);
-    const write = evalWriteFor(result, { ieStatus: training.ieStatus });
-    const heeftWaarden = Object.keys(write.values).length > 0;
+    const verwerkt = await verwerkTraining(
+      deps,
+      { itemId: item.trainingItemId, boardId: item.boardId },
+      training,
+      label,
+      mine,
+      result,
+      { dryRun: options.dryRun, force: false }
+    );
 
-    if (heeftWaarden && !options.dryRun) {
-      await deps.writeColumns(item.trainingItemId, item.boardId, write.values);
+    if (verwerkt.line.wrote) {
       written += 1;
     }
-
-    /**
-     * Mailen NA het bijwerken van het bord.
-     *
-     * Beide mails verwijzen naar de status in Monday — de ZONDER-varianten zeggen zelfs
-     * letterlijk dat 'IE. Trainer' al op 'Onvindbaar' staat. Andersom zou die zin een tijd
-     * lang onwaar zijn, en bij een mislukte bordschrijving blijvend.
-     */
-    const variant = variantFor(result.kind);
-    const attempt =
-      deps.mail === undefined || variant === null || label === undefined
-        ? NIETS
-        : await mailForTraining(deps.mail, training, label, mine, variant, options.dryRun);
-    mailed += attempt.mailed;
-    if (attempt.failed) {
+    mailed += verwerkt.line.mailed;
+    if (verwerkt.mailFailed) {
       mailFailures.push(item.trainingItemId);
     }
-
     totals[result.kind] += 1;
-    lines.push({
-      itemId: item.trainingItemId,
-      klanttitel: training.klanttitel,
-      result: result.kind,
-      summary: write.summary,
-      wrote: heeftWaarden && !options.dryRun,
-      mailed: attempt.mailed,
-      mailNote: attempt.note,
-      warnings: attempt.warnings,
-    });
+    lines.push(verwerkt.line);
   }
 
   return {

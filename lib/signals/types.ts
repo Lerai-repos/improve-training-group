@@ -109,6 +109,19 @@ export type Finding =
       readonly reden: string;
     }
   /**
+   * De knop Eval Rapport kon voor deze training geen rapport maken.
+   *
+   * Komt net als `mail-mislukt` uit KV: de knop laat de reden achter, deze controle maakt er
+   * een melding van, en een latere geslaagde knopdruk haalt hem weer weg.
+   */
+  | {
+      readonly kind: 'eval-knop';
+      readonly itemId: string;
+      readonly klanttitel: string;
+      readonly datum: string;
+      readonly reden: string;
+    }
+  /**
    * Een sectie van de briefing die op het bord Briefingteksten ontbreekt.
    *
    * Een verwijderd item betekent hetzelfde als een lege tekst: de sectie staat niet meer in de
@@ -170,6 +183,8 @@ export function findingKey(finding: Finding): string {
      */
     case 'mail-mislukt':
       return `mail-mislukt:${finding.itemId}:${finding.variant}`;
+    case 'eval-knop':
+      return `eval-knop:${finding.itemId}`;
     // Op bord-id: een hernoemd bord is hetzelfde bord.
     case 'agendabord-nieuw':
       return `agendabord-nieuw:${finding.boardId}`;
