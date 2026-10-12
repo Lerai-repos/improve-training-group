@@ -53,6 +53,7 @@ import {
   reisPerSessie,
 } from './cyclus-document';
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
+import { herstelAlineas, isAchtergrondKop } from './alineas';
 import { resolveConceptInhoud, standaardConcept } from './concept';
 import { gevuldeSectie, standaardTekstenVoor, type GevuldeSectie } from './teksten';
 
@@ -141,6 +142,12 @@ export interface DocumentSectie extends GevuldeSectie {
 }
 
 /** Precies de velden die de negen sjablonen aanroepen. */
+/** Eén alinea van de achtergrond. Een kopje (`isAchtergrondKop`) komt vet in het document. */
+export interface AchtergrondAlinea {
+  readonly tekst: string;
+  readonly kop: boolean;
+}
+
 export interface BriefingDocumentData {
   /** De algemene tekst bovenaan, onder de kopband `Algemeen.`. */
   readonly algemeen: readonly DocumentSectie[];
@@ -162,7 +169,7 @@ export interface BriefingDocumentData {
   readonly evaluatie: string;
   readonly iecode: string;
   readonly trainingscodeMc: string;
-  readonly achtergrond: readonly string[];
+  readonly achtergrond: readonly AchtergrondAlinea[];
   readonly extraInfo: readonly string[];
   readonly bullets: readonly string[];
   /**
@@ -408,15 +415,21 @@ function clientContactFor(training: BriefingTraining, recipient?: Recipient): st
  * `«…»`-regel. Wel blijft er iets zichtbaars in het document staan, want een lege sectie ziet
  * eruit als een afgeronde briefing.
  */
-function achtergrondAlineas(training: BriefingTraining, extras: BriefingExtras): readonly string[] {
+function achtergrondAlineas(
+  training: BriefingTraining,
+  extras: BriefingExtras
+): readonly AchtergrondAlinea[] {
+  /**
+   * Ook hier `herstelAlineas`, en niet alleen bij het lezen: tekst die vóór 12-Oct-2026 in de
+   * tab is opgeslagen staat er nog als één lap in, en die gaat de Opportunity voor.
+   */
+  const alinea = (tekst: string): AchtergrondAlinea => ({ tekst, kop: isAchtergrondKop(tekst) });
+  // Van de aanroeper: een lege array is "aangesloten en leeg" en drukt niets af.
   if (extras.achtergrond !== undefined) {
-    return extras.achtergrond;
+    return extras.achtergrond.map(alinea);
   }
-  const alineas = training.achtergrond
-    .split('\n')
-    .map((r) => r.trim())
-    .filter((r) => r !== '');
-  return alineas.length > 0 ? alineas : [MISSING.achtergrond];
+  const alineas = herstelAlineas(training.achtergrond).split('\n').filter((r) => r !== '');
+  return (alineas.length > 0 ? alineas : [MISSING.achtergrond]).map(alinea);
 }
 
 /** De gekoppelde personen die in de groep `Acteurs` staan; voor de voorinvulling. */
@@ -469,7 +482,7 @@ export function openIssues(data: BriefingDocumentData): string[] {
     data.reis,
     data.trainingscodeMc,
     data.evaluatie,
-    ...data.achtergrond,
+    ...data.achtergrond.map((alinea) => alinea.tekst),
     ...data.extraInfo,
     ...data.bullets,
     ...[...data.rolblokken, ...data.blokken].flatMap((blok) =>

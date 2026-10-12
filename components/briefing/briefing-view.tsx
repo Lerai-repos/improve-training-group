@@ -168,9 +168,14 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
       {tab.aandacht !== null && (
         <div
           role="status"
-          className="flex items-start gap-3 rounded-md border border-primary/40 bg-primary/10 p-3 text-sm"
+          // Amber zoals "Nog niet compleet" in de gereedheid: `primary` volgt het Monday-thema
+          // en is daar blauw, en een waarschuwing hoort er niet uit te zien als een link.
+          className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
         >
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <AlertTriangle
+            className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+            aria-hidden
+          />
           <p>
             <span className="font-semibold">Extra aandacht nodig: </span>
             {tab.aandacht}

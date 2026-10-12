@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { herstelAlineas } from '../alineas';
+import { herstelAlineas, isAchtergrondKop } from '../alineas';
 
 describe('herstelAlineas', () => {
   /** Zo levert Monday een enter in een lang tekstveld: twee spaties. */
@@ -25,8 +25,45 @@ describe('herstelAlineas', () => {
     expect(herstelAlineas('Een.\n\n Twee.  Drie.\n')).toBe('Een.\nTwee.\nDrie.');
   });
 
-  it('laat een kopje met één spatie vast aan de zin erna', () => {
-    expect(herstelAlineas('Aanleiding Binnen het team')).toBe('Aanleiding Binnen het team');
+  /**
+   * ITG schrijft de achtergrond met een vaste set kopjes, en Monday plakt die met één spatie
+   * aan de zin erna. Gemeten 12-Oct-2026 over 96 teksten: deze acht, telkens aan het begin van
+   * een alinea en gevolgd door een hoofdletter. Windgoo had geen enkele andere breuk.
+   */
+  it('zet de vaste kopjes op een eigen regel, ook met één spatie erachter', () => {
+    expect(
+      herstelAlineas(
+        'Over de organisatie Windgoo is een startup. De aanleiding Binnen de winkels is het goed. ' +
+          'De deelnemersgroep Aan de training nemen veertien mensen deel.'
+      )
+    ).toBe(
+      'Over de organisatie\nWindgoo is een startup.\nDe aanleiding\nBinnen de winkels is het goed.\n' +
+        'De deelnemersgroep\nAan de training nemen veertien mensen deel.'
+    );
+  });
+
+  it.each(['Organisatie', 'De organisatie', 'Aanleiding', 'Deelnemers', 'De deelnemers'])(
+    'herkent ook het kopje %s',
+    (kop) => {
+      expect(herstelAlineas(`${kop} Tekst erna.`)).toBe(`${kop}\nTekst erna.`);
+    }
+  );
+
+  /** Midden in een zin, of met een kleine letter erna, is het geen kopje. */
+  it('splitst niet midden in een zin of vóór een kleine letter', () => {
+    expect(herstelAlineas('Wij kijken naar de aanleiding Binnen het team.')).toBe(
+      'Wij kijken naar de aanleiding Binnen het team.'
+    );
+    expect(herstelAlineas('Organisatie is belangrijk.')).toBe('Organisatie is belangrijk.');
+  });
+
+  it('herkent een kopje dat al op een eigen regel staat', () => {
+    expect(isAchtergrondKop('De aanleiding')).toBe(true);
+    expect(isAchtergrondKop('De aanleiding Binnen het team')).toBe(false);
+  });
+
+  it('laat een ander kopje met één spatie vast aan de zin erna', () => {
+    expect(herstelAlineas('Achtergrond Binnen het team')).toBe('Achtergrond Binnen het team');
   });
 
   it('laat een lege tekst leeg', () => {

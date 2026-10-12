@@ -130,7 +130,9 @@ describe('composeBriefing', () => {
    */
   it('neemt de achtergrondtekst van de Opportunity over', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
-    expect(data.achtergrond).toEqual(['Probiblio ondersteunt openbare bibliotheken.']);
+    expect(data.achtergrond).toEqual([
+      { tekst: 'Probiblio ondersteunt openbare bibliotheken.', kop: false },
+    ]);
   });
 
   /** Dirkje: *"We gebruiken wel altijd meerdere alinea's."* */
@@ -139,7 +141,41 @@ describe('composeBriefing', () => {
       { ...PROBIBLIO, achtergrond: 'Eerste alinea.\n\n  Tweede alinea.  \n' },
       EMPTY_CHECKLIST
     );
-    expect(data.achtergrond).toEqual(['Eerste alinea.', 'Tweede alinea.']);
+    expect(data.achtergrond.map((a) => a.tekst)).toEqual(['Eerste alinea.', 'Tweede alinea.']);
+  });
+
+  /** Een lege array is "aangesloten en er is niets", geen ontbrekende bron; zie `BriefingExtras`. */
+  it('drukt niets af bij een expliciet lege achtergrond van de aanroeper', () => {
+    const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST, { achtergrond: [] });
+    expect(data.achtergrond).toEqual([]);
+  });
+
+  /** De vaste kopjes komen vet in het document; de rest is gewone tekst. */
+  it('markeert de kopjes van de achtergrond', () => {
+    const data = composeBriefing(
+      { ...PROBIBLIO, achtergrond: 'De aanleiding\nBinnen het team gaat het goed.' },
+      EMPTY_CHECKLIST
+    );
+    expect(data.achtergrond).toEqual([
+      { tekst: 'De aanleiding', kop: true },
+      { tekst: 'Binnen het team gaat het goed.', kop: false },
+    ]);
+  });
+
+  /**
+   * Tekst die vóór de alineaherstelling in de tab is opgeslagen, staat er als één lap in. Ook
+   * die krijgt zijn alinea's en kopjes terug, bij het samenstellen.
+   */
+  it('herstelt ook de alinea’s van een eerder opgeslagen eigen tekst', () => {
+    const data = composeBriefing(
+      { ...PROBIBLIO, achtergrond: 'Over de organisatie Windgoo verkoopt fietsen.  Meer.' },
+      EMPTY_CHECKLIST
+    );
+    expect(data.achtergrond).toEqual([
+      { tekst: 'Over de organisatie', kop: true },
+      { tekst: 'Windgoo verkoopt fietsen.', kop: false },
+      { tekst: 'Meer.', kop: false },
+    ]);
   });
 
   /**
@@ -148,14 +184,14 @@ describe('composeBriefing', () => {
    */
   it('houdt een lege achtergrondkolom zichtbaar in het document', () => {
     const data = composeBriefing({ ...PROBIBLIO, achtergrond: '   ' }, EMPTY_CHECKLIST);
-    expect(data.achtergrond[0]).toContain('achtergrondinformatie');
+    expect(data.achtergrond[0]?.tekst).toContain('achtergrondinformatie');
     expect(openIssues(data)).toHaveLength(6);
   });
 
   /** De aanroeper mag hem nog steeds overschrijven — de kolom is de bron, niet de baas. */
   it('laat een meegegeven achtergrond voorgaan op de kolom', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST, { achtergrond: ['Eigen tekst.'] });
-    expect(data.achtergrond).toEqual(['Eigen tekst.']);
+    expect(data.achtergrond).toEqual([{ tekst: 'Eigen tekst.', kop: false }]);
   });
 
   /**

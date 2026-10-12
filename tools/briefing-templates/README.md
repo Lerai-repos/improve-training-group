@@ -97,3 +97,15 @@ python3 tools/briefing-templates/volgorde.py
 Volgorde daarna: `Concept inhoud` (kop, inleiding, bullets) → rolblokken → overige blokken →
 `Inventarisatie klant`. Een sjabloon dat al goed staat slaat hij over. Genereer je ooit opnieuw
 met `convert.py` + `body.py`, draai dan `teksten.py` en daarna dit.
+
+## Stap vijf: vette kopjes in de achtergrond (12-Oct-2026)
+
+`lib/briefing/alineas.ts` haalt ITG's vaste kopjes ("De aanleiding", "De deelnemersgroep", …) los
+uit de achtergrondtekst en markeert ze. `achtergrond-koppen.py` geeft de achtergrondlus een vette
+variant voor die regels:
+
+```bash
+python3 tools/briefing-templates/achtergrond-koppen.py
+```
+
+Volgorde na opnieuw genereren: `teksten.py`, `volgorde.py`, dan dit.

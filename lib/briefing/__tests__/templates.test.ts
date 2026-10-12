@@ -449,6 +449,23 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
     expect(await renderLead(label)).not.toMatch(highlight('yellow'));
   });
 
+  /** De vaste kopjes van de achtergrond vet, de tekst eronder niet; zie `isAchtergrondKop`. */
+  it('zet de kopjes van de achtergrond vet', async () => {
+    const training = {
+      ...TRAINING,
+      label,
+      achtergrond: 'De aanleiding\nBinnen het team gaat het goed.',
+    };
+    const bytes = await renderBriefing(label, composeBriefing(training, EMPTY_CHECKLIST));
+    const xml = await zipReadText(bytes, 'word/document.xml');
+
+    expect(paragraphAt(xml, positionOf(xml, 'De aanleiding'))).toContain('<w:b/>');
+    expect(paragraphAt(xml, positionOf(xml, 'Binnen het team gaat het goed.'))).not.toContain(
+      '<w:b/>'
+    );
+    expect(xml).not.toContain('[object Object]');
+  });
+
   it('geeft de concept-regels een opsommingsteken', async () => {
     const xml = await renderLead(label);
     expect(paragraphAt(xml, positionOf(xml, 'Plenaire opening.'))).toContain('<w:numPr>');
