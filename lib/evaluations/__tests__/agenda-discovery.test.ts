@@ -7,6 +7,7 @@ import {
   classifyAgendaBoards,
   discoverAgendaBoards,
   readAgendaBoard,
+  agendaBoardsToConnect,
   resolveAgendaBoards,
   type BoardsQueryClient,
   type DiscoveredBoard,
@@ -144,6 +145,32 @@ describe('classifyAgendaBoard', () => {
       kopie({ columns: kopie().columns.filter((c) => c.id !== 'tekst_mkn58pt6') })
     );
     expect(uit.kind === 'onbruikbaar' && uit.rejected.reden).toMatch(/tekst_mkn58pt6/);
+  });
+});
+
+/**
+ * Borden aansluiten (webhooks) is iets anders dan cijfers berekenen: een ontbrekend oud jaar
+ * maakt de statistiek onbetrouwbaar, maar is geen reden om een nieuwe jaargang níét aan te
+ * sluiten.
+ */
+describe('agendaBoardsToConnect', () => {
+  const met2027 = classifyAgendaBoards([kopie({ id: AGENDA_2026, name: 'Agenda 2026' }), kopie()]);
+
+  it('geeft de gevonden borden, ook als een historisch bord ontbreekt', () => {
+    expect(agendaBoardsToConnect(met2027, null).boards.map((b) => b.naam)).toEqual([
+      'Agenda 2026',
+      'Agenda 2027',
+    ]);
+  });
+
+  it('volgt de testoverride: alleen die ene kopie', () => {
+    expect(agendaBoardsToConnect(met2027, '6000000001').boards.map((b) => b.boardId)).toEqual([
+      '6000000001',
+    ]);
+  });
+
+  it('weigert een override naar een bord dat er niet is', () => {
+    expect(() => agendaBoardsToConnect(met2027, '42')).toThrow(/42/);
   });
 });
 

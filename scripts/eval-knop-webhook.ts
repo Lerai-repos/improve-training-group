@@ -3,24 +3,39 @@ import { config as loadEnv } from 'dotenv';
 
 loadEnv({ path: '.env.local' });
 
-import { liveAgendaBoards, loadAgendaBoards } from '@lib/evaluations';
+import {
+  agendaBoardOverride,
+  agendaBoardsToConnect,
+  discoverAgendaBoards,
+  liveAgendaBoards,
+} from '@lib/evaluations';
 import { MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
-import { EVAL_STATUS_COLUMN, EVAL_STATUS_INDEX } from '@lib/report/knop';
+import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
+import { EVAL_STATUS_COLUMN } from '@lib/report/knop';
+import {
+  CREATE_EVAL_KNOP_WEBHOOK,
+  createKnopWebhookStore,
+  EVAL_KNOP_WEBHOOK_CONFIG,
+  evalKnopWebhookUrl,
+} from '@lib/report/knop-webhook-deps';
 import {
   EVAL_STATUS_EVENT,
   isEvalStatusWebhook,
   teVerwijderen,
 } from '@lib/report/knop-webhook-sync';
 
-import type { WebhookRij } from '@lib/report/knop-webhook-sync';
+import type { KnopWebhookStore, WebhookRij } from '@lib/report/knop-webhook-sync';
 
 /**
  * De knop Eval Rapport aansluiten op deze app, in plaats van op n8n.
  *
  *   pnpm eval:knop-webhook            # droogloop: laat per agendabord zien wat er staat
  *   pnpm eval:knop-webhook --apply    # onze webhook aanmaken, de andere op Eval Status weg
+ *
+ * Sinds de uurlijkse sync (`/api/cron/sync-webhooks`) is dit alleen nog nodig om een
+ * VREEMDE webhook op Eval Status op te ruimen (die van n8n); aansluiten gebeurt vanzelf.
  *
  * Per actief agendabord met de kolom `Eval Status`. **Pas NA de deploy draaien**: Monday roept
  * bij het aanmaken meteen de route aan (de challenge), en zonder route mislukt het aanmaken.
@@ -47,11 +62,18 @@ async function main(): Promise<void> {
   const pad = '/api/webhooks/monday/eval-rapport';
 
   const read = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
+  /**
+   * Pas bij het eerste wegschrijven, dus alleen met `--apply`: de droogloop leest alleen
+   * Monday en hoort zonder Redis-sleutels te kunnen draaien.
+   */
+  let store: KnopWebhookStore | null = null;
+  const winkel = (): KnopWebhookStore =>
+    (store ??= createKnopWebhookStore(createUpstashKvStore(createRedisClient())));
   const write = createMondayMutationClient({ token, apiVersion: MONDAY_API_VERSION });
 
-  const borden = liveAgendaBoards(await loadAgendaBoards(read)).filter(
-    (b) => b.columnTypes[EVAL_STATUS_COLUMN] !== undefined
-  );
+  const borden = liveAgendaBoards(
+    agendaBoardsToConnect(await discoverAgendaBoards(read), agendaBoardOverride())
+  ).filter((b) => b.columnTypes[EVAL_STATUS_COLUMN] !== undefined);
   console.log(
     `\nKnop Eval Rapport — ${apply ? 'APPLY' : 'droogloop'} — doel: ${base || '(PUBLIC_BASE_URL leeg)'}${pad}\n`
   );
@@ -80,20 +102,17 @@ async function main(): Promise<void> {
     }
 
     const gemaakt = await write.mutate<{ create_webhook: { id: string } }>(
-      `mutation ($b: ID!, $url: String!, $event: WebhookEventType!, $config: JSON) {
-         create_webhook(board_id: $b, url: $url, event: $event, config: $config) { id }
-       }`,
+      CREATE_EVAL_KNOP_WEBHOOK,
       {
         b: bord.boardId,
-        url: `${base}${pad}?token=${geheim}`,
+        url: evalKnopWebhookUrl(base, geheim),
         event: EVAL_STATUS_EVENT,
-        config: JSON.stringify({
-          columnId: EVAL_STATUS_COLUMN,
-          columnValue: { index: EVAL_STATUS_INDEX.run },
-        }),
+        config: EVAL_KNOP_WEBHOOK_CONFIG,
       }
     );
     const nieuw = String(gemaakt.create_webhook.id);
+    /** Onthouden, zodat de uurlijkse sync hem herkent en er geen tweede naast zet. */
+    await winkel().write(bord.boardId, nieuw);
     console.log(`    aangemaakt: ${nieuw}`);
 
     /**

@@ -431,6 +431,22 @@ export function resolveAgendaBoards(
   return found;
 }
 
+/**
+ * De borden om AAN TE SLUITEN (webhooks), zonder de eis dat de hele historie er is.
+ *
+ * `resolveAgendaBoards` weigert als een bekend oud bord ontbreekt, en terecht: zonder dat jaar
+ * verdwijnen de evaluatiecijfers stil. Maar dat is geen reden om een nieuwe jaargang níét op
+ * de knop of de aanbevelingen aan te sluiten — dan werkt het nieuwe bord niet, om een probleem
+ * met een oud bord. De override telt wél: een testomgeving hoort alleen haar eigen kopie aan te
+ * sluiten.
+ */
+export function agendaBoardsToConnect(
+  found: AgendaBoardSet,
+  override: string | null
+): AgendaBoardSet {
+  return override === null ? found : resolveAgendaBoards(found, override);
+}
+
 /** Ontdekken en de regels hierboven toepassen. Wat elke job aanroept. */
 export async function loadAgendaBoards(client: BoardsQueryClient): Promise<AgendaBoardSet> {
   return resolveAgendaBoards(await discoverAgendaBoards(client), agendaBoardOverride());

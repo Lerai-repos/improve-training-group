@@ -70,6 +70,7 @@ export {
 
 export {
   agendaBoardOverride,
+  agendaBoardsToConnect,
   classifyAgendaBoard,
   classifyAgendaBoards,
   discoverAgendaBoards,
