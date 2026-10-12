@@ -14,6 +14,7 @@
  * blijven naam en nummer per contactpersoon aan elkaar vast.
  */
 
+import { herstelAlineas } from './alineas';
 import { BRIEFING_REQUIRED_FIELDS } from './required';
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
 import { assertColumns } from '@lib/monday/schema-check';
@@ -23,13 +24,18 @@ import { agendaBoardId, THEMAS_BOARD, TRAINERS_BOARD } from '@lib/monday/board-c
 import { formatTrainingCode } from './mc-codes';
 
 import {
+  AANDACHT_GEEN,
+  BRIE_LABELS,
   BRIEFING_AGENDA_COLUMNS,
+  CALL_LABELS,
   CONTACT_COLUMNS,
   DUURCATEGORIE_CYCLUS,
   HUISWERK_WEL,
   VOORBEREIDEND_WEL,
   OPPORTUNITY_BOARD,
   OPPORTUNITY_COLUMNS,
+  QR_LABELS,
+  TAAL_LABELS,
   THEMAS_COLUMNS,
   THEMAS_MC_COLUMNS,
   TRAINER_ACTEURS_GROUP,
@@ -239,6 +245,19 @@ function linkedIds(item: RawItem, id: string): string[] {
 const text = (item: RawItem, id: string): string => {
   const value = cell(item, id);
   return (value.display_value ?? value.text ?? '').trim();
+};
+
+/**
+ * Een status- of dropdowncel in onze woorden, op labelnummer; zie `BRIE_LABELS`.
+ *
+ * Een dropdown telt alleen bij precies één gekozen label: bij meer is er geen enkel woord dat
+ * het samenvat, en dan gaat de tekst mee zoals hij op het bord staat.
+ */
+const opNummer = (item: RawItem, id: string, woorden: Readonly<Record<number, string>>): string => {
+  const c = cell(item, id);
+  const nummers = c.values?.map((v) => Number(v.id)) ?? [];
+  const nummer = typeof c.index === 'number' ? c.index : nummers.length === 1 ? nummers[0] : null;
+  return (nummer === null ? undefined : woorden[nummer]) ?? text(item, id);
 };
 
 /**
@@ -463,25 +482,61 @@ const OPPORTUNITY_EXPECTED_COLUMNS: ExpectedColumn[] = [
    * van "de kolom bestaat niet meer".
    */
   { id: OPPORTUNITY_COLUMNS.achtergrond, type: 'long_text' },
+  { id: OPPORTUNITY_COLUMNS.conceptProgramma, type: 'long_text' },
+  { id: OPPORTUNITY_COLUMNS.extraInfo, type: 'long_text' },
   { id: OPPORTUNITY_COLUMNS.cyclus, type: 'status' },
+  /** Van Dirkje; alleen het type, want de lezer gaat op labelnummer. */
+  { id: OPPORTUNITY_COLUMNS.aandacht, type: 'status' },
 ];
+
+/** Wat de briefing van de Opportunity gebruikt, naast de contactpersoon. */
+interface OpportunityVelden {
+  readonly achtergrond: string;
+  readonly cyclusVariant: string;
+  readonly conceptProgramma: string;
+  readonly extraInfo: string;
+  readonly aandacht: string | null;
+}
+
+const GEEN_OPPORTUNITY: OpportunityVelden = {
+  achtergrond: '',
+  cyclusVariant: '',
+  conceptProgramma: '',
+  extraInfo: '',
+  aandacht: null,
+};
+
+const OPPORTUNITY_IDS = [
+  OPPORTUNITY_COLUMNS.contact,
+  OPPORTUNITY_COLUMNS.achtergrond,
+  OPPORTUNITY_COLUMNS.conceptProgramma,
+  OPPORTUNITY_COLUMNS.extraInfo,
+  OPPORTUNITY_COLUMNS.cyclus,
+  OPPORTUNITY_COLUMNS.aandacht,
+];
+
+function opportunityVelden(item: RawItem): OpportunityVelden {
+  const aandacht = cell(item, OPPORTUNITY_COLUMNS.aandacht);
+  return {
+    achtergrond: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.achtergrond)),
+    cyclusVariant: text(item, OPPORTUNITY_COLUMNS.cyclus),
+    conceptProgramma: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.conceptProgramma)),
+    extraInfo: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.extraInfo)),
+    aandacht:
+      typeof aandacht.index === 'number' && aandacht.index !== AANDACHT_GEEN
+        ? text(item, OPPORTUNITY_COLUMNS.aandacht) || 'Extra aandacht nodig'
+        : null,
+  };
+}
 
 async function readContact(
   client: MondayGraphQLClient,
   opportunityItemId: string | null,
   agendaNaam: string
-): Promise<{
-  contact: { naam: string; telefoon: string } | null;
-  achtergrond: string;
-  cyclusVariant: string;
-}> {
+): Promise<{ contact: { naam: string; telefoon: string } | null } & OpportunityVelden> {
   const naam = agendaNaam.trim();
   if (opportunityItemId === null) {
-    return {
-      contact: naam === '' ? null : { naam, telefoon: '' },
-      achtergrond: '',
-      cyclusVariant: '',
-    };
+    return { contact: naam === '' ? null : { naam, telefoon: '' }, ...GEEN_OPPORTUNITY };
   }
   const [oppMeta] = await client.getSchema([OPPORTUNITY_BOARD]);
   if (oppMeta === undefined) {
@@ -493,8 +548,8 @@ async function readContact(
     `query ($ids: [ID!]) {
        items(ids: $ids) {
          id name
-         column_values(ids: ["${OPPORTUNITY_COLUMNS.contact}", "${OPPORTUNITY_COLUMNS.achtergrond}", "${OPPORTUNITY_COLUMNS.cyclus}"]) {
-           id text ... on BoardRelationValue { linked_item_ids }
+         column_values(ids: ${JSON.stringify(OPPORTUNITY_IDS)}) {
+           id text ... on BoardRelationValue { linked_item_ids } ... on StatusValue { index }
          }
        }
      }`,
@@ -518,11 +573,10 @@ async function readContact(
     // functie met een echte RawItem werkt in plaats van met een cast.
     throw new Error(`Briefing: Opportunity ${opportunityItemId} kon niet worden opgehaald`);
   }
-  const achtergrond = text(oppItem, OPPORTUNITY_COLUMNS.achtergrond);
-  const cyclusVariant = text(oppItem, OPPORTUNITY_COLUMNS.cyclus);
+  const velden = opportunityVelden(oppItem);
   const linked = linkedIds(oppItem, OPPORTUNITY_COLUMNS.contact);
   if (linked.length === 0) {
-    return { contact: naam === '' ? null : { naam, telefoon: '' }, achtergrond, cyclusVariant };
+    return { contact: naam === '' ? null : { naam, telefoon: '' }, ...velden };
   }
 
   const contact = await client.query<{ items: RawItem[] }>(
@@ -563,13 +617,13 @@ async function readContact(
    * raden we dan niet.
    */
   if (candidates.length === 1) {
-    return { contact: candidates[0] ?? null, achtergrond, cyclusVariant };
+    return { contact: candidates[0] ?? null, ...velden };
   }
   if (naam !== '') {
     const match = candidates.find((c) => c.naam.toLowerCase() === naam.toLowerCase());
-    return { contact: { naam, telefoon: match?.telefoon ?? '' }, achtergrond, cyclusVariant };
+    return { contact: { naam, telefoon: match?.telefoon ?? '' }, ...velden };
   }
-  return { contact: null, achtergrond, cyclusVariant };
+  return { contact: null, ...velden };
 }
 
 /**
@@ -716,12 +770,12 @@ export async function readBriefingTraining(
     itemId: String(item.id),
     naam: item.name,
     label: text(item, C.label),
-    brie: text(item, C.brie),
+    brie: opNummer(item, C.brie, BRIE_LABELS),
     opdrachtgever: text(item, C.opdrachtgever),
     themas: themaIds.map((id) => themaItems.get(id)?.naam ?? id),
     trainingscodeMc: formatTrainingCode(
       themaIds.map((id) => themaItems.get(id)?.mcCode ?? ''),
-      text(item, C.taal)
+      opNummer(item, C.taal, TAAL_LABELS)
     ),
     themaInhoud: themaIds
       .map((id) => themaItems.get(id)?.conceptInhoud ?? '')
@@ -733,9 +787,9 @@ export async function readBriefingTraining(
     tijden: text(item, C.tijden),
     groepsgrootte: text(item, C.deelnemers),
     locatie: text(item, C.locatie),
-    voertaal: text(item, C.taal),
-    klantcontactmoment: text(item, C.klantcontactmoment),
-    evaluatie: text(item, C.qr),
+    voertaal: opNummer(item, C.taal, TAAL_LABELS),
+    klantcontactmoment: opNummer(item, C.klantcontactmoment, CALL_LABELS),
+    evaluatie: opNummer(item, C.qr, QR_LABELS),
     ieCode: text(item, C.ieCode),
     accountmanager,
     contactpersoon: contactpersoon?.naam.trim() ? contactpersoon : null,
@@ -743,6 +797,9 @@ export async function readBriefingTraining(
     acteuraantal: acteurRaw === '' ? null : Number(acteurRaw),
     opportunityItemId,
     achtergrond: opportunity.achtergrond,
+    conceptProgramma: opportunity.conceptProgramma,
+    extraInfo: opportunity.extraInfo,
+    aandacht: opportunity.aandacht,
     opdrachten: readOpdrachten(item),
     // De cyclus vraagt een zoektocht over alle agendaborden; zie `readBriefingMetCyclus`.
     cyclus: null,

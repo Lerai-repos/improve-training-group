@@ -60,7 +60,21 @@ const zonderBijlage: OutgoingMail = {
   to: ['aanvragen@voorbeeld.nl'],
   subject: 'Onderwerp',
   body: 'Tekst',
+  html: '<p>Tekst</p>',
 };
+
+describe('de inhoud', () => {
+  /** Kopjes dikgedrukt en Calibri 11 kan alleen in HTML; de platte tekst is voor de log. */
+  it('stuurt de HTML-versie', async () => {
+    const { sender, calls } = harness();
+    await sender.send(zonderBijlage);
+
+    const body: unknown = JSON.parse(String(calls[0].init?.body));
+    expect(body).toMatchObject({
+      message: { body: { contentType: 'HTML', content: '<p>Tekst</p>' } },
+    });
+  });
+});
 
 describe('zonder bijlage', () => {
   it('gaat in één sendMail en raakt geen uploadsessie aan', async () => {

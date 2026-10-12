@@ -54,7 +54,8 @@ describe('createMondayStatusWriter', () => {
     expect(calls[0].body.variables).toMatchObject({
       item: '5029726254',
       col: OUR_COLUMN,
-      val: JSON.stringify({ label: 'GEREED' }),
+      // Op labelnummer, zodat ITG `GEREED` mag hernoemen; zie LABEL_INDEX.
+      val: JSON.stringify({ index: 1 }),
     });
   });
 

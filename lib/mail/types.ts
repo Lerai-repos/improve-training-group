@@ -17,16 +17,18 @@ export interface MailAttachment {
 export interface OutgoingMail {
   readonly to: readonly string[];
   readonly subject: string;
-  /**
-   * De hele body als platte tekst.
-   *
-   * Platte tekst en geen HTML, omdat deze mail bedoeld is om **overgenomen** te worden: de
-   * accountmanager plakt hem in zijn eigen bericht aan de klant. Opmaak die in ons bericht
-   * mooi staat, verandert bij het plakken in andermans lettertype en kleuren, en de
-   * markeringen die aangeven wat ITG zelf moet invullen zouden juist dán wegvallen. In
-   * platte tekst blijft `[ZO IETS]` overal `[ZO IETS]`.
-   */
+  /** De body als platte tekst: voor de droogloop en het logboek, niet om te versturen. */
   readonly body: string;
+  /**
+   * Wat er verstuurd wordt: dezelfde regels als `body`, met de kopjes dikgedrukt en alles in
+   * Calibri 11.
+   *
+   * Eerst was dit bewust platte tekst, omdat de accountmanager de mail overneemt en opmaak bij
+   * het plakken zou verspringen. ITG vroeg op 12-Oct-2026 om de opmaak van vóór de overstap
+   * terug (die mails waren ook HTML). Het lettertype staat daarom op elke alinea, zodat het
+   * meegaat bij het plakken, en `[ZO IETS]` blijft gewoon tekst.
+   */
+  readonly html: string;
   readonly attachment?: MailAttachment;
 }
 

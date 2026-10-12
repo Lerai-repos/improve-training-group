@@ -1,6 +1,8 @@
-import { aftersalesMet, aftersalesZonder, trainerMet, trainerZonder } from './text';
+import { klantEnTitel } from './facts';
+import { aftersalesMet, aftersalesZonder, metKopregel, trainerMet, trainerZonder } from './text';
 
 import type { MailFacts } from './facts';
+import type { MailText } from './text';
 import type { MailRecipients } from './recipients';
 import type { MailVariant } from './sent-store';
 import type { MailAttachment, OutgoingMail } from './types';
@@ -29,17 +31,28 @@ export interface ComposedMail {
  * en dubbele punten in ("Bouw / Techniek: dag 2"). Die gaan mee in de bestandsnaam van een
  * bijlage, en een ontvanger met Windows kan zo'n bestand niet opslaan.
  */
-function veiligeBestandsnaam(titel: string): string {
-  const schoon = titel
+function zonderVerbodenTekens(tekst: string): string {
+  return tekst
     .replace(/[\\/:*?"<>|]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return schoon === '' ? 'training' : schoon;
 }
 
+/**
+ * Klant en titel elk apart opgeschoond, en pas dan samen: een titel die alleen uit verboden
+ * tekens bestond wordt `training`, en niet een naam die op "Gemeente Emmen - " eindigt.
+ */
 export function rapportBestandsnaam(facts: MailFacts): string {
   const datum = facts.datum === '' ? '' : ` (${facts.datum})`;
-  return `Evaluatierapport ${veiligeBestandsnaam(facts.klanttitel)}${datum}.pdf`;
+  const naam = klantEnTitel(
+    {
+      ...facts,
+      klant: zonderVerbodenTekens(facts.klant),
+      klanttitel: zonderVerbodenTekens(facts.klanttitel) || 'training',
+    },
+    ' - '
+  );
+  return `Evaluatierapport ${naam}${datum}.pdf`;
 }
 
 export function pdfBijlage(facts: MailFacts, pdf: Uint8Array): MailAttachment {
@@ -62,14 +75,8 @@ function waarschuwingsregel(warnings: readonly string[]): string {
 }
 
 /** De waarschuwing als eerste regel van de kop, vóór alles wat ITG verder moet doen. */
-function metWaarschuwing(
-  tekst: { readonly subject: string; readonly body: string },
-  waarschuwing: string
-): { readonly subject: string; readonly body: string } {
-  if (waarschuwing === '') {
-    return tekst;
-  }
-  return { subject: tekst.subject, body: `${waarschuwing}\n\n${tekst.body}` };
+function metWaarschuwing(tekst: MailText, waarschuwing: string): MailText {
+  return waarschuwing === '' ? tekst : metKopregel(tekst, waarschuwing);
 }
 
 export interface ComposeInput {

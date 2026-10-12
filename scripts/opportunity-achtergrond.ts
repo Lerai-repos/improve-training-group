@@ -9,7 +9,13 @@ import { createMondayMutationClient } from '@lib/monday/mutate';
 import { OPPORTUNITY_BOARD, OPPORTUNITY_COLUMNS } from '@lib/briefing/columns';
 
 /**
- * Maakt de kolom voor de achtergrondinformatie op het Opportunitybord.
+ * Maakt onze lange tekstkolommen op het Opportunitybord: de achtergrondinformatie, het
+ * concept programma en de extra info voor de briefing. Een kolom die er al staat blijft
+ * ongemoeid, dus opnieuw draaien maakt alleen wat er nog mist.
+ *
+ * Het concept programma en de extra info kwamen er 12-Oct-2026 bij (Dirkje): de
+ * accountmanager vult de bullets en de extra info al in de Opportunityfase in, en de extra
+ * info hoeft dan niet meer als update met "In briefing" ervoor.
  *
  * Dirkje, in `docs/correspondence/correspondence_august.md`:
  *
@@ -23,27 +29,28 @@ import { OPPORTUNITY_BOARD, OPPORTUNITY_COLUMNS } from '@lib/briefing/columns';
  *   pnpm opportunity:achtergrond --apply
  *
  * Draait tegen het live bord van de klant. Daarom: droogloop als standaard, en `--apply`
- * verandert precies één ding.
+ * maakt alleen de kolommen die nog ontbreken.
  */
 
 const EXIT_FAILURE = 1;
 
 /**
- * Een **vastgepinde** kolom-id, geen door Monday verzonnen id.
+ * **Vastgepinde** kolom-ids, geen door Monday verzonnen ids.
  *
  * De lezer zoekt op id en niet op titel, juist zodat ITG de kolom mag hernoemen zonder dat de
  * briefing leegloopt. Monday laat een onbekend kolom-id stilzwijgend weg in plaats van te
  * foutmelden, dus een id dat wij niet kennen is niet te onderscheiden van een leeg veld.
- */
-const COLUMN_ID = OPPORTUNITY_COLUMNS.achtergrond;
-
-/** Wat ITG in de kolomkop ziet. Gelijk aan het kopje in de briefing. */
-const COLUMN_TITLE = 'Achtergrondinformatie';
-
-/**
+ *
  * `long_text` en niet `text`, omdat de tekst uit meerdere alinea's bestaat — Dirkje zegt dat
  * expliciet. Een `text`-kolom kapt af en slikt regelafbrekingen.
  */
+const KOLOMMEN: ReadonlyArray<{ readonly id: string; readonly titel: string }> = [
+  /** Gelijk aan het kopje in de briefing. */
+  { id: OPPORTUNITY_COLUMNS.achtergrond, titel: 'Achtergrondinformatie' },
+  { id: OPPORTUNITY_COLUMNS.conceptProgramma, titel: 'Concept programma (briefing)' },
+  { id: OPPORTUNITY_COLUMNS.extraInfo, titel: 'Extra info voor briefing' },
+];
+
 const COLUMN_TYPE = 'long_text';
 
 interface BoardColumn {
@@ -84,60 +91,47 @@ async function main(): Promise<void> {
   }
   console.log(`\nBord ${board.id} — ${board.name}  (${board.columns.length} kolommen)\n`);
 
-  const bestaand = board.columns.find((c) => c.id === COLUMN_ID);
-  if (bestaand !== undefined) {
-    if (bestaand.type !== COLUMN_TYPE) {
+  const write = createMondayMutationClient({ token, apiVersion: MONDAY_API_VERSION });
+  for (const kolom of KOLOMMEN) {
+    const bestaand = board.columns.find((c) => c.id === kolom.id);
+    if (bestaand !== undefined) {
+      if (bestaand.type !== COLUMN_TYPE) {
+        throw new Error(
+          `Kolom ${kolom.id} bestaat al maar is type '${bestaand.type}', verwacht '${COLUMN_TYPE}'. ` +
+            'Handmatig corrigeren; dit script overschrijft geen bestaande kolom.'
+        );
+      }
+      console.log(`  bestaat al: ${kolom.id} ("${bestaand.title}")`);
+      continue;
+    }
+
+    console.log(`${apply ? '  APPLY ' : '  would '}create column ${kolom.id} "${kolom.titel}" (${COLUMN_TYPE})`);
+    if (!apply) {
+      continue;
+    }
+    const created = await write.mutate<{ create_column: { id: string } }>(
+      `mutation ($board: ID!, $title: String!, $type: ColumnType!, $id: String!) {
+         create_column(board_id: $board, title: $title, column_type: $type, id: $id) { id }
+       }`,
+      { board: OPPORTUNITY_BOARD, title: kolom.titel, type: COLUMN_TYPE, id: kolom.id },
+      // De kolom-id in de sleutel, zodat een herhaalde run dezelfde bedoeling hergebruikt in
+      // plaats van een tweede kolom te maken binnen Monday's venster van 30 minuten.
+      { idempotencyKey: `opportunity-achtergrond:${OPPORTUNITY_BOARD}:${kolom.id}` }
+    );
+
+    const gemaakt = created.create_column?.id;
+    if (gemaakt !== kolom.id) {
       throw new Error(
-        `Kolom ${COLUMN_ID} bestaat al maar is type '${bestaand.type}', verwacht '${COLUMN_TYPE}'. ` +
-          'Handmatig corrigeren; dit script overschrijft geen bestaande kolom.'
+        `Monday gaf kolom-id '${gemaakt}' terug in plaats van '${kolom.id}'. De id is niet ` +
+          'vastgepind; de lezer zou hem niet vinden. Controleer het bord voordat je verder gaat.'
       );
     }
-    console.log(`  kolom bestaat al: ${COLUMN_ID} ("${bestaand.title}", ${bestaand.type})`);
-    console.log('  niets te doen.\n');
-    return;
+    console.log(`  aangemaakt: ${gemaakt}`);
   }
-
-  /**
-   * Er staan al twee kolommen "Beschrijving" op dit bord. Die laten we met rust — de ene bevat
-   * de aanvraag van de klant zelf, in de ik-vorm — maar het is wel het vermelden waard, zodat
-   * niemand denkt dat we een derde bijna-duplicaat per ongeluk toevoegen.
-   */
-  const lijkend = board.columns.filter(
-    (c) => c.type === 'long_text' || /beschrijving|achtergrond|aanleiding/i.test(c.title)
-  );
-  if (lijkend.length > 0) {
-    console.log('  bestaande tekstkolommen die erop lijken (blijven ongemoeid):');
-    for (const c of lijkend) {
-      console.log(`     ${c.id.padEnd(24)} ${c.title}  (${c.type})`);
-    }
-    console.log();
-  }
-
-  console.log(`${apply ? '  APPLY ' : '  would '}create column ${COLUMN_ID} "${COLUMN_TITLE}" (${COLUMN_TYPE})\n`);
   if (!apply) {
-    console.log('  Droogloop. Voer uit met --apply om het echt aan te maken.\n');
-    return;
+    console.log('\n  Droogloop. Voer uit met --apply om het echt aan te maken.');
   }
-
-  const write = createMondayMutationClient({ token, apiVersion: MONDAY_API_VERSION });
-  const created = await write.mutate<{ create_column: { id: string } }>(
-    `mutation ($board: ID!, $title: String!, $type: ColumnType!, $id: String!) {
-       create_column(board_id: $board, title: $title, column_type: $type, id: $id) { id }
-     }`,
-    { board: OPPORTUNITY_BOARD, title: COLUMN_TITLE, type: COLUMN_TYPE, id: COLUMN_ID },
-    // De kolom-id in de sleutel, zodat een herhaalde run dezelfde bedoeling hergebruikt in
-    // plaats van een tweede kolom te maken binnen Monday's venster van 30 minuten.
-    { idempotencyKey: `opportunity-achtergrond:${OPPORTUNITY_BOARD}:${COLUMN_ID}` }
-  );
-
-  const gemaakt = created.create_column?.id;
-  if (gemaakt !== COLUMN_ID) {
-    throw new Error(
-      `Monday gaf kolom-id '${gemaakt}' terug in plaats van '${COLUMN_ID}'. De id is niet ` +
-        'vastgepind; de lezer zou hem niet vinden. Controleer het bord voordat je verder gaat.'
-    );
-  }
-  console.log(`  aangemaakt: ${gemaakt}\n`);
+  console.log('');
 }
 
 main().catch((error: unknown) => {

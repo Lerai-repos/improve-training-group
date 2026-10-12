@@ -1,4 +1,4 @@
-import { BRIEFINGS_BOARD, BRIEFINGS_COLUMNS, BRIEFING_AGENDA_COLUMNS } from './columns';
+import { BRIE_INDEX, BRIEFINGS_BOARD, BRIEFINGS_COLUMNS, BRIEFING_AGENDA_COLUMNS } from './columns';
 import { isNotDecided } from './open-issues';
 
 import type { RecipientRole } from './recipients';
@@ -44,11 +44,16 @@ export interface BriefingRecorder {
 }
 
 const SET_STATUS = `
-mutation ($board: ID!, $item: ID!, $column: String!, $value: String!) {
-  change_simple_column_value(board_id: $board, item_id: $item, column_id: $column, value: $value) {
+mutation ($board: ID!, $item: ID!, $column: String!, $value: JSON!) {
+  change_column_value(board_id: $board, item_id: $item, column_id: $column, value: $value) {
     id
   }
 }`;
+
+const BRIE_NUMMER: Readonly<Record<BrieStatus, number>> = {
+  'Begonnen, niet klaar': BRIE_INDEX.onvolledig,
+  'Staat klaar': BRIE_INDEX.klaar,
+};
 
 const CREATE_ITEM = `
 mutation ($board: ID!, $group: String!, $name: String!, $values: JSON!) {
@@ -73,17 +78,15 @@ export function createBriefingRecorder(
   return {
     async setBrie(itemId, status, boardId = agendaBoardId) {
       /**
-       * `change_simple_column_value` met de labeltekst, niet met een index.
-       *
-       * De indexen op `Brie` zijn historisch en lopen niet netjes door (0, 1, 2, 3, 5), dus
-       * een getal in de code zou vastliggen aan een volgorde die ITG in hun eigen bord kan
-       * wijzigen. De tekst is wat zij zien en wat het procesdeck noemt.
+       * Op labelnummer, niet op tekst: ITG mag `Brie` hernoemen, en een hernoemd label houdt
+       * zijn nummer. Met de tekst wierp elke schrijfactie zodra ze "Staat klaar" anders
+       * noemden. `BrieStatus` blijft de tekst, want dat is wat de route en het logboek tonen.
        */
       await client.mutate(SET_STATUS, {
         board: boardId,
         item: itemId,
         column: BRIEFING_AGENDA_COLUMNS.brie,
-        value: status,
+        value: JSON.stringify({ index: BRIE_NUMMER[status] }),
       });
     },
 

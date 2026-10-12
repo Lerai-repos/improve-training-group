@@ -123,6 +123,53 @@ export const HUISWERK_WEL: readonly number[] = [9, 19, 1];
 /** Label-id van `trainingscyclus (2x4/2x7)` in `DuurcategorieAG`. */
 export const DUURCATEGORIE_CYCLUS = 6;
 
+/**
+ * Wat de labels van de statuskolommen betekenen, op labelnummer.
+ *
+ * ITG mag labels hernoemen zonder dat er iets breekt (getekende scope), en een hernoemd label
+ * houdt zijn nummer. Dus de lezer vertaalt het nummer naar ónze woorden, en de opmaak in
+ * `format.ts` werkt met die woorden. Een nummer dat hier niet staat geeft de tekst zoals hij op
+ * het bord staat: een nieuw label hoort zichtbaar te worden, niet stilzwijgend ergens onder te
+ * vallen.
+ *
+ * Gemeten 12-Oct-2026, gelijk op Agenda 2025 en 2026 waar beide het label hebben (2025 heeft
+ * 4/6/7 op `QR` niet, en noemt 5 daar `NOTK`).
+ */
+export const BRIE_LABELS: Readonly<Record<number, string>> = {
+  0: 'Begonnen, niet klaar',
+  1: 'Verzonden',
+  2: 'Interne trainer',
+  3: 'Staat klaar',
+  5: 'Aanmaken',
+};
+
+/** Wat wij op `Brie` schrijven, op nummer; zie `BRIE_LABELS`. */
+export const BRIE_INDEX = { onvolledig: 0, klaar: 3 } as const;
+
+export const QR_LABELS: Readonly<Record<number, string>> = {
+  0: 'Aanmaken',
+  1: 'Staat klaar',
+  2: 'Geen QR (deze sessie)',
+  3: 'Verzonden',
+  4: 'NL Aanmaken',
+  5: '0. NOTK',
+  6: 'EN Aanmaken',
+  7: 'TT Aanmaken',
+};
+
+/** `Call`: alleen `Teams` en `Telefoon` krijgen een eigen zin, de rest gaat letterlijk mee. */
+export const CALL_LABELS: Readonly<Record<number, string>> = {
+  0: 'Teams',
+  2: 'Telefoon',
+};
+
+/** `Taal` is een dropdown; dit zijn de label-ids, niet de posities. */
+export const TAAL_LABELS: Readonly<Record<number, string>> = {
+  10: 'NL',
+  11: 'ENG',
+  12: 'NL + ENG',
+};
+
 /** Het Opportunitybord waar de agenda naartoe koppelt. */
 export const OPPORTUNITY_BOARD = '1279052045';
 
@@ -148,7 +195,32 @@ export const OPPORTUNITY_COLUMNS = {
    * kolom voedt de nachtelijke overname; zie `lib/overname/columns.ts` voor de label-indexen.
    */
   cyclus: 'color_mm724vqh',
+  /**
+   * De bullets voor `Concept inhoud`, door de accountmanager in de Opportunityfase ingevuld
+   * (Dirkje, 12-Oct-2026). Door ons aangemaakt met `pnpm opportunity:kolommen`. Leeg = het
+   * skelet van het thema, zoals ervoor; zie `standaardConcept`.
+   */
+  conceptProgramma: 'itg_conceptprogramma',
+  /**
+   * Extra info voor de trainer, onder "Extra informatie trainer". Vervangt de updates met
+   * "In briefing" ervoor, die Dirkje te foutgevoelig vond (12-Oct-2026); die blijven wel gelezen
+   * worden, zodat wat er al staat niet verloren gaat.
+   */
+  extraInfo: 'itg_extrainfo',
+  /**
+   * `Briefing: heeft deze extra aandacht nodig van WS?`, door Dirkje aangemaakt. Gelezen op
+   * labelnummer; zie `AANDACHT_GEEN`.
+   */
+  aandacht: 'color_mm7xdcf',
 } as const;
+
+/**
+ * Het label van `aandacht` dat "niets bijzonders" betekent. Gemeten 12-Oct-2026: 0 `AUB offerte
+ * ernaast houden en info aanvullen`, 1 `Geen extra aandacht nodig`, 2 `Complexe opdracht, aub
+ * extra check bij AM`. Elk ander gezet label geeft een melding in de tab, met de tekst zoals
+ * hij op het bord staat; zo mag Dirkje de labels hernoemen en er een bij zetten.
+ */
+export const AANDACHT_GEEN = 1;
 
 /**
  * Het Themas-bord, waar het agendabord met `themaRelation` naartoe koppelt.

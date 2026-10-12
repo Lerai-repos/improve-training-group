@@ -167,6 +167,33 @@ export function collectExtraInfo(
 }
 
 /**
+ * "Extra informatie trainer": eerst het tekstveld op de Opportunity, dan de gemarkeerde
+ * updates, zonder dubbelen.
+ *
+ * Het tekstveld vervangt de updates met "In briefing" ervoor; Dirkje vond die te foutgevoelig
+ * (12-Oct-2026: vergeten, net anders getypt). De updates blijven gelezen worden, zodat wat er
+ * al op lopende trainingen staat niet verdwijnt. Iemand die dezelfde tekst op beide plekken
+ * zet, ziet hem één keer terug.
+ */
+export function extraInfoRegels(
+  veld: string,
+  updateRegels: readonly string[]
+): readonly string[] {
+  const seen = new Set<string>();
+  const uit: string[] = [];
+  for (const regel of [...veld.split('\n'), ...updateRegels]) {
+    const tekst = regel.trim();
+    const key = tekst.replace(/\s+/g, ' ').toLowerCase();
+    if (tekst === '' || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uit.push(tekst);
+  }
+  return uit;
+}
+
+/**
  * Hoeveel updates we per item ophalen.
  *
  * Ruim boven wat er in de praktijk staat: het drukste item op het agendabord heeft er een

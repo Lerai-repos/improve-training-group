@@ -19,6 +19,17 @@ import { fetchWithRetry } from './http';
 
 const MONDAY_URL = 'https://api.monday.com/v2';
 const ALLOWED_LABELS = new Set<StatusLabel>(['GEREED', 'GEEN MATCH', 'FOUT']);
+/**
+ * Written by label NUMBER, as measured on `Status Aanbevelingen` (12-Oct-2026): ITG may rename
+ * labels (signed scope), a renamed label keeps its number, and writing the text made every
+ * write fail the moment `GEREED` was called something else. The column only reaches a new
+ * board by duplicating the board, which keeps the numbers.
+ */
+const LABEL_INDEX: Readonly<Record<StatusLabel, number>> = {
+  'GEEN MATCH': 0,
+  GEREED: 1,
+  FOUT: 2,
+};
 // The write must finish well within the 60s delivery lease so a hung Monday call
 // can't outlive the lease and race a takeover worker's mutation. 2 × 12s + backoff
 // (≈ 24.5s) stays under it; the label write is idempotent so retrying is safe.
@@ -91,7 +102,7 @@ export function createMondayStatusWriter(opts: MondayStatusWriterOptions): Statu
               board: boardId,
               item: itemId,
               col: columnId,
-              val: JSON.stringify({ label }),
+              val: JSON.stringify({ index: LABEL_INDEX[label] }),
             },
           }),
         },

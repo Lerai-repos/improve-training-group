@@ -23,13 +23,14 @@ import {
 } from './compose';
 import { describeOpenIssue, isNotDecided, splitOpenIssue } from './open-issues';
 import { prefillTrainingActor, type BriefingChecklist } from './blocks';
-import { conceptLines, resolveConceptInhoud } from './concept';
+import { conceptLines, resolveConceptInhoud, standaardConcept } from './concept';
 import { formatDutchDate } from './deadline';
 import { resolveRecipientRoles, type RecipientRole } from './recipients';
 import { metEigenAchtergrond } from './achtergrond';
 import { EMPTY_SAVED, type SavedChecklist } from './answers';
 
 import type { BriefingSessie, BriefingTraining, BriefingTrainer, CyclusKeuze } from './types';
+import type { ConceptBron } from './concept';
 
 /** Eén gekoppelde persoon, zoals de tab hem toont bij de acteurvraag. */
 export interface TabPerson {
@@ -135,14 +136,24 @@ export interface TabView {
   /** Is de acteurvraag door een mens beantwoord, of staat de suggestie er nog? */
   readonly acteurBeantwoord: boolean;
   readonly personen: readonly TabPerson[];
-  /** Het skelet van het thema, als regels. Vult het tekstvak voor. */
+  /**
+   * Wat het tekstvak voorvult: de bullets van de Opportunity, en anders het skelet van het
+   * thema, als regels. Zie `standaardConcept`.
+   */
   readonly conceptSkelet: readonly string[];
+  /** Waar `conceptSkelet` vandaan komt, zodat het tekstvak het erbij kan zeggen. */
+  readonly conceptBron: ConceptBron;
   /** Wat de adviseur zelf heeft getypt, of `null` als hij het niet heeft aangeraakt. */
   readonly conceptEigen: string | null;
   /** De regels zoals ze in het document zouden komen, met `{organisatie}` ingevuld. */
   readonly conceptResultaat: readonly string[];
   /** De achtergrondinformatie van de Opportunity. Vult het tekstvak voor. */
   readonly achtergrondBron: string;
+  /**
+   * Wat de accountmanager bij "extra aandacht nodig?" koos, als dat om aandacht vraagt; anders
+   * `null`. Een melding bovenaan de tab, niet in het document: de trainer heeft er niets aan.
+   */
+  readonly aandacht: string | null;
   /** Wat de adviseur zelf heeft getypt, of `null` als hij het niet heeft aangeraakt. */
   readonly achtergrondEigen: string | null;
   readonly documenten: readonly TabDocument[];
@@ -742,9 +753,10 @@ export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist 
       : [];
 
   const eigen = checklist.conceptInhoud ?? null;
+  const standaard = standaardConcept(training);
   const conceptResultaat =
     resolveConceptInhoud({
-      themaTekst: training.themaInhoud,
+      themaTekst: standaard.tekst,
       adviseurTekst: eigen ?? undefined,
       organisatie: training.opdrachtgever,
     }) ?? [];
@@ -766,10 +778,12 @@ export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist 
     acteurVoorstel: voorstel,
     acteurBeantwoord: beantwoord,
     personen: personen(training, antwoorden.actorItemIds),
-    conceptSkelet: conceptLines(training.themaInhoud),
+    conceptSkelet: conceptLines(standaard.tekst),
+    conceptBron: standaard.bron,
     conceptEigen: eigen,
     conceptResultaat,
     achtergrondBron: opgehaald.achtergrond,
+    aandacht: training.aandacht,
     achtergrondEigen: antwoorden.checklist.achtergrondInhoud ?? null,
     documenten,
     cyclusKeuze: training.cyclusKeuze,

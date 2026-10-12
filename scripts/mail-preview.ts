@@ -1,4 +1,8 @@
 /* eslint-disable no-console */
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { config as loadEnv } from 'dotenv';
 
 loadEnv({ path: '.env.local' });
@@ -14,6 +18,7 @@ import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
  * De twee mails van één training op het scherm, zonder ze te versturen.
  *
  *   pnpm mail:preview <agenda-item-id>
+ *   pnpm mail:preview <agenda-item-id> --html   # ook als HTML-bestand, om in een browser te openen
  *
  * Hiermee zijn de teksten na te lezen voordat ze bij ITG in de postbus liggen, en hiermee is
  * te controleren of de gele velden uit het V2-document echt gevuld worden: de datum, het
@@ -70,6 +75,7 @@ async function main(): Promise<void> {
   const facts = buildMailFacts({
     datum: training.datum,
     klanttitel: training.klanttitel,
+    klant: training.klant,
     themaNamen: training.themaNamen,
     labelNaam: label.volledigeNaam,
     rapportterm: label.rapportterm,
@@ -101,6 +107,11 @@ async function main(): Promise<void> {
     );
     console.log(`${'#'.repeat(78)}\n`);
     console.log(composed.mail.body);
+    if (process.argv.includes('--html')) {
+      const pad = join(tmpdir(), `mail-preview-${itemId}-${composed.doel}.html`);
+      writeFileSync(pad, composed.mail.html);
+      console.log(`\n# HTML: ${pad}`);
+    }
   }
   console.log('');
 }

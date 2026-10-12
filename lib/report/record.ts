@@ -61,23 +61,28 @@ export const EVAL_COLUMNS = {
  */
 export const IE_STATUS_COLUMN = 'dup__of_qr';
 
-/** Het label uit de bestaande set dat "er is gezocht en niets gevonden" betekent. */
-export const IE_STATUS_ONVINDBAAR = 'Onvindbaar';
-
 /**
- * De neutrale toestand van deze kolom: ongesorteerd, nog niet beoordeeld.
+ * De labels van `IE. Trainer` die wij lezen of schrijven, op labelnummer.
  *
- * `IE` is Monday's lege index-5-vak waar ITG een naam op heeft gezet — het is dan ook precies
- * wat Monday schrijft als je de kolom "wist". Gemeten over het hele bord: van de zes labels
- * heeft alleen `IE` een gemengde bezetting (134 items, 54% met een IE-code), terwijl
- * `Verzonden`, `Onvindbaar` en `Staat klaar` alle drie 100% een code hebben en
- * `Geen (deze sessie)` maar 3%. Dat maakt `IE` de restbak en niet een werkstroomstap.
+ * Op nummer en niet op tekst: ITG mag labels hernoemen (getekende scope), en een hernoemd
+ * label houdt zijn nummer. Met de tekst wierp het schrijven zodra `Onvindbaar` anders heette,
+ * en las een hernoemde `Onvindbaar` als iets van hén, zodat "niets gevonden" bleef staan naast
+ * een cijfer. Gemeten 12-Oct-2026, gelijk op Agenda 2025 en 2026.
  *
- * Daarom is dit de juiste waarde om een achterhaalde `Onvindbaar` mee te overschrijven: de
- * rij gaat terug de gewone stroom in (Aanmaken → Staat klaar → Verzonden) in plaats van te
- * blijven beweren dat er niets gevonden is.
+ * - `onvindbaar` (2): er is gezocht en niets gevonden.
+ * - `neutraal` (5), `IE`: Monday's lege index-5-vak waar ITG een naam op heeft gezet — het is
+ *   dan ook precies wat Monday schrijft als je de kolom "wist". Gemeten over het hele bord:
+ *   van de zes labels heeft alleen `IE` een gemengde bezetting (134 items, 54% met een
+ *   IE-code), terwijl `Verzonden`, `Onvindbaar` en `Staat klaar` alle drie 100% een code
+ *   hebben en `Geen (deze sessie)` maar 3%. Dat maakt `IE` de restbak en niet een
+ *   werkstroomstap, en dus de juiste waarde om een achterhaalde `Onvindbaar` mee te
+ *   overschrijven: de rij gaat terug de gewone stroom in (Aanmaken → Staat klaar → Verzonden)
+ *   in plaats van te blijven beweren dat er niets gevonden is.
  */
-export const IE_STATUS_NEUTRAAL = 'IE';
+export const IE_STATUS_INDEX = { onvindbaar: 2, neutraal: 5 } as const;
+
+/** Alleen voor het logboek en de droogloop; geschreven wordt op nummer. */
+const IE_NAAM = { onvindbaar: 'Onvindbaar', neutraal: 'IE' } as const;
 
 export interface EvalWrite {
   /** `column_values` voor Monday. Leeg betekent: niets te schrijven. */
@@ -88,8 +93,8 @@ export interface EvalWrite {
 
 /** Wat er NU op het item staat; nodig om oude uitkomsten op te ruimen. */
 export interface CurrentState {
-  /** De huidige waarde van `IE. Trainer`. */
-  readonly ieStatus: string;
+  /** Het labelnummer van `IE. Trainer` nu, of `null` als de cel leeg is. */
+  readonly ieStatusIndex: number | null;
 }
 
 /** Een lege waarde wist een getalkolom; weglaten laat de oude waarde staan. */
@@ -113,7 +118,7 @@ export function evalWriteFor(result: EvalResult, current: CurrentState): EvalWri
    * Alleen `Onvindbaar` zetten wij; `Verzonden`, `Staat klaar` en `IE` horen bij de
    * mailstap en bij ITG's eigen werkstroom. Die mogen hier nooit overschreven worden.
    */
-  const onsOnvindbaar = current.ieStatus.trim() === IE_STATUS_ONVINDBAAR;
+  const onsOnvindbaar = current.ieStatusIndex === IE_STATUS_INDEX.onvindbaar;
 
   switch (result.kind) {
     case 'ok': {
@@ -147,14 +152,14 @@ export function evalWriteFor(result: EvalResult, current: CurrentState): EvalWri
        * onaangeroerd, ook als er reacties binnenkomen.
        */
       if (onsOnvindbaar) {
-        values[IE_STATUS_COLUMN] = { label: IE_STATUS_NEUTRAAL };
+        values[IE_STATUS_COLUMN] = { index: IE_STATUS_INDEX.neutraal };
       }
       return {
         values,
         summary:
           `${result.responseCount} reacties, gemiddeld ${result.gemiddelde ?? '—'}` +
           (onsOnvindbaar
-            ? `; ${IE_STATUS_ONVINDBAAR} → ${IE_STATUS_NEUTRAAL} (reacties alsnog gevonden)`
+            ? `; ${IE_NAAM.onvindbaar} → ${IE_NAAM.neutraal} (reacties alsnog gevonden)`
             : ''),
       };
     }
@@ -166,13 +171,13 @@ export function evalWriteFor(result: EvalResult, current: CurrentState): EvalWri
        */
       return {
         values: {
-          [IE_STATUS_COLUMN]: { label: IE_STATUS_ONVINDBAAR },
+          [IE_STATUS_COLUMN]: { index: IE_STATUS_INDEX.onvindbaar },
           [EVAL_COLUMNS.respondenten]: 0,
           // Ook hier wissen: een cijfer van een eerdere run naast nul respondenten is een
           // tegenspraak die er verzorgd uitziet.
           [EVAL_COLUMNS.eindcijfer]: CLEAR_NUMBER,
         },
-        summary: `status → ${IE_STATUS_ONVINDBAAR} (nul reacties)`,
+        summary: `status → ${IE_NAAM.onvindbaar} (nul reacties)`,
       };
 
     case 'no_code':

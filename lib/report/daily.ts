@@ -360,6 +360,7 @@ async function mailForTraining(
     const facts = buildMailFacts({
       datum: training.datum,
       klanttitel: training.klanttitel,
+      klant: training.klant,
       themaNamen: training.themaNamen,
       labelNaam: label.volledigeNaam,
       rapportterm: label.rapportterm,
@@ -535,7 +536,7 @@ export async function verwerkTraining(
   result: EvalResult,
   options: VerwerkOptions
 ): Promise<Verwerking> {
-  const write = evalWriteFor(result, { ieStatus: training.ieStatus });
+  const write = evalWriteFor(result, { ieStatusIndex: training.ieStatusIndex });
   const heeftWaarden = Object.keys(write.values).length > 0;
 
   if (heeftWaarden && !options.dryRun) {

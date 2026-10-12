@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@components/ui/button';
 import { Textarea } from '@components/ui/textarea';
 
+import type { ConceptBron } from '@lib/briefing/concept';
+
 /**
  * De concept-inhoud: het enige veld van de briefing dat vrije tekst is.
  *
@@ -23,8 +25,10 @@ import { Textarea } from '@components/ui/textarea';
  */
 
 export interface ConceptPanelProps {
-  /** Het skelet van het thema, zoals het in Monday staat. */
+  /** De voorvulling: de bullets van de Opportunity, of anders het skelet van het thema. */
   readonly skelet: readonly string[];
+  /** Waar de voorvulling vandaan komt; de uitleg en de herstelknop zeggen het erbij. */
+  readonly bron: ConceptBron;
   /** Wat de adviseur heeft getypt, of `null` als hij het niet heeft aangeraakt. */
   readonly eigen: string | null;
   /** Hoe het in het document komt te staan, met de klantnaam ingevuld. */
@@ -32,7 +36,22 @@ export interface ConceptPanelProps {
   onChange(next: string | undefined): void;
 }
 
-export const ConceptPanel = ({ skelet, eigen, resultaat, onChange }: ConceptPanelProps) => {
+/** Wat de uitleg en de knop zeggen, per herkomst van de voorvulling. */
+const TEKST: Readonly<Record<ConceptBron, { uitleg: string; terug: string; knop: string }>> = {
+  thema: {
+    uitleg: 'Dit is het skelet van het thema.',
+    terug: 'het thema-skelet',
+    knop: 'Herstel het skelet',
+  },
+  opportunity: {
+    uitleg: 'Dit heeft de accountmanager op de Opportunity gezet.',
+    terug: 'de tekst van de Opportunity',
+    knop: 'Herstel de Opportunity-tekst',
+  },
+};
+
+export const ConceptPanel = ({ skelet, bron, eigen, resultaat, onChange }: ConceptPanelProps) => {
+  const tekstBron = TEKST[bron];
   const skeletTekst = skelet.join('\n');
   const [tekst, setTekst] = useState(eigen ?? skeletTekst);
 
@@ -70,14 +89,14 @@ export const ConceptPanel = ({ skelet, eigen, resultaat, onChange }: ConceptPane
         <h2 className="text-sm font-semibold">Concept inhoud</h2>
         {aangepast && (
           <Button variant="ghost" size="sm" onClick={herstel}>
-            Herstel het skelet
+            {tekstBron.knop}
           </Button>
         )}
       </div>
       <p className="text-xs text-muted-foreground">
         {aangepast
-          ? 'Aangepast voor deze training. Herstellen zet het thema-skelet terug.'
-          : 'Dit is het skelet van het thema. Pas je het aan, dan geldt jouw versie alleen voor deze training.'}
+          ? `Aangepast voor deze training. Herstellen zet ${tekstBron.terug} terug.`
+          : `${tekstBron.uitleg} Pas je het aan, dan geldt jouw versie alleen voor deze training.`}
       </p>
       <Textarea
         value={tekst}

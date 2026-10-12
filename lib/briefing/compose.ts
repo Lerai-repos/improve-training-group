@@ -53,7 +53,7 @@ import {
   reisPerSessie,
 } from './cyclus-document';
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
-import { resolveConceptInhoud } from './concept';
+import { resolveConceptInhoud, standaardConcept } from './concept';
 import { gevuldeSectie, standaardTekstenVoor, type GevuldeSectie } from './teksten';
 
 import { classify, type Recipient, type RoleOverrides } from './recipients';
@@ -350,7 +350,7 @@ export function composeBriefing(
     extraInfo: extras.extraInfo ?? [MISSING.extraInfo],
     bullets: extras.bullets ??
       resolveConceptInhoud({
-        themaTekst: training.themaInhoud,
+        themaTekst: standaardConcept(training).tekst,
         adviseurTekst: checklist.conceptInhoud,
         organisatie: training.opdrachtgever,
       }) ?? [MISSING.bullets],

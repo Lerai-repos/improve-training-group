@@ -71,6 +71,9 @@ const TRAINING: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: 'opp1',
   achtergrond: 'Iets over de klant.',
+  conceptProgramma: '',
+  extraInfo: '',
+  aandacht: null,
   opdrachten: { trainingCycle: true, homework: false, preparatoryAssignment: false },
   cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04')], anker: '900' },
   cyclusKeuze: { opties: [optie('900', true), optie('901', false)], openstaand: false },
@@ -78,7 +81,11 @@ const TRAINING: BriefingTraining = {
   missing: [],
 };
 
-function stel(over: { cyclus?: UseBriefingView['cyclus']; generate?: GenerateState }): {
+function stel(over: {
+  cyclus?: UseBriefingView['cyclus'];
+  generate?: GenerateState;
+  training?: Partial<BriefingTraining>;
+}): {
   view: UseBriefingView;
   generate: Parameters<typeof BriefingView>[0]['generate'];
 } {
@@ -88,7 +95,7 @@ function stel(over: { cyclus?: UseBriefingView['cyclus']; generate?: GenerateSta
     status: {
       kind: 'loaded',
       payload: { training: TRAINING, saved: null, token: 't', unreadable: false },
-      view: buildTabView(TRAINING, { ...EMPTY_SAVED, actorAnswered: true }),
+      view: buildTabView({ ...TRAINING, ...over.training }, { ...EMPTY_SAVED, actorAnswered: true }),
     },
     save: { kind: 'rust' },
     answers: EMPTY_SAVED,
@@ -116,6 +123,32 @@ function stel(over: { cyclus?: UseBriefingView['cyclus']; generate?: GenerateSta
 const knop = (naam: RegExp) => screen.getByRole('button', { name: naam });
 
 describe('BriefingView', () => {
+  /** Dirkje, 12-Oct-2026: de vraag op de Opportunity als melding bij het maken van de briefing. */
+  it('toont bovenaan wat de accountmanager over extra aandacht zei', () => {
+    const { view, generate } = stel({
+      training: { aandacht: 'Complexe opdracht, aub extra check bij AM' },
+    });
+    render(<BriefingView view={view} generate={generate} />);
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Extra aandacht nodig: Complexe opdracht, aub extra check bij AM'
+    );
+  });
+
+  it('toont geen melding als er geen extra aandacht nodig is', () => {
+    const { view, generate } = stel({});
+    render(<BriefingView view={view} generate={generate} />);
+
+    expect(screen.queryByText(/Extra aandacht nodig/)).toBeNull();
+  });
+
+  it('zegt bij Concept inhoud dat de tekst van de Opportunity komt', () => {
+    const { view, generate } = stel({ training: { conceptProgramma: 'Uit de offerte.' } });
+    render(<BriefingView view={view} generate={generate} />);
+
+    expect(screen.getByText(/accountmanager op de Opportunity gezet/)).not.toBeNull();
+  });
+
   it('laat beide knoppen werken als er niets loopt', () => {
     const { view, generate } = stel({});
     render(<BriefingView view={view} generate={generate} />);

@@ -84,3 +84,16 @@ lus, niet meer op de inleiding: die kan ITG leegmaken.
 
 `verify-blocks.py` is daarbij vervallen. Die legde de blokteksten in `blocks.ts` naast ITG's
 bronbestand; die teksten zijn nu de beginwaarden van het bord, en daarna zijn ze van ITG.
+
+## Stap vier: de volgorde (12-Oct-2026)
+
+Dirkje wil eerst het concept programma en dan pas de teksten voor de rol. `volgorde.py`
+verplaatst in de bestaande sjablonen de rolblokkenlus naar vlak boven de overige blokken:
+
+```bash
+python3 tools/briefing-templates/volgorde.py
+```
+
+Volgorde daarna: `Concept inhoud` (kop, inleiding, bullets) → rolblokken → overige blokken →
+`Inventarisatie klant`. Een sjabloon dat al goed staat slaat hij over. Genereer je ooit opnieuw
+met `convert.py` + `body.py`, draai dan `teksten.py` en daarna dit.

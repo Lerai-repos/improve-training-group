@@ -5,7 +5,7 @@ import { isTransient, MAIL_ATTEMPTS, sendWithRetry } from '../retry';
 
 import type { MailSender, OutgoingMail } from '../types';
 
-const mail: OutgoingMail = { to: ['a@b.nl'], subject: 'x', body: 'y' };
+const mail: OutgoingMail = { to: ['a@b.nl'], subject: 'x', body: 'y', html: '<p>y</p>' };
 
 /** Faalt de eerste `keer` pogingen en slaagt daarna. */
 function flakySender(keer: number, error: unknown): { sender: MailSender; pogingen: () => number } {

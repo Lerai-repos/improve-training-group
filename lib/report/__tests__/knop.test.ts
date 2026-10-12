@@ -10,7 +10,7 @@ import {
   parseEvalKnopWebhook,
   runEvalKnop,
 } from '../knop';
-import { EVAL_COLUMNS, IE_STATUS_COLUMN } from '../record';
+import { EVAL_COLUMNS, IE_STATUS_COLUMN, IE_STATUS_INDEX } from '../record';
 
 import type { EvaluationResponse } from '@lib/evaluations';
 import type { LabelRecord } from '@lib/labels/read';
@@ -104,7 +104,8 @@ const training: TrainingForReport = {
   labelCode: 'IT',
   rawIeCode: '260814',
   rawLabel: 'IT',
-  ieStatus: 'Onvindbaar',
+  klant: '',
+  ieStatusIndex: IE_STATUS_INDEX.onvindbaar,
   datum: '2026-09-17',
   themaNamen: ['Persoonlijke effectiviteit'],
   trainerItemIds: ['t1'],
@@ -224,7 +225,7 @@ describe('runEvalKnop', () => {
       {
         [EVAL_COLUMNS.respondenten]: 1,
         [EVAL_COLUMNS.eindcijfer]: 8,
-        [IE_STATUS_COLUMN]: { label: 'IE' },
+        [IE_STATUS_COLUMN]: { index: IE_STATUS_INDEX.neutraal },
       },
     ]);
     expect(h.verstuurd).toHaveLength(2);
@@ -261,7 +262,7 @@ describe('runEvalKnop', () => {
   it('zet zonder reacties Onvindbaar en stuurt de twee ZONDER-mails', async () => {
     const h = harness({ readResponses: async () => [] });
     await runEvalKnop(h.deps, 'i1', BORD);
-    expect(h.geschreven[0][IE_STATUS_COLUMN]).toEqual({ label: 'Onvindbaar' });
+    expect(h.geschreven[0][IE_STATUS_COLUMN]).toEqual({ index: IE_STATUS_INDEX.onvindbaar });
     expect(h.verstuurd).toHaveLength(2);
     expect(h.verstuurd.every((m) => m.attachment === undefined)).toBe(true);
     expect(h.statussen).toEqual(['leeg']);

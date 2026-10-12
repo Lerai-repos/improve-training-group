@@ -73,12 +73,18 @@ const INVOER = {
  * foutpaden afdekt ziet dat niet; deze legt het geslaagde pad vast.
  */
 describe('createBriefingRecorder', () => {
-  function mutatieClient(): MondayMutationClient & { documenten: readonly string[] } {
+  function mutatieClient(): MondayMutationClient & {
+    documenten: readonly string[];
+    variabelen: readonly Record<string, unknown>[];
+  } {
     const documenten: string[] = [];
+    const variabelen: Record<string, unknown>[] = [];
     return {
       documenten,
-      mutate: <T>(document: string): Promise<T> => {
+      variabelen,
+      mutate: <T>(document: string, vars: Record<string, unknown> = {}): Promise<T> => {
         documenten.push(document);
+        variabelen.push(vars);
         // Wat `create_item` teruggeeft; `setBrie` kijkt er niet naar.
         return Promise.resolve({ create_item: { id: '42' } } as T);
       },
@@ -106,7 +112,19 @@ describe('createBriefingRecorder', () => {
 
     await createBriefingRecorder(client, '5087396949').setBrie('900', 'Staat klaar');
 
-    expect(client.documenten[0]).toContain('change_simple_column_value');
+    expect(client.documenten[0]).toContain('change_column_value');
+  });
+
+  /** Op labelnummer: ITG mag `Brie` hernoemen, en dan wierp het schrijven van de tekst. */
+  it.each([
+    ['Staat klaar', 3],
+    ['Begonnen, niet klaar', 0],
+  ] as const)('schrijft %s als labelnummer %i', async (status, nummer) => {
+    const client = mutatieClient();
+
+    await createBriefingRecorder(client, '5087396949').setBrie('900', status);
+
+    expect(client.variabelen[0]?.value).toBe(JSON.stringify({ index: nummer }));
   });
 
   /**

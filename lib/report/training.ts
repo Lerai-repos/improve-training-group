@@ -44,22 +44,32 @@ export interface TrainingForReport extends ReportTraining {
   readonly trainerItemIds: readonly string[];
   /** De naam uit de people-kolom, voor de CC-regel in de trainermail. Mag leeg zijn. */
   readonly accountmanager: string;
+  /**
+   * De klant, uit de `Bedrijf`-mirror (`opdrachtgever`), en anders de itemnaam. Voor het
+   * onderwerp, de kop en de bestandsnaam van de mails.
+   */
+  readonly klant: string;
   /** Ruwe inhoud van de IE-codekolom; de toekenning splitst hem zelf. */
   readonly rawIeCode: string | null;
   /** Wat er in `status23` stond, ook als wij het niet kennen — voor de foutmelding. */
   readonly rawLabel: string;
   /**
-   * De huidige waarde van `IE. Trainer`.
+   * Het labelnummer van `IE. Trainer` nu, of `null` bij een lege cel.
    *
    * Nodig om te kunnen bepalen of een eerdere `Onvindbaar` van ONS is en dus opgeruimd mag
-   * worden, zonder een handmatige `Verzonden` of `Staat klaar` te overschrijven.
+   * worden, zonder een handmatige `Verzonden` of `Staat klaar` te overschrijven. Op nummer,
+   * zodat ITG het label mag hernoemen; zie `IE_STATUS_INDEX`.
    */
-  readonly ieStatus: string;
+  readonly ieStatusIndex: number | null;
 }
 
 interface RelationCell {
   id: string;
   text?: string | null;
+  /** Een mirror levert zijn waarde hier, niet in `text`. */
+  display_value?: string | null;
+  /** `StatusValue.index`; `null` bij een lege cel. */
+  index?: number | null;
   linked_items?: Array<{ id: string; name: string }> | null;
 }
 
@@ -86,6 +96,7 @@ const FIELDS = [
   C.qr,
   C.datum,
   C.accountmanager,
+  C.opdrachtgever,
   IE_STATUS_COLUMN,
 ] as const;
 
@@ -121,6 +132,7 @@ export async function readTrainingForReport(
   const data = await client.query(
     `query ($i: [ID!]) { items(ids: $i) { id name board { id } ` +
       `column_values(ids: [${ids}]) { id text ` +
+      `... on StatusValue { index } ... on MirrorValue { display_value } ` +
       `... on BoardRelationValue { linked_items { id name } } } } }`,
     { i: [itemId] }
   );
@@ -200,7 +212,12 @@ export async function readTrainingForReport(
     labelCode: rawLabel === '' ? null : resolveLabelCode(rawLabel),
     rawIeCode: rawIeCode === '' ? null : rawIeCode,
     rawLabel,
-    ieStatus: textOf(item, IE_STATUS_COLUMN),
+    ieStatusIndex: cell(item, IE_STATUS_COLUMN)?.index ?? null,
+    /**
+     * `Bedrijf`, en anders de itemnaam: die is op het agendabord de klantnaam ("Nationaal Media
+     * Onderzoek", waar `Bedrijf` leeg was). Gemeten 12-Oct-2026: 1 van 200 zonder `Bedrijf`.
+     */
+    klant: (cell(item, C.opdrachtgever)?.display_value ?? '').trim() || item.name.trim(),
     /**
      * De datumkolom levert `YYYY-MM-DD` als tekst. Leeg wordt `null` en niet de lege string,
      * zodat de mailtekst het verschil kan maken tussen "geen datum" en een lege zin.

@@ -23,7 +23,7 @@ import type { BriefingTraining } from '../types';
  * `render.test.ts` rendert alléén `IT`. Dat is genoeg om te controleren of de commando's
  * werken, maar niet of de negen sjablonen dezelfde opbouw hebben — en die opbouw is precies
  * wat op 24-Aug-2026 verbouwd is: de gegevenstabel uit het tekstvak, de gele markering eruit,
- * echte opsommingstekens, en de rolblokken boven `Concept inhoud`.
+ * echte opsommingstekens, en de rolblokken onder `Concept inhoud`.
  *
  * Elk van die vier faalt **stil**. Een sjabloon dat opnieuw gegenereerd wordt met een oudere
  * `convert.py` levert een document op dat prima opent, waarin Word de tabel gewoon toont, en
@@ -279,16 +279,18 @@ describe.each(LABELS)('sjabloon %s', (label) => {
   });
 
   /**
-   * Tim, 24-Aug-2026: *"i think it should be above the concept inhoud. So the page starts
-   * with that."* De trainer leest eerst wat er van hém verwacht wordt, dan pas het programma.
+   * Dirkje, 12-Oct-2026: eerst het concept programma, dan de teksten voor de rol, en daarna de
+   * groep, vaste klant, cyclus en opdrachten. Dat draait Tims keuze van 24-Aug-2026 om.
    */
-  it('zet de rolblokken boven Concept inhoud en de rest eronder', () => {
+  it('zet Concept inhoud bovenaan, dan de rolblokken, dan de rest', () => {
     const xml = templateXml(label);
-    const rol = positionOf(xml, '+++FOR blk IN rolblokken+++');
     const kop = positionOf(xml, '+++FOR s IN concept+++');
+    const bullets = positionOf(xml, '+++FOR b IN bullets+++');
+    const rol = positionOf(xml, '+++FOR blk IN rolblokken+++');
     const rest = positionOf(xml, '+++FOR blk IN blokken+++');
-    expect(rol).toBeLessThan(kop);
-    expect(kop).toBeLessThan(rest);
+    expect(kop).toBeLessThan(bullets);
+    expect(bullets).toBeLessThan(rol);
+    expect(rol).toBeLessThan(rest);
   });
 });
 
@@ -345,6 +347,9 @@ const TRAINING: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
+  conceptProgramma: '',
+  extraInfo: '',
+  aandacht: null,
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
@@ -454,9 +459,11 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
     expect(paragraphAt(xml, positionOf(xml, 'Ontwikkelen van training'))).toContain('<w:numPr>');
   });
 
-  it('zet het rolblok boven Concept inhoud', async () => {
+  it('zet het rolblok onder Concept inhoud', async () => {
     const xml = await renderLead(label);
-    expect(positionOf(xml, 'Leadtrainer')).toBeLessThan(positionOf(xml, 'Concept inhoud'));
+    expect(positionOf(xml, 'Concept inhoud')).toBeLessThan(positionOf(xml, 'Leadtrainer'));
+    // Het blok brengt zijn eigen witregel mee, ook nu het na de bullets komt.
+    expect(blanksBefore(xml, 'Leadtrainer')).toBe(1);
   });
 
   /**

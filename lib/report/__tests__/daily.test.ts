@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { EVAL_COLUMNS, IE_STATUS_COLUMN, evalWriteFor } from '../record';
+import { EVAL_COLUMNS, IE_STATUS_COLUMN, IE_STATUS_INDEX, evalWriteFor } from '../record';
 import { amsterdamHour, classify, previousDay, runDailyReports, shouldRunNow } from '../daily';
 
 import type { EvaluationResponse } from '@lib/evaluations';
@@ -36,7 +36,8 @@ const training: TrainingForReport = {
   labelCode: 'IT',
   rawIeCode: '251050',
   rawLabel: 'IT',
-  ieStatus: '',
+  klant: '',
+  ieStatusIndex: null,
   datum: '2026-09-03',
   themaNamen: ['Onderhandelen'],
   trainerItemIds: ['t1'],
@@ -158,7 +159,7 @@ describe('classify', () => {
 });
 
 describe('evalWriteFor', () => {
-  const leeg = { ieStatus: '' };
+  const leeg = { ieStatusIndex: null };
 
   it('schrijft cijfer en aantal bij een geslaagde run', () => {
     const write = evalWriteFor({ kind: 'ok', responseCount: 30, gemiddelde: '8.0' }, leeg);
@@ -183,7 +184,7 @@ describe('evalWriteFor', () => {
 
   it('zet de status op Onvindbaar bij nul reacties en wist een oud cijfer', () => {
     const write = evalWriteFor({ kind: 'no_responses' }, leeg);
-    expect(write.values[IE_STATUS_COLUMN]).toEqual({ label: 'Onvindbaar' });
+    expect(write.values[IE_STATUS_COLUMN]).toEqual({ index: IE_STATUS_INDEX.onvindbaar });
     expect(write.values[EVAL_COLUMNS.respondenten]).toBe(0);
     expect(write.values[EVAL_COLUMNS.eindcijfer]).toBe('');
   });
@@ -202,19 +203,23 @@ describe('evalWriteFor', () => {
   it('overschrijft een achterhaalde Onvindbaar met de neutrale waarde', () => {
     const write = evalWriteFor(
       { kind: 'ok', responseCount: 12, gemiddelde: '7.9' },
-      { ieStatus: 'Onvindbaar' }
+      { ieStatusIndex: IE_STATUS_INDEX.onvindbaar }
     );
-    expect(write.values[IE_STATUS_COLUMN]).toEqual({ label: 'IE' });
+    expect(write.values[IE_STATUS_COLUMN]).toEqual({ index: IE_STATUS_INDEX.neutraal });
     expect(write.summary).toContain('Onvindbaar → IE');
   });
 
-  /** Maar NOOIT een status van ITG's eigen werkstroom of van de mailstap. */
-  it.each(['Verzonden', 'Staat klaar', 'IE', 'Geen (deze sessie)', 'Aanmaken'])(
-    'laat de status %j met rust bij een geslaagde run',
+  /**
+   * Maar NOOIT een status van ITG's eigen werkstroom of van de mailstap. Op labelnummer, zoals
+   * ze op het bord staan: Aanmaken 0, Staat klaar 1, Geen (deze sessie) 3, Verzonden 4, IE 5,
+   * Def onvindbaar 6.
+   */
+  it.each([0, 1, 3, 4, 5, 6])(
+    'laat de status met labelnummer %i met rust bij een geslaagd rapport',
     (huidig) => {
       const write = evalWriteFor(
         { kind: 'ok', responseCount: 12, gemiddelde: '7.9' },
-        { ieStatus: huidig }
+        { ieStatusIndex: huidig }
       );
       expect(write.values[IE_STATUS_COLUMN]).toBeUndefined();
     }
@@ -296,7 +301,7 @@ describe('runDailyReports', () => {
     const writeColumns = vi.fn(async () => undefined);
     await runDailyReports(deps({ readResponses: async () => [], writeColumns }), options);
     expect(writeColumns).toHaveBeenCalledWith('i1', AGENDA_2026, {
-      [IE_STATUS_COLUMN]: { label: 'Onvindbaar' },
+      [IE_STATUS_COLUMN]: { index: IE_STATUS_INDEX.onvindbaar },
       [EVAL_COLUMNS.respondenten]: 0,
       [EVAL_COLUMNS.eindcijfer]: '',
     });

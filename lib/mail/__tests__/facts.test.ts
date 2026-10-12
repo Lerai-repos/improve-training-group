@@ -7,6 +7,7 @@ import type { FactsInput } from '../facts';
 const basis: FactsInput = {
   datum: '2026-09-03',
   klanttitel: 'Building Boksing + Conflicthantering',
+  klant: 'Gemeente Emmen',
   themaNamen: ['Feedback geven'],
   labelNaam: 'Incompany Trainer',
   rapportterm: 'de training',

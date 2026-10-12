@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
 import { AGENDA_HISTORY_BOARDS } from '@lib/evaluations';
+import { IE_STATUS_COLUMN, IE_STATUS_INDEX } from '../record';
 import { readTrainingForReport } from '../training';
 
 const C = BRIEFING_AGENDA_COLUMNS;
@@ -20,6 +21,8 @@ const THEMA_2025 = 'board_relation_mkz4hjnt';
 interface Cell {
   id: string;
   text?: string | null;
+  index?: number | null;
+  display_value?: string | null;
   linked_items?: Array<{ id: string; name: string }> | null;
 }
 
@@ -77,6 +80,43 @@ describe('readTrainingForReport', () => {
       labelCode: 'IT',
       rawIeCode: '251050',
     });
+  });
+
+  /**
+   * Op labelnummer: ITG mag `IE. Trainer` hernoemen. Met de tekst las een hernoemde
+   * `Onvindbaar` als iets van hen, en bleef "niets gevonden" naast een cijfer staan.
+   */
+  it('leest IE. Trainer op labelnummer, niet op tekst', async () => {
+    const raw = item(AGENDA_2026, [
+      { id: IE_STATUS_COLUMN, text: 'Niets binnengekomen', index: IE_STATUS_INDEX.onvindbaar },
+    ]);
+    const t = await readTrainingForReport(clientFor(raw), 'i1', BOARDS);
+    expect(t?.ieStatusIndex).toBe(IE_STATUS_INDEX.onvindbaar);
+  });
+
+  /** Een mirror levert zijn waarde in `display_value`; `text` is daar altijd null. */
+  it('leest de klant uit de Bedrijf-mirror', async () => {
+    const raw = item(AGENDA_2026, [
+      { id: C.opdrachtgever, text: null, display_value: 'Gemeente Emmen' },
+    ]);
+    const t = await readTrainingForReport(clientFor(raw), 'i1', BOARDS);
+    expect(t?.klant).toBe('Gemeente Emmen');
+  });
+
+  it('valt voor de klant terug op de itemnaam als Bedrijf leeg is', async () => {
+    const raw = item(
+      AGENDA_2026,
+      [{ id: C.opdrachtgever, text: null, display_value: '' }],
+      'Nationaal Media Onderzoek'
+    );
+    const t = await readTrainingForReport(clientFor(raw), 'i1', BOARDS);
+    expect(t?.klant).toBe('Nationaal Media Onderzoek');
+  });
+
+  it('leest een lege IE. Trainer als geen nummer', async () => {
+    const raw = item(AGENDA_2026, [{ id: IE_STATUS_COLUMN, text: '', index: null }]);
+    const t = await readTrainingForReport(clientFor(raw), 'i1', BOARDS);
+    expect(t?.ieStatusIndex).toBeNull();
   });
 
   it('gebruikt de itemnaam als de klanttitelkolom leeg is', async () => {

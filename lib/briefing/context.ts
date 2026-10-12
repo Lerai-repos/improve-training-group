@@ -19,7 +19,7 @@ import { loadSettingsOnce } from '@lib/settings/load';
 
 import { readHistorie } from './historie';
 import { readTrainerAddresses, resolveBriefingTravel } from './reis';
-import { readExtraInfo } from './updates';
+import { extraInfoRegels, readExtraInfo } from './updates';
 
 import type { GenerateContext } from './generate';
 import type { TravelInput } from './format';
@@ -203,7 +203,7 @@ export async function buildGenerateContext(
     context: {
       teksten,
       historie,
-      extraInfo: extraInfo.lines,
+      extraInfo: extraInfoRegels(training.extraInfo, extraInfo.lines),
       reis,
       reisSessies,
       actorItemIds: input.actorItemIds,

@@ -102,7 +102,7 @@ const recipients = (adressen: readonly string[]): Array<{ emailAddress: { addres
 
 const messageBody = (mail: OutgoingMail): Record<string, unknown> => ({
   subject: mail.subject,
-  body: { contentType: 'Text', content: mail.body },
+  body: { contentType: 'HTML', content: mail.html },
   toRecipients: recipients(mail.to),
 });
 

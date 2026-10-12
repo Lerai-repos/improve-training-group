@@ -161,6 +161,24 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
       </header>
 
       {/**
+       * De accountmanager vroeg bij de Opportunity om extra aandacht (Dirkje, 12-Oct-2026).
+       * Bovenaan en niet in de checklist: het is een waarschuwing vóór het werk, geen veld dat
+       * de briefing onaf maakt.
+       */}
+      {tab.aandacht !== null && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-md border border-primary/40 bg-primary/10 p-3 text-sm"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <p>
+            <span className="font-semibold">Extra aandacht nodig: </span>
+            {tab.aandacht}
+          </p>
+        </div>
+      )}
+
+      {/**
        * Een botsing is geen fout maar een vraag: iemand anders heeft opgeslagen terwijl deze
        * tab open stond. Blind doorschrijven zou hun werk wissen, dus tonen we het en bieden we
        * opnieuw laden aan.
@@ -218,6 +236,7 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
           >
             <ConceptPanel
               skelet={tab.conceptSkelet}
+              bron={tab.conceptBron}
               eigen={tab.checklist.conceptInhoud ?? null}
               resultaat={tab.conceptResultaat}
               onChange={handleConcept}

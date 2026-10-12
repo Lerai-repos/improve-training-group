@@ -49,6 +49,9 @@ const PROBIBLIO: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: '2674263314',
   achtergrond: 'Probiblio ondersteunt openbare bibliotheken.',
+  conceptProgramma: '',
+  extraInfo: '',
+  aandacht: null,
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
@@ -821,5 +824,21 @@ describe('composeBriefing — het cyclusdocument', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST, { reis: rit });
     expect(data.datumTijd).toBe('24 maart 2026; 09:30 - 12:30 uur');
     expect(data.reis).toBe('Totaal: 108 km. / Totaal: 85 min. (40 min. factureren)');
+  });
+});
+
+/** Dirkje, 12-Oct-2026: de bullets van de Opportunity gaan vóór het skelet van het thema. */
+describe('de bullets van de Opportunity', () => {
+  it('komen in het document in plaats van het skelet', () => {
+    const data = composeBriefing(
+      { ...PROBIBLIO, themaInhoud: 'Skelet.', conceptProgramma: 'Uit de offerte.' },
+      EMPTY_CHECKLIST
+    );
+    expect(data.bullets).toEqual(['Uit de offerte.']);
+  });
+
+  it('laten het skelet staan als de Opportunity niets heeft', () => {
+    const data = composeBriefing({ ...PROBIBLIO, themaInhoud: 'Skelet.' }, EMPTY_CHECKLIST);
+    expect(data.bullets).toEqual(['Skelet.']);
   });
 });

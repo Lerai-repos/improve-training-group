@@ -9,6 +9,7 @@ import type { MailRecipients } from '../recipients';
 const input: FactsInput = {
   datum: '2026-09-03',
   klanttitel: 'Building Boksing',
+  klant: 'Gemeente Emmen',
   themaNamen: ['Feedback geven'],
   labelNaam: 'Incompany Trainer',
   rapportterm: 'de training',
@@ -60,6 +61,12 @@ describe('composeMails', () => {
 });
 
 describe('rapportBestandsnaam', () => {
+  it('noemt de klant, zodat het rapport in een map terug te vinden is', () => {
+    expect(rapportBestandsnaam(facts)).toBe(
+      'Evaluatierapport Gemeente Emmen - Building Boksing (3 september 2026).pdf'
+    );
+  });
+
   it('haalt tekens eruit die een ontvanger niet kan opslaan', () => {
     const raar = buildMailFacts({ ...input, klanttitel: 'Bouw / Techniek: dag 2' });
     const naam = rapportBestandsnaam(raar);
@@ -85,6 +92,7 @@ describe('een rapport waarvan de huisstijl niet opgehaald kon worden', () => {
     const mails = composeMails({ variant: 'met', facts, recipients, rapport: pdf, warnings });
     for (const m of mails) {
       expect(m.mail.body.startsWith('LET OP:')).toBe(true);
+      expect(m.mail.html).toContain('LET OP:');
       expect(m.mail.body).toContain('logo niet opgehaald');
       expect(m.mail.body).toContain('voorblad niet opgehaald');
     }

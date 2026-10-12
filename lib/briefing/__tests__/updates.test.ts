@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isMarked, parseMarkedUpdate, collectExtraInfo } from '../updates';
+import { isMarked, parseMarkedUpdate, collectExtraInfo, extraInfoRegels } from '../updates';
 
 /**
  * Alle vaste tekst hieronder is letterlijk overgenomen uit de live borden op 20-Aug-2026
@@ -151,5 +151,25 @@ describe('collectExtraInfo', () => {
   it('geeft de afkapvlag door', () => {
     expect(collectExtraInfo([], { truncated: true }).truncated).toBe(true);
     expect(collectExtraInfo([]).truncated).toBe(false);
+  });
+});
+
+describe('extraInfoRegels', () => {
+  it('zet het tekstveld van de Opportunity vóór de gemarkeerde updates', () => {
+    expect(extraInfoRegels('Neem een flipover mee.\nParkeren achter.', ['Uit een update.'])).toEqual(
+      ['Neem een flipover mee.', 'Parkeren achter.', 'Uit een update.']
+    );
+  });
+
+  /** Wie overstapt zet dezelfde tekst soms op beide plekken; die hoort er één keer te staan. */
+  it('laat een tekst die ook als update staat maar één keer staan', () => {
+    expect(extraInfoRegels('Neem een flipover mee.', ['neem een  flipover mee.'])).toEqual([
+      'Neem een flipover mee.',
+    ]);
+  });
+
+  it('geeft alleen de updates als het veld leeg is, en niets als beide leeg zijn', () => {
+    expect(extraInfoRegels('', ['Uit een update.'])).toEqual(['Uit een update.']);
+    expect(extraInfoRegels('  ', [])).toEqual([]);
   });
 });

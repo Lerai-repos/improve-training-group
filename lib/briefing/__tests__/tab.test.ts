@@ -43,6 +43,9 @@ const TRAINING: BriefingTraining = {
   acteuraantal: null,
   opportunityItemId: null,
   achtergrond: 'Iets over de klant.',
+  conceptProgramma: '',
+  extraInfo: '',
+  aandacht: null,
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
@@ -714,5 +717,43 @@ describe('buildTabView', () => {
     expect(uit.conceptEigen).toBe('Alleen dit.');
     expect(uit.conceptResultaat).toEqual(['Alleen dit.']);
     expect(uit.conceptSkelet).toEqual(['Plenaire opening.', 'Oefenen bij {organisatie}.']);
+  });
+
+  it('zegt dat de voorvulling van het thema komt als de Opportunity niets heeft', () => {
+    expect(buildTabView(TRAINING, opgeslagen()).conceptBron).toBe('thema');
+  });
+
+  /**
+   * Dirkje, 12-Oct-2026: de accountmanager vult de bullets al in de Opportunityfase in. Die
+   * vervangen het skelet; het blijft één programma, nooit allebei.
+   */
+  it('vult het tekstvak voor met de bullets van de Opportunity, in plaats van het skelet', () => {
+    const uit = buildTabView(
+      { ...TRAINING, conceptProgramma: 'Kennismaken.\nOefenen bij {organisatie}.' },
+      opgeslagen()
+    );
+    expect(uit.conceptBron).toBe('opportunity');
+    expect(uit.conceptSkelet).toEqual(['Kennismaken.', 'Oefenen bij {organisatie}.']);
+    expect(uit.conceptResultaat).toEqual(['Kennismaken.', 'Oefenen bij Welzijn Ermelo.']);
+  });
+
+  it('laat de eigen tekst van de adviseur ook winnen van de Opportunity', () => {
+    const uit = buildTabView(
+      { ...TRAINING, conceptProgramma: 'Kennismaken.' },
+      opgeslagen({ checklist: { ...EMPTY_CHECKLIST, conceptInhoud: 'Alleen dit.' } })
+    );
+    expect(uit.conceptResultaat).toEqual(['Alleen dit.']);
+  });
+
+  /** Een melding in de tab, en geen issue: de briefing is er niet minder compleet door. */
+  it('geeft de extra-aandachtvraag door zonder de briefing onaf te maken', () => {
+    const met = buildTabView(
+      { ...TRAINING, aandacht: 'Complexe opdracht, aub extra check bij AM' },
+      opgeslagen()
+    );
+    const zonder = buildTabView(TRAINING, opgeslagen());
+    expect(met.aandacht).toBe('Complexe opdracht, aub extra check bij AM');
+    expect(zonder.aandacht).toBeNull();
+    expect(met.issues).toEqual(zonder.issues);
   });
 });

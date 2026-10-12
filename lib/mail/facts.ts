@@ -17,6 +17,13 @@ export interface MailFacts {
   readonly datum: string;
   /** De klanttitel van de agenda: "Building Boksing + Conflicthantering". */
   readonly klanttitel: string;
+  /**
+   * De klant, uit de `Bedrijf`-mirror: "Gemeente Emmen". Leeg als er geen bedrijf gekoppeld is.
+   *
+   * De klanttitel noemt de klant vaak niet ("De kracht van lichaamstaal"), en dan is een mail
+   * of rapport in een volle postbus niet terug te vinden (Dirkje, 12-Oct-2026).
+   */
+  readonly klant: string;
   /** De thema's van de training, samengevoegd. Leeg als er geen thema gekoppeld is. */
   readonly thema: string;
   /** "Incompany Trainer" — het merk waaronder getraind is. */
@@ -75,6 +82,7 @@ export function dutchDate(iso: string): string {
 export interface FactsInput {
   readonly datum: string | null;
   readonly klanttitel: string;
+  readonly klant: string;
   readonly themaNamen: readonly string[];
   readonly labelNaam: string;
   readonly rapportterm: string;
@@ -94,6 +102,7 @@ export function buildMailFacts(input: FactsInput): MailFacts {
   return {
     datum: input.datum === null ? '' : dutchDate(input.datum),
     klanttitel: input.klanttitel,
+    klant: input.klant.trim(),
     thema: joinDutch(input.themaNamen),
     labelNaam: input.labelNaam,
     rapportterm: input.rapportterm,
@@ -108,4 +117,19 @@ export function buildMailFacts(input: FactsInput): MailFacts {
     gemiddelde: input.gemiddelde,
     vervolgPercentage: input.vervolgPercentage,
   };
+}
+
+/**
+ * "Gemeente Emmen – Omgaan met agressie": klant en klanttitel, voor het onderwerp en de
+ * bestandsnaam.
+ *
+ * Alleen de titel als er geen klant is, of als de titel de klant al noemt: "Gemeente Emmen –
+ * Gemeente Emmen agressie" leest als een fout.
+ */
+export function klantEnTitel(facts: MailFacts, scheiding = ' – '): string {
+  const klant = facts.klant;
+  if (klant === '' || facts.klanttitel.toLowerCase().includes(klant.toLowerCase())) {
+    return facts.klanttitel;
+  }
+  return facts.klanttitel === '' ? klant : `${klant}${scheiding}${facts.klanttitel}`;
 }

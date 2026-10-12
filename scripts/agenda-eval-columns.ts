@@ -7,8 +7,8 @@ import { agendaBoardId, MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { boardFromArgv } from '@lib/monday/board-arg';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
 import { createMondayMutationClient } from '@lib/monday/mutate';
-import { checkColumn } from '@lib/monday/provisioning';
-import { EVAL_COLUMNS, IE_STATUS_COLUMN, IE_STATUS_ONVINDBAAR } from '@lib/report/record';
+import { statusLabelIndexes } from '@lib/monday/provisioning';
+import { EVAL_COLUMNS, IE_STATUS_COLUMN, IE_STATUS_INDEX } from '@lib/report/record';
 
 /**
  * Maakt de twee getalkolommen waar het evaluatieresultaat in komt te staan.
@@ -99,17 +99,16 @@ async function main(): Promise<void> {
         'kolom kan het "geen data"-signaal nergens heen.'
     );
   }
-  const verdict = checkColumn(
-    { id: IE_STATUS_COLUMN, type: 'status', statusLabels: [IE_STATUS_ONVINDBAAR] },
-    status
-  );
-  if (verdict.kind !== 'ok') {
+  /** Op nummer: ITG mag de labels hernoemen; zie `IE_STATUS_INDEX`. */
+  const nummers = statusLabelIndexes(status.settings_str) ?? [];
+  const ontbreekt = Object.entries(IE_STATUS_INDEX).filter(([, n]) => !nummers.includes(n));
+  if (status.type !== 'status' || ontbreekt.length > 0) {
     throw new Error(
-      `De statuskolom "${status.title}" mist het label ${IE_STATUS_ONVINDBAAR}. Voeg dat in ` +
-        'Monday toe; dit script raakt bestaande statuslabels niet aan.'
+      `De statuskolom "${status.title}" mist label ${ontbreekt.map(([naam, n]) => `${n} (${naam})`).join(', ')}. ` +
+        'Voeg dat in Monday toe; dit script raakt bestaande statuslabels niet aan.'
     );
   }
-  console.log(`  statuskolom "${status.title}" heeft ${IE_STATUS_ONVINDBAAR}  ✓`);
+  console.log(`  statuskolom "${status.title}" heeft de labels voor onvindbaar en neutraal  ✓`);
 
   const existing = new Map(target.columns.map((c) => [c.id, c]));
   let created = 0;

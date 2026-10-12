@@ -181,11 +181,23 @@ export interface BriefingTraining {
   /**
    * De achtergrondinformatie ("de aanleidingtekst") uit `itg_achtergrond` op de Opportunity.
    *
-   * Ruwe tekst met regelafbrekingen; de alinea-indeling gebeurt in de opmaaklaag. Leeg is
-   * normaal zolang ITG de kolom nog aan het vullen is — hij is op 20-Aug-2026 door ons
-   * aangemaakt en begon dus overal leeg.
+   * Eén alinea per regel (`herstelAlineas`). Leeg is normaal zolang ITG de kolom nog aan het
+   * vullen is — hij is op 20-Aug-2026 door ons aangemaakt en begon dus overal leeg.
    */
   readonly achtergrond: string;
+  /**
+   * De bullets voor `Concept inhoud` die de accountmanager op de Opportunity zette, één per
+   * regel; leeg als hij dat niet deed. Gaat vóór het skelet van het thema; zie
+   * `standaardConcept`.
+   */
+  readonly conceptProgramma: string;
+  /** "Extra info voor briefing" op de Opportunity, één alinea per regel; leeg is normaal. */
+  readonly extraInfo: string;
+  /**
+   * De tekst van `Briefing: heeft deze extra aandacht nodig van WS?` als die om aandacht
+   * vraagt, anders `null`. Alleen voor de melding in de tab, niet voor het document.
+   */
+  readonly aandacht: string | null;
   /** Cyclus, huiswerk en voorbereidende opdracht, zoals het agendabord ze aangeeft. */
   readonly opdrachten: BriefingOpdrachten;
   /**

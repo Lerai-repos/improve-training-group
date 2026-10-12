@@ -6,6 +6,7 @@ import {
   IDEMPOTENCY_WINDOW_MS,
   relationBoardIds,
   sampleCleanupPlan,
+  statusLabelIndexes,
   statusLabels,
   unresolvedCreateVerdict,
 } from '../provisioning';
@@ -49,6 +50,17 @@ describe('statusLabels', () => {
   it('geeft null bij instellingen die niet te lezen zijn', () => {
     expect(statusLabels('{}')).toBeNull();
     expect(statusLabels(null)).toBeNull();
+  });
+});
+
+describe('statusLabelIndexes', () => {
+  it('geeft de labelnummers, los van de namen', () => {
+    expect(statusLabelIndexes('{"labels":{"2":"Niets binnen","5":"IE"}}')).toEqual([2, 5]);
+  });
+
+  it('geeft null bij instellingen die niet te lezen zijn', () => {
+    expect(statusLabelIndexes('{}')).toBeNull();
+    expect(statusLabelIndexes(null)).toBeNull();
   });
 });
 

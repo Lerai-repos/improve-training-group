@@ -92,3 +92,23 @@ export function resolveConceptInhoud(input: {
   }
   return fillOrganisatie(lines, input.organisatie);
 }
+
+/** Waar de voorvulling van `Concept inhoud` vandaan komt; het tekstvak zegt het erbij. */
+export type ConceptBron = 'opportunity' | 'thema';
+
+/**
+ * Wat er staat als de adviseur niets typte: de bullets die de accountmanager op de
+ * Opportunity zette, en anders het skelet van het thema.
+ *
+ * Nooit allebei: het is één programma. De Opportunity wint omdat die bullets uit de offerte
+ * komen en al naar de klant zijn geschreven; het skelet is een algemene voorzet (Dirkje,
+ * 12-Oct-2026: "dat is het moment dat het handig is voor de AM's om het in te vullen").
+ */
+export function standaardConcept(training: {
+  readonly conceptProgramma: string;
+  readonly themaInhoud: string;
+}): { readonly tekst: string; readonly bron: ConceptBron } {
+  return training.conceptProgramma.trim() !== ''
+    ? { tekst: training.conceptProgramma, bron: 'opportunity' }
+    : { tekst: training.themaInhoud, bron: 'thema' };
+}

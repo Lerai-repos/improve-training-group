@@ -79,6 +79,11 @@ interface FakeOpts {
   achtergrond?: string;
   /** `Trainingscyclus?` op de Opportunity, als labeltekst. */
   cyclusVariant?: string;
+  /** De bullets en de extra info die de accountmanager op de Opportunity zette. */
+  conceptProgramma?: string;
+  extraInfo?: string;
+  /** `Briefing: heeft deze extra aandacht nodig van WS?`, als labelnummer en tekst. */
+  aandacht?: { index: number | null; text: string };
 }
 
 /** Een bord dat aan alle verwachtingen voldoet, tenzij de test iets omzet. */
@@ -137,6 +142,9 @@ function client(item: unknown, opts: FakeOpts = {}) {
                 text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.',
               },
               { id: 'color_mm724vqh', text: opts.cyclusVariant ?? '' },
+              { id: 'itg_conceptprogramma', text: opts.conceptProgramma ?? '' },
+              { id: 'itg_extrainfo', text: opts.extraInfo ?? '' },
+              { id: 'color_mm7xdcf', ...(opts.aandacht ?? { index: null, text: '' }) },
             ],
           },
         ],
@@ -229,6 +237,18 @@ function client(item: unknown, opts: FakeOpts = {}) {
                   {
                     id: 'color_mm724vqh',
                     title: 'Trainingscyclus?',
+                    type: 'status',
+                    settings_str: '{}',
+                  },
+                  ...['itg_conceptprogramma', 'itg_extrainfo'].map((id) => ({
+                    id,
+                    title: id,
+                    type: 'long_text',
+                    settings_str: '{}',
+                  })),
+                  {
+                    id: 'color_mm7xdcf',
+                    title: 'Briefing: heeft deze extra aandacht nodig van WS?',
                     type: 'status',
                     settings_str: '{}',
                   },
@@ -475,6 +495,45 @@ describe('readBriefingTraining', () => {
     expect(geen.opdrachten.homework).toBe(false);
   });
 
+  /**
+   * ITG mag labels hernoemen (getekende scope). Een hernoemd label houdt zijn nummer, dus de
+   * lezer vertaalt het nummer naar onze woorden en de opmaak blijft hetzelfde zeggen.
+   */
+  it('reads Brie, QR, Call and Taal by label number, not by their text', async () => {
+    const t = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.brie]: { text: 'Intern, geen briefing', index: 2 },
+          [C.qr]: { text: 'QR maken', index: 0 },
+          [C.klantcontactmoment]: { text: 'Online (Teams)', index: 0 },
+          [C.taal]: { text: 'Engels', values: [{ id: 11 }] },
+        })
+      ),
+      '1'
+    );
+    expect(t.brie).toBe('Interne trainer');
+    expect(t.evaluatie).toBe('Aanmaken');
+    expect(t.klantcontactmoment).toBe('Teams');
+    expect(t.voertaal).toBe('ENG');
+  });
+
+  /** Een nieuw label hoort zichtbaar te worden, niet stilzwijgend ergens onder te vallen. */
+  it('passes the board text through for a label number it does not know', async () => {
+    const t = await readBriefingTraining(
+      client(
+        agendaItem({
+          [C.qr]: { text: 'Nog beslissen', index: 9 },
+          [C.klantcontactmoment]: { text: 'Niet nodig', index: 1 },
+          [C.taal]: { text: 'NL, ENG', values: [{ id: 10 }, { id: 11 }] },
+        })
+      ),
+      '1'
+    );
+    expect(t.evaluatie).toBe('Nog beslissen');
+    expect(t.klantcontactmoment).toBe('Niet nodig');
+    expect(t.voertaal).toBe('NL, ENG');
+  });
+
   /** Zonder `values` is de kolom van type veranderd; dat is geen "geen cyclus". */
   it('throws when the duration category comes back without dropdown values', async () => {
     const item = agendaItem({ [C.duurcategorie]: { text: '' } });
@@ -684,8 +743,43 @@ describe('readBriefingTraining', () => {
       client(agendaItem(), { achtergrond: 'Eerste alinea.\n\nTweede alinea.' }),
       '1'
     );
-    expect(t.achtergrond).toBe('Eerste alinea.\n\nTweede alinea.');
+    expect(t.achtergrond).toBe('Eerste alinea.\nTweede alinea.');
     expect(t.missing.map((m) => m.label)).not.toContain('Achtergrondinformatie');
+  });
+
+  /** Monday levert een enter in een lang tekstveld als twee spaties; zie `herstelAlineas`. */
+  it('turns the double spaces Monday stores for an enter back into paragraphs', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), { achtergrond: 'Over de klant.  Aanleiding  Het team wil groeien.' }),
+      '1'
+    );
+    expect(t.achtergrond).toBe('Over de klant.\nAanleiding\nHet team wil groeien.');
+  });
+
+  /** Dirkje, 12-Oct-2026: de accountmanager vult bullets en extra info al op de Opportunity. */
+  it('reads the concept programme and extra info from the Opportunity, as paragraphs', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), {
+        conceptProgramma: 'Kennismaken.  Oefenen met feedback.',
+        extraInfo: 'Neem een flipover mee.',
+      }),
+      '1'
+    );
+    expect(t.conceptProgramma).toBe('Kennismaken.\nOefenen met feedback.');
+    expect(t.extraInfo).toBe('Neem een flipover mee.');
+  });
+
+  /** Op labelnummer, zodat Dirkje de antwoorden mag herformuleren. */
+  it('asks for attention for every label but "geen extra aandacht"', async () => {
+    const lees = async (aandacht: { index: number | null; text: string }) =>
+      (await readBriefingTraining(client(agendaItem(), { aandacht }), '1')).aandacht;
+
+    expect(await lees({ index: 2, text: 'Complexe opdracht, aub extra check bij AM' })).toBe(
+      'Complexe opdracht, aub extra check bij AM'
+    );
+    expect(await lees({ index: 0, text: 'Offerte ernaast houden' })).toBe('Offerte ernaast houden');
+    expect(await lees({ index: 1, text: 'Hernoemd: alles standaard' })).toBeNull();
+    expect(await lees({ index: null, text: '' })).toBeNull();
   });
 
   /** Een van type veranderde kolom is schemadrift en moet hard falen, niet stil leeglopen. */

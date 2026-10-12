@@ -200,7 +200,10 @@ const GEEN_QR = /geen qr/i;
  * een onbekende waarde een zichtbare openstaande regel op.
  *
  * Gemeten over 823 trainingen: dit zijn alle voorkomende waarden op `Geen QR (deze sessie)`
- * (461) en `0. NOTK` (17) na.
+ * (461) en `0. NOTK` (17) na. `TT Aanmaken` kwam er later bij (label 7, 12-Oct-2026).
+ *
+ * De lezer levert hier de woorden van `QR_LABELS`, op labelnummer; een hernoemd label komt dus
+ * nog steeds als `Aanmaken` binnen.
  */
 const QR_WORDT_GEMAAKT: readonly string[] = [
   'Verzonden',
@@ -208,6 +211,7 @@ const QR_WORDT_GEMAAKT: readonly string[] = [
   'Staat klaar',
   'NL Aanmaken',
   'EN Aanmaken',
+  'TT Aanmaken',
 ];
 
 export function formatEvaluation(raw: string): string {

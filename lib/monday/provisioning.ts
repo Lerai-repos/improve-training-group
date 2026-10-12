@@ -48,6 +48,22 @@ export function relationBoardIds(settingsStr: string | null | undefined): readon
   return ids;
 }
 
+/**
+ * De labelnummers van een statuskolom. Voor een controle die het label zoekt dat wij schrijven:
+ * op nummer, want ITG mag het hernoemen en dan houdt het zijn nummer.
+ */
+export function statusLabelIndexes(settingsStr: string | null | undefined): readonly number[] | null {
+  const settings = parseSettings(settingsStr);
+  if (settings === null || !('labels' in settings)) {
+    return null;
+  }
+  const { labels } = settings;
+  if (typeof labels !== 'object' || labels === null || Array.isArray(labels)) {
+    return null;
+  }
+  return Object.keys(labels).map(Number);
+}
+
 /** De labels van een statuskolom, gesorteerd zodat de volgorde van Monday niet meetelt. */
 export function statusLabels(settingsStr: string | null | undefined): readonly string[] | null {
   const settings = parseSettings(settingsStr);

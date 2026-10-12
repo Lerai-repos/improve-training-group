@@ -8,6 +8,7 @@ import type { FactsInput } from '../facts';
 const input: FactsInput = {
   datum: '2026-09-03',
   klanttitel: 'Building Boksing',
+  klant: 'Gemeente Emmen',
   themaNamen: ['Feedback geven'],
   labelNaam: 'Incompany Trainer',
   rapportterm: 'de training',
@@ -126,5 +127,97 @@ describe('een training zonder thema', () => {
     const zonderThema = buildMailFacts({ ...input, themaNamen: [] });
     expect(aftersalesMet(zonderThema).body).toContain('bij jullie de sessie.');
     expect(trainerMet(zonderThema).body).not.toContain('over  gegeven');
+  });
+});
+
+/**
+ * De klanttitel noemt de klant vaak niet ("De kracht van lichaamstaal"), en dan was een
+ * evaluatie in een volle map niet terug te vinden (Dirkje, 12-Oct-2026).
+ */
+describe('de klant', () => {
+  it('staat in de kop, direct onder de training', () => {
+    expect(aftersalesMet(facts).body).toContain('Training: Building Boksing\nKlant: Gemeente Emmen');
+    expect(trainerZonder(facts).body).toContain('Klant: Gemeente Emmen');
+  });
+
+  it('staat in het onderwerp van alle vier de mails', () => {
+    for (const mail of [aftersalesMet, aftersalesZonder, trainerMet, trainerZonder]) {
+      expect(mail(facts).subject).toContain('Gemeente Emmen – Building Boksing');
+    }
+  });
+
+  it('komt niet dubbel als de klanttitel hem al noemt', () => {
+    const dubbel = buildMailFacts({ ...input, klanttitel: 'Gemeente Emmen agressie' });
+    expect(aftersalesMet(dubbel).subject).toContain('Aftersales Gemeente Emmen agressie (');
+  });
+
+  it('zegt dat er geen bedrijf gekoppeld is in plaats van een lege regel', () => {
+    const zonder = buildMailFacts({ ...input, klant: '' });
+    expect(aftersalesMet(zonder).body).toContain('Klant: (geen bedrijf gekoppeld op het agendabord)');
+    expect(aftersalesMet(zonder).subject).toContain('Aftersales Building Boksing (');
+  });
+});
+
+/**
+ * Bij Slides stonden beide teksten tussen aanhalingstekens in één opdracht, en moest de
+ * accountmanager ze eruit knippen. Bij Vervolg staan ze als twee kant-en-klare alinea's en
+ * verwijder je de andere; dat werkt fijn (Dirkje), dus Slides werkt nu ook zo.
+ */
+describe('het Slides-blok', () => {
+  const { body } = aftersalesMet(facts);
+
+  it('geeft twee kant-en-klare varianten, net als Vervolg', () => {
+    expect(body).toContain(
+      'Variant A: Hierbij vind je ook de slides van de sessie. Handig als naslagwerk.'
+    );
+    expect(body).toContain('Variant B: In de bijlage vind je ook de slides van de sessie.');
+  });
+
+  it('zet geen te kiezen tekst meer tussen aanhalingstekens', () => {
+    expect(body).not.toContain('KIES: "');
+    expect(body).not.toMatch(/"Hierbij vind je/);
+  });
+});
+
+/** Kopjes dikgedrukt en Calibri 11, zoals de mails vóór de overstap (Dirkje, 12-Oct-2026). */
+describe('de HTML-versie', () => {
+  const { body, html } = aftersalesMet(facts);
+
+  it('staat in Calibri 11', () => {
+    expect(html).toContain('font-family:Calibri');
+    expect(html).toContain('font-size:11pt');
+  });
+
+  it('zet de kopjes dikgedrukt', () => {
+    for (const kop of ['Evaluatie', 'Individuele evaluatie deelnemers', 'Slides', 'Vervolg']) {
+      expect(html).toContain(`<b>${kop}</b>`);
+    }
+    expect(trainerMet(facts).html).toContain('<b>Individuele evaluatie deelnemers</b>');
+  });
+
+  it('maakt de formulierlinks klikbaar', () => {
+    expect(aftersalesZonder(facts).html).toContain(
+      '<a href="https://forms.gle/P9CBnDgVhbz8iRZp9">https://forms.gle/P9CBnDgVhbz8iRZp9</a>'
+    );
+  });
+
+  it('laat tekst uit Monday nooit als HTML meelopen', () => {
+    const vies = buildMailFacts({ ...input, klanttitel: 'Feedback <script> & meer' });
+    const { html: schoon } = aftersalesMet(vies);
+    expect(schoon).toContain('Feedback &lt;script&gt; &amp; meer');
+    expect(schoon).not.toContain('<script>');
+  });
+
+  /** De HTML is een opmaak van de tekst, geen tweede tekst die uit de pas kan lopen. */
+  it('zegt woord voor woord hetzelfde als de platte tekst', () => {
+    const alsTekst = html
+      .replace(/<\/p>/g, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, '')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&');
+    expect(alsTekst.trimEnd()).toBe(body);
   });
 });
