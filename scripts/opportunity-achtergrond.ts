@@ -9,8 +9,8 @@ import { createMondayMutationClient } from '@lib/monday/mutate';
 import { OPPORTUNITY_BOARD, OPPORTUNITY_COLUMNS } from '@lib/briefing/columns';
 
 /**
- * Maakt onze lange tekstkolommen op het Opportunitybord: de achtergrondinformatie, het
- * concept programma en de extra info voor de briefing. Een kolom die er al staat blijft
+ * Maakt onze kolommen op het Opportunitybord: de achtergrondinformatie, het concept programma
+ * en de extra info voor de briefing (lange tekst), en de link naar het inventarisatieformulier. Een kolom die er al staat blijft
  * ongemoeid, dus opnieuw draaien maakt alleen wat er nog mist.
  *
  * Het concept programma en de extra info kwamen er 12-Oct-2026 bij (Dirkje): de
@@ -44,14 +44,22 @@ const EXIT_FAILURE = 1;
  * `long_text` en niet `text`, omdat de tekst uit meerdere alinea's bestaat — Dirkje zegt dat
  * expliciet. Een `text`-kolom kapt af en slikt regelafbrekingen.
  */
-const KOLOMMEN: ReadonlyArray<{ readonly id: string; readonly titel: string }> = [
+const KOLOMMEN: ReadonlyArray<{
+  readonly id: string;
+  readonly titel: string;
+  readonly type: 'long_text' | 'link';
+}> = [
   /** Gelijk aan het kopje in de briefing. */
-  { id: OPPORTUNITY_COLUMNS.achtergrond, titel: 'Achtergrondinformatie' },
-  { id: OPPORTUNITY_COLUMNS.conceptProgramma, titel: 'Concept programma (briefing)' },
-  { id: OPPORTUNITY_COLUMNS.extraInfo, titel: 'Extra info voor briefing' },
+  { id: OPPORTUNITY_COLUMNS.achtergrond, titel: 'Achtergrondinformatie', type: 'long_text' },
+  {
+    id: OPPORTUNITY_COLUMNS.conceptProgramma,
+    titel: 'Concept programma (briefing)',
+    type: 'long_text',
+  },
+  { id: OPPORTUNITY_COLUMNS.extraInfo, titel: 'Extra info voor briefing', type: 'long_text' },
+  /** Gevuld door ons (`lib/inventarisatie`), niet door ITG. */
+  { id: OPPORTUNITY_COLUMNS.inventarisatie, titel: 'Inventarisatieformulier', type: 'link' },
 ];
-
-const COLUMN_TYPE = 'long_text';
 
 interface BoardColumn {
   id: string;
@@ -95,9 +103,9 @@ async function main(): Promise<void> {
   for (const kolom of KOLOMMEN) {
     const bestaand = board.columns.find((c) => c.id === kolom.id);
     if (bestaand !== undefined) {
-      if (bestaand.type !== COLUMN_TYPE) {
+      if (bestaand.type !== kolom.type) {
         throw new Error(
-          `Kolom ${kolom.id} bestaat al maar is type '${bestaand.type}', verwacht '${COLUMN_TYPE}'. ` +
+          `Kolom ${kolom.id} bestaat al maar is type '${bestaand.type}', verwacht '${kolom.type}'. ` +
             'Handmatig corrigeren; dit script overschrijft geen bestaande kolom.'
         );
       }
@@ -105,7 +113,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    console.log(`${apply ? '  APPLY ' : '  would '}create column ${kolom.id} "${kolom.titel}" (${COLUMN_TYPE})`);
+    console.log(`${apply ? '  APPLY ' : '  would '}create column ${kolom.id} "${kolom.titel}" (${kolom.type})`);
     if (!apply) {
       continue;
     }
@@ -113,7 +121,7 @@ async function main(): Promise<void> {
       `mutation ($board: ID!, $title: String!, $type: ColumnType!, $id: String!) {
          create_column(board_id: $board, title: $title, column_type: $type, id: $id) { id }
        }`,
-      { board: OPPORTUNITY_BOARD, title: kolom.titel, type: COLUMN_TYPE, id: kolom.id },
+      { board: OPPORTUNITY_BOARD, title: kolom.titel, type: kolom.type, id: kolom.id },
       // De kolom-id in de sleutel, zodat een herhaalde run dezelfde bedoeling hergebruikt in
       // plaats van een tweede kolom te maken binnen Monday's venster van 30 minuten.
       { idempotencyKey: `opportunity-achtergrond:${OPPORTUNITY_BOARD}:${kolom.id}` }

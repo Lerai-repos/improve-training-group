@@ -212,6 +212,14 @@ export const OPPORTUNITY_COLUMNS = {
    * labelnummer; zie `AANDACHT_GEEN`.
    */
   aandacht: 'color_mm7xdcf',
+  /** `Label`, van ITG; staat er vanaf het begin. Gelezen op labelnummer, zie `lib/inventarisatie`. */
+  label: 'label',
+  /**
+   * De link naar het inventarisatieformulier op de website van het label, met de Opportunity
+   * als referentie. Door ons gevuld (`lib/inventarisatie`), aangemaakt met
+   * `pnpm opportunity:kolommen`.
+   */
+  inventarisatie: 'itg_inventarisatie',
 } as const;
 
 /**

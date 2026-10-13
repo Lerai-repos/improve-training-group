@@ -30,6 +30,10 @@
       "schedule": "45 3 * * *"
     },
     {
+      "path": "/api/cron/inventarisatie-links",
+      "schedule": "30 2 * * *"
+    },
+    {
       "path": "/api/cron/sync-webhooks",
       "schedule": "7 * * * *"
     }
