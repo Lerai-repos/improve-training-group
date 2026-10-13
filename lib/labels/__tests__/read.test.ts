@@ -73,7 +73,6 @@ describe('mapLabelItems', () => {
   it('geeft een lege link terug als lege string, niet als undefined', () => {
     const { records } = mapLabelItems([filled('IT')]);
     expect(records[0]?.website).toBe('');
-    expect(records[0]?.inventarisatieformulier).toBe('');
   });
 
   it('leest de eerste afbeelding uit een bestandskolom', () => {

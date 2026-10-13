@@ -88,7 +88,6 @@ export function resolveLabelCode(raw: string): LabelCode | null {
  * |---|---|
  * | naam, kleur, term, rapportterm, evaluatieformulier | `snapshots/airtable/label_configuratie.json`, letterlijk |
  * | website | afgeleid van het domein van de evaluatieformulier-URL, alle acht geverifieerd op 200 |
- * | inventarisatieformulier | Dirkje's annotatie in `docs/build/06-briefing.md`, alle zes geverifieerd bereikbaar |
  *
  * De lege velden zijn gemeten, niet vergeten — zie `LABEL_GAPS`.
  *
@@ -105,9 +104,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de training',
     evaluatieformulier: 'https://www.incompanytrainer.nl/evaluatieformulier',
     website: 'https://www.incompanytrainer.nl',
-    // Zelfde formulier als JE. Geen overschrijffout: het is één document, twee labels.
-    inventarisatieformulier:
-      'https://docs.google.com/forms/d/1Ca6ZX624PWNU2EjFfgR0n4K_vq-ceA3Ybba70gadWyg/viewform',
   },
   {
     code: 'JE',
@@ -117,8 +113,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de workshop',
     evaluatieformulier: 'https://www.jobeducation.nl/evaluatieformulier',
     website: 'https://www.jobeducation.nl',
-    inventarisatieformulier:
-      'https://docs.google.com/forms/d/1Ca6ZX624PWNU2EjFfgR0n4K_vq-ceA3Ybba70gadWyg/viewform',
   },
   {
     code: 'TT',
@@ -128,8 +122,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de teambuilding',
     evaluatieformulier: 'https://www.teambuildingtrainer.nl/evaluatieformulier',
     website: 'https://www.teambuildingtrainer.nl',
-    inventarisatieformulier:
-      'https://docs.google.com/forms/d/1NJWz0dyyJD5EurPCq-lYYR_5wk1hK6fnkeRKL9urF4E/viewform',
   },
   {
     code: 'FV',
@@ -139,8 +131,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de workshop',
     evaluatieformulier: 'https://www.firmavitaliteit.nl/evaluatieformulier',
     website: 'https://www.firmavitaliteit.nl',
-    inventarisatieformulier:
-      'https://docs.google.com/forms/d/14SGRXQJcIHJFUz0vh4pqilOPd3SbKg0rJWdKcQaxcYg/viewform',
   },
   {
     code: 'SST',
@@ -150,8 +140,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de training',
     evaluatieformulier: 'https://www.softskilltrainer.nl/evaluatieformulier',
     website: 'https://www.softskilltrainer.nl',
-    inventarisatieformulier:
-      'https://docs.google.com/forms/d/1iCYVq4lEgTrBtjFQcSof7lLyGQR0r9EKLYG6t6BfR6s/viewform',
   },
   {
     code: 'WJ',
@@ -161,8 +149,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de workshop',
     evaluatieformulier: 'https://www.workjoy.nl/evaluatieformulier',
     website: 'https://www.workjoy.nl',
-    inventarisatieformulier:
-      'https://docs.google.com/forms/d/1JjqGw6Vpjd37j5W7_WBKxigr1BpfYJ740Z7pnZrIW4E/viewform',
   },
   {
     code: 'CC',
@@ -172,7 +158,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de cursus',
     evaluatieformulier: 'https://www.companycursus.nl/evaluatieformulier/',
     website: 'https://www.companycursus.nl',
-    inventarisatieformulier: '',
   },
   {
     code: 'CP',
@@ -182,7 +167,6 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     rapportterm: 'de training',
     evaluatieformulier: 'https://www.communicatieplus.nl/evaluatieformulier/',
     website: 'https://www.communicatieplus.nl',
-    inventarisatieformulier: '',
   },
   {
     code: 'FT',
@@ -190,12 +174,11 @@ export const LABEL_SEED: readonly LabelConfig[] = [
     kleur: '#265e5d',
     term: 'Training',
     rapportterm: 'de training',
-    // Alle drie leeg en dat is geen omissie van ons. `feedbacktrainer.nl` gaf 403 op
+    // Allebei leeg en dat is geen omissie van ons. `feedbacktrainer.nl` gaf 403 op
     // 1-Sep-2026, en zowel `04-evaluatierapportage.md` als `06-briefing.md` vergeten FT in
-    // hun opsomming. Eén vraag aan Dirkje, drie velden.
+    // hun opsomming. Eén vraag aan Dirkje, twee velden.
     evaluatieformulier: '',
     website: '',
-    inventarisatieformulier: '',
   },
 ];
 
@@ -206,7 +189,4 @@ export const LABEL_SEED: readonly LabelConfig[] = [
 export const LABEL_GAPS: Readonly<Record<string, string>> = {
   'FT.evaluatieformulier': 'ITG heeft er nooit een aangeleverd',
   'FT.website': 'feedbacktrainer.nl gaf 403; het echte adres is onbekend',
-  'FT.inventarisatieformulier': 'ontbreekt in Dirkjes annotatie',
-  'CC.inventarisatieformulier': 'ontbreekt in Dirkjes annotatie',
-  'CP.inventarisatieformulier': 'ontbreekt in Dirkjes annotatie',
 };

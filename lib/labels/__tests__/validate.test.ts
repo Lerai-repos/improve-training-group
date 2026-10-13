@@ -13,7 +13,6 @@ const base: LabelConfig = {
   rapportterm: 'de training',
   evaluatieformulier: '',
   website: '',
-  inventarisatieformulier: '',
 };
 
 /** De negen labels, minimaal ingevuld — de basis waar elke test één ding aan stukmaakt. */
@@ -90,10 +89,10 @@ describe('validateCatalog', () => {
   });
 
   /**
-   * De briefingvelden mogen leeg zijn zonder het rapport tegen te houden — FT en CC/CP staan
-   * vandaag zo op het bord.
+   * De website mag leeg zijn zonder het rapport tegen te houden — FT staat vandaag zo op het
+   * bord.
    */
-  it('laat een lege website en inventarisatieformulier ongemoeid', () => {
+  it('laat een lege website ongemoeid', () => {
     expect(validateCatalog(complete())).toEqual([]);
   });
 
@@ -130,26 +129,13 @@ describe('LABEL_SEED', () => {
    */
   it('laat exact de gemeten velden leeg', () => {
     const leeg = LABEL_SEED.flatMap((l) =>
-      (['evaluatieformulier', 'website', 'inventarisatieformulier'] as const)
+      (['evaluatieformulier', 'website'] as const)
         .filter((f) => l[f] === '')
         .map((f) => `${l.code}.${f}`)
     );
     expect(leeg.sort()).toEqual(
-      [
-        'CC.inventarisatieformulier',
-        'CP.inventarisatieformulier',
-        'FT.evaluatieformulier',
-        'FT.inventarisatieformulier',
-        'FT.website',
-      ].sort()
+      ['FT.evaluatieformulier', 'FT.website'].sort()
     );
-  });
-
-  /** IT en JE delen één Google Form. Gedocumenteerd, dus vastgelegd. */
-  it('geeft IT en JE hetzelfde inventarisatieformulier', () => {
-    const by = new Map(LABEL_SEED.map((l) => [l.code, l]));
-    expect(by.get('IT')?.inventarisatieformulier).toBe(by.get('JE')?.inventarisatieformulier);
-    expect(by.get('IT')?.inventarisatieformulier).not.toBe('');
   });
 });
 

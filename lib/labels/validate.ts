@@ -27,8 +27,8 @@ export function normaliseHex(value: string): string | null {
 /**
  * Wat het RAPPORT niet kan missen.
  *
- * Bewust kort: website en inventarisatieformulier staan er niet in, want die voeden de
- * briefing. Een ontbrekende website mag geen rapport tegenhouden, en andersom.
+ * Bewust kort: de website staat er niet in, want die voedt de inventarisatielink. Een
+ * ontbrekende website mag geen rapport tegenhouden, en andersom.
  */
 const REPORT_REQUIRED: ReadonlyArray<readonly ['volledigeNaam' | 'kleur' | 'rapportterm', string]> =
   [

@@ -2,7 +2,7 @@
  * De labelconfiguratie: één rij per merk waaronder ITG traint.
  *
  * Negen labels, één bron, meerdere afnemers — het rapport pakt kleur/naam/rapportterm en de
- * afbeeldingen, de briefing pakt website en inventarisatieformulier, de mails pakken de
+ * afbeeldingen, de inventarisatielink pakt de website, de mails pakken de
  * evaluatieformulier-URL. Vandaar één bord in plaats van drie losse lijstjes.
  */
 
@@ -13,8 +13,8 @@ export type LabelCode = 'IT' | 'JE' | 'TT' | 'FV' | 'SST' | 'WJ' | 'CC' | 'CP' |
  * Wat er per label op het bord staat.
  *
  * Een leeg tekstveld is een échte toestand, geen fout: FT heeft vandaag geen website en geen
- * evaluatieformulier, en CC/CP hebben geen inventarisatieformulier. Wie een veld nódig heeft
- * controleert dat zelf — het rapport op kleur en naam, de briefing op website. Dit type
+ * evaluatieformulier. Wie een veld nódig heeft controleert dat zelf — het rapport op kleur en
+ * naam, de inventarisatielink op website. Dit type
  * dwingt dat niet af, want dan zou één ontbrekend briefingveld het rapport blokkeren.
  */
 export interface LabelConfig {
@@ -29,8 +29,12 @@ export interface LabelConfig {
   readonly rapportterm: string;
   /** Klanttevredenheidsformulier op de eigen site. Alleen voor de mails, niet voor het rapport. */
   readonly evaluatieformulier: string;
-  /** De labelsite, waar de briefing de inspirerende tekst vandaan haalt. */
+  /**
+   * De labelsite. Daarop staat `/inventarisatie` met het generieke formulier; de link op de
+   * Opportunity wordt hiervan gemaakt (`lib/inventarisatie`).
+   *
+   * Er stond ook een kolom Inventarisatieformulier met een Google Form per label. Sinds
+   * 13-Oct-2026 is er één generiek formulier op de labelsites, dus die is weg.
+   */
   readonly website: string;
-  /** Google Form dat de klant vóór een training invult; de briefing leest de antwoorden. */
-  readonly inventarisatieformulier: string;
 }

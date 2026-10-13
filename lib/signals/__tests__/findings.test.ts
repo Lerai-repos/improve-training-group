@@ -26,7 +26,6 @@ function record(over: Partial<LabelRecord> = {}): LabelRecord {
     rapportterm: 'de training',
     evaluatieformulier: 'www.incompanytrainer.nl/evaluatieformulier',
     website: '',
-    inventarisatieformulier: '',
     logo: asset,
     voorblad: asset,
     achterblad: asset,
@@ -47,9 +46,9 @@ describe('unusableLabelFields', () => {
   });
 
   it('kijkt NIET naar de velden die nog door niets gelezen worden', () => {
-    // `website` en `inventarisatieformulier` zijn allebei leeg in `record()`. Zouden ze
-    // meetellen, dan meldt de controle bekende gaten die niemand hoeft op te lossen.
-    const leeg = unusableLabelFields(record({ website: '', inventarisatieformulier: '' }));
+    // `website` is leeg in `record()`. Zou hij meetellen, dan meldt de controle een bekend gat
+    // dat niemand hoeft op te lossen.
+    const leeg = unusableLabelFields(record({ website: '' }));
     expect(leeg).toEqual([]);
   });
 

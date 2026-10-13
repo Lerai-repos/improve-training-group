@@ -169,7 +169,6 @@ function toRecord(item: LabelItem, code: LabelCode): { record: LabelRecord; ambi
       rapportterm: textOf(item, LABEL_COLUMNS.rapportterm),
       evaluatieformulier: linkOf(item, LABEL_COLUMNS.evaluatieformulier),
       website: linkOf(item, LABEL_COLUMNS.website),
-      inventarisatieformulier: linkOf(item, LABEL_COLUMNS.inventarisatieformulier),
       logo: assets[LABEL_COLUMNS.logo] ?? null,
       voorblad: assets[LABEL_COLUMNS.voorblad] ?? null,
       achterblad: assets[LABEL_COLUMNS.achterblad] ?? null,

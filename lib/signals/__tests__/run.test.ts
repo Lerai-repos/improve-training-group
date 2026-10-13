@@ -30,7 +30,6 @@ const label = (over: Partial<LabelRecord> = {}): LabelRecord => ({
   rapportterm: 'de training',
   evaluatieformulier: 'www.incompanytrainer.nl/evaluatieformulier',
   website: '',
-  inventarisatieformulier: '',
   logo: asset,
   voorblad: asset,
   achterblad: asset,

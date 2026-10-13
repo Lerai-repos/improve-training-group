@@ -46,9 +46,8 @@ export interface ThemaRecord {
  * | `term` | door niets gelezen; zie de notitie bij het Labels-bord |
  * | `evaluatieformulier` | het rapport verwijst er (nog) niet naar |
  * | `website` | wacht op de acht label-URL's, M5 |
- * | `inventarisatieformulier` | de bron zelf is nog niet gebouwd — dan is de LINK niet het gat |
  *
- * Zodra een van die vier wél gelezen wordt hoort hij hier bij, en dan meldt de controle hem
+ * Zodra een van die drie wél gelezen wordt hoort hij hier bij, en dan meldt de controle hem
  * vanzelf. Dat is de bedoeling: de lijst volgt wat er kapot kan.
  */
 export const LABEL_REQUIRED_FIELDS: readonly string[] = [

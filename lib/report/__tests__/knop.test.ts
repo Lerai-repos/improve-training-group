@@ -90,7 +90,6 @@ const label: LabelRecord = {
   rapportterm: 'de training',
   evaluatieformulier: '',
   website: '',
-  inventarisatieformulier: '',
   logo: null,
   voorblad: null,
   achterblad: null,

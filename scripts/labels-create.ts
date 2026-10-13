@@ -177,6 +177,9 @@ async function main(): Promise<void> {
   reportGaps();
 }
 
+/** Wat `seedColumnValues` kan vullen: alles behalve de bestanden, die gaan apart. */
+const VULBARE_VELDEN = LABEL_COLUMN_SPECS.filter((spec) => spec.type !== 'file').length;
+
 function dryRun(): void {
   for (const spec of LABEL_COLUMN_SPECS) {
     console.log(`  would create column ${spec.id.padEnd(22)} "${spec.title}" (${spec.type})`);
@@ -186,7 +189,7 @@ function dryRun(): void {
     const naam = `"${label.volledigeNaam}"`;
     console.log(
       `  would create item ${label.code.padEnd(4)} ${naam.padEnd(24)} ` +
-        `${label.kleur}  ${filled}/7 velden gevuld`
+        `${label.kleur}  ${filled}/${VULBARE_VELDEN} velden gevuld`
     );
   }
   reportGaps();

@@ -15,7 +15,6 @@ export const LABEL_COLUMNS = {
   rapportterm: 'itg_rapportterm',
   evaluatieformulier: 'itg_evalformulier',
   website: 'itg_website',
-  inventarisatieformulier: 'itg_invformulier',
   logo: 'itg_logo',
   voorblad: 'itg_voorblad',
   achterblad: 'itg_achterblad',
@@ -29,7 +28,6 @@ export const LABEL_EXPECTED_COLUMNS: readonly ExpectedColumn[] = [
   { id: LABEL_COLUMNS.rapportterm, type: 'text' },
   { id: LABEL_COLUMNS.evaluatieformulier, type: 'link' },
   { id: LABEL_COLUMNS.website, type: 'link' },
-  { id: LABEL_COLUMNS.inventarisatieformulier, type: 'link' },
   { id: LABEL_COLUMNS.logo, type: 'file' },
   { id: LABEL_COLUMNS.voorblad, type: 'file' },
   { id: LABEL_COLUMNS.achterblad, type: 'file' },
@@ -49,7 +47,6 @@ export const LABEL_COLUMN_SPECS: readonly LabelColumnSpec[] = [
   { id: LABEL_COLUMNS.rapportterm, title: 'Rapportterm', type: 'text' },
   { id: LABEL_COLUMNS.evaluatieformulier, title: 'Evaluatieformulier', type: 'link' },
   { id: LABEL_COLUMNS.website, title: 'Website', type: 'link' },
-  { id: LABEL_COLUMNS.inventarisatieformulier, title: 'Inventarisatieformulier', type: 'link' },
   { id: LABEL_COLUMNS.logo, title: 'Logo', type: 'file' },
   { id: LABEL_COLUMNS.voorblad, title: 'Voorblad', type: 'file' },
   { id: LABEL_COLUMNS.achterblad, title: 'Achterblad', type: 'file' },
@@ -76,7 +73,6 @@ export function seedColumnValues(label: LabelConfig): Record<string, unknown> {
   const links: ReadonlyArray<readonly [string, string]> = [
     [LABEL_COLUMNS.evaluatieformulier, label.evaluatieformulier],
     [LABEL_COLUMNS.website, label.website],
-    [LABEL_COLUMNS.inventarisatieformulier, label.inventarisatieformulier],
   ];
   for (const [id, url] of links) {
     if (url.trim() !== '') {
