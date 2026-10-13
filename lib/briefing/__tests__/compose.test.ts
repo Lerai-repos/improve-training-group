@@ -11,7 +11,7 @@ import {
   type SessionFacts,
 } from '../blocks';
 import { composeBriefing, openIssues, sessionFacts } from '../compose';
-import { briefingFilename, templatePath } from '../render';
+import { briefingFilename } from '../render';
 
 import type { BriefingTraining } from '../types';
 
@@ -734,18 +734,7 @@ describe('briefingFilename', () => {
   });
 });
 
-describe('templatePath', () => {
-  it('wijst elk label naar zijn eigen sjabloon', () => {
-    expect(templatePath('IT')).toMatch(/IT\.docx$/);
-    expect(templatePath('sst')).toMatch(/SST\.docx$/);
-  });
-
-  /** Terugvallen op een standaardsjabloon zou het logo van een ander merk opleveren. */
-  it('weigert een onbekend label in plaats van terug te vallen', () => {
-    expect(() => templatePath('')).toThrow(/onbekend label/);
-    expect(() => templatePath('../../etc/passwd')).toThrow(/onbekend label/);
-  });
-});
+/** Welk sjabloon een label krijgt staat in `logo.test.ts`, naast het algemene sjabloon. */
 
 describe('km en reistijd bij genereren', () => {
   /**

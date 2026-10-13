@@ -4,11 +4,13 @@ import { BRIEFING_AGENDA_COLUMNS } from '@lib/briefing/columns';
 import { EVAL_COLUMNS } from '@lib/report/record';
 import { KNOWN_AGENDA_BOARD_IDS, liveAgendaBoards } from '@lib/evaluations';
 import { engineBoardProblem, type EngineBoardRules } from '@lib/recommend/engine-boards';
-import { LABEL_CODES, resolveLabelCode } from '@lib/labels';
+import { LABEL_CODES, isLabelCode, resolveLabelCode } from '@lib/labels';
+import { ontbrekend } from '@lib/labels/keuzelijst';
 import { normaliseHex } from '@lib/labels/validate';
 
 import type { TekstRij } from '@lib/briefingteksten/beoordeel';
 import type { LabelCode } from '@lib/labels';
+import type { StatusOptie } from '@lib/labels/keuzelijst';
 import type { LabelRecord } from '@lib/labels/read';
 import type { AgendaBoard, AgendaBoardSet, RejectedAgendaBoard } from '@lib/evaluations';
 import type { MailFailure } from '@lib/mail';
@@ -121,34 +123,46 @@ export function labelFindings(
   const found: Finding[] = [];
   /** Codes die via een alias op dezelfde configuratie uitkomen, samengeteld. */
   const perCode = new Map<LabelCode, number>();
+  /** Hoe de waarde op de agenda staat, voor de melding over een label zonder rij. */
+  const zoalsGeschreven = new Map<LabelCode, string>();
 
   for (const [raw, trainingen] of usage.labels) {
-    if (raw.trim() === '') {
-      continue;
-    }
     const code = resolveLabelCode(raw);
     if (code === null) {
-      found.push({ kind: 'onbekend-label', label: raw, trainingen });
       continue;
     }
     perCode.set(code, (perCode.get(code) ?? 0) + trainingen);
+    if (!zoalsGeschreven.has(code)) {
+      zoalsGeschreven.set(code, raw.trim());
+    }
   }
 
   /**
-   * In de volgorde van `LABEL_CODES` en niet in die van de agenda.
+   * De negen oorspronkelijke labels in de volgorde van `LABEL_CODES`, daarna de rest op
+   * alfabet — en niet in die van de agenda.
    *
    * `usage.labels` komt uit een Map die op leesvolgorde staat, en die verschilt per run zodra
    * ITG een training toevoegt. Dan zou de melding-volgorde per nacht wisselen zonder dat er
    * iets veranderd is — onhandig bij het vergelijken van twee runs.
    */
-  for (const code of LABEL_CODES) {
+  const overig = [...perCode.keys()].filter((c) => !LABEL_CODES.includes(c)).sort();
+  for (const code of [...LABEL_CODES, ...overig]) {
     const trainingen = perCode.get(code);
     if (trainingen === undefined) {
       continue;
     }
     const record = configured.get(code);
     if (record === undefined) {
-      found.push({ kind: 'label-ontbreekt', code, trainingen });
+      /**
+       * Een van de negen zonder rij is een rij die verdwenen is; een ander label zonder rij is er
+       * nooit geweest. Twee meldingen, zodat de sleutels op het Systeem-bord gelijk blijven aan
+       * die van vóór 13-Oct-2026 en een openstaande melding niet dubbel terugkomt.
+       */
+      found.push(
+        isLabelCode(code)
+          ? { kind: 'label-ontbreekt', code, trainingen }
+          : { kind: 'onbekend-label', label: zoalsGeschreven.get(code) ?? code, trainingen }
+      );
       continue;
     }
     const velden = unusableLabelFields(record);
@@ -158,6 +172,36 @@ export function labelFindings(
   }
 
   return found;
+}
+
+/** Eén keuzelijst zoals hij nu in Monday staat. */
+export interface Keuzelijst {
+  readonly boardId: string;
+  /** "Opportunities" of de naam van het agendabord. */
+  readonly bord: string;
+  readonly opties: readonly StatusOptie[];
+}
+
+/**
+ * Labels van het Labels-bord die in een keuzelijst ontbreken.
+ *
+ * Dezelfde regel als het toevoegen (`ontbrekend`), zodat deze controle precies meldt wat de
+ * koppeling had moeten doen en niet deed. Op bordvolgorde en dan in de volgorde van het bord.
+ */
+export function keuzelijstFindings(
+  gewenst: readonly string[],
+  lijsten: readonly Keuzelijst[]
+): readonly Finding[] {
+  return lijsten.flatMap((lijst) =>
+    ontbrekend(lijst.opties, gewenst).map(
+      (code): Finding => ({
+        kind: 'label-niet-in-keuzelijst',
+        code,
+        boardId: lijst.boardId,
+        bord: lijst.bord,
+      })
+    )
+  );
 }
 
 /**

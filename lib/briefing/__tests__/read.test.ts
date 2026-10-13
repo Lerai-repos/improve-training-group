@@ -551,10 +551,14 @@ describe('readBriefingTraining', () => {
     expect(t.missing.map((m) => m.label).sort()).toEqual(['Label', 'Tijden', 'Voertaal']);
   });
 
-  /** TMT, YNS, ST and Email exist on the board (16 trainings) but have no template. */
-  it('rejects a label that has no template', async () => {
-    const t = await readBriefingTraining(client(agendaItem({ [C.label]: { text: 'TMT' } })), '1');
-    expect(t.missing.map((m) => m.label).join()).toMatch(/TMT.*geen sjabloon/);
+  /**
+   * Since 13-Oct-2026 any label can be generated: a label without its own template gets the
+   * general one with its Labels-board logo. Whether that row exists is checked at generation,
+   * where the logo is fetched.
+   */
+  it('does not reject a label without its own template', async () => {
+    const t = await readBriefingTraining(client(agendaItem({ [C.label]: { text: 'ITG' } })), '1');
+    expect(t.missing.map((m) => m.label).join()).not.toMatch(/ITG|sjabloon/);
   });
 
   /**

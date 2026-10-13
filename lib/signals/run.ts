@@ -4,6 +4,7 @@ import { engineBoardProblem } from '@lib/recommend/engine-boards';
 import {
   agendaBoardFindings,
   briefingtekstFindings,
+  keuzelijstFindings,
   labelFindings,
   knopFindings,
   mailFindings,
@@ -25,7 +26,7 @@ import type { LabelCode } from '@lib/labels';
 import type { LabelRecord } from '@lib/labels/read';
 import type { MailFailure } from '@lib/mail';
 import type { KnopProbleem } from '@lib/report/knop-store';
-import type { AgendaUsage, ThemaRecord } from './findings';
+import type { AgendaUsage, Keuzelijst, ThemaRecord } from './findings';
 import type { SignalGroupIds } from './groups';
 import type { LeaseDeps } from './lease';
 import type { ExistingSignal, SignalAction } from './reconcile';
@@ -38,6 +39,7 @@ const LABEL_KINDS: readonly FindingKind[] = [
   'label-ontbreekt',
   'label-onvolledig',
 ];
+const KEUZELIJST_KINDS: readonly FindingKind[] = ['label-niet-in-keuzelijst'];
 const THEMA_KINDS: readonly FindingKind[] = ['thema-ontbreekt', 'thema-zonder-inhoud'];
 const TRAINER_KINDS: readonly FindingKind[] = ['trainer-ontbreekt'];
 const MAIL_KINDS: readonly FindingKind[] = ['mail-mislukt'];
@@ -76,6 +78,11 @@ export interface DailyCheckDeps {
   readonly readKnopProblemen: () => Promise<readonly KnopProbleem[]>;
   /** De items van het bord Briefingteksten. */
   readonly readBriefingteksten: () => Promise<readonly TekstRij[]>;
+  /** De labels van het Labels-bord, en de keuzelijsten waar ze in horen te staan. */
+  readonly readKeuzelijsten: () => Promise<{
+    readonly gewenst: readonly string[];
+    readonly lijsten: readonly Keuzelijst[];
+  }>;
   /** `null` in een droogloop: dan wordt er niets geschreven, ook niet de samenvatting. */
   readonly writer: SignalWriter | null;
   readonly groups: SignalGroupIds;
@@ -229,6 +236,13 @@ export async function runDailyCheck(deps: DailyCheckDeps): Promise<DailyCheckRep
     await attempt('briefingteksten', BRIEFINGTEKST_KINDS, async () =>
       briefingtekstFindings(await deps.readBriefingteksten())
     )
+  );
+  // Leest de keuzelijsten zelf; hangt dus niet aan de telling op de agenda.
+  results.push(
+    await attempt('keuzelijsten', KEUZELIJST_KINDS, async () => {
+      const { gewenst, lijsten } = await deps.readKeuzelijsten();
+      return keuzelijstFindings(gewenst, lijsten);
+    })
   );
 
   const findings = results.flatMap((r) => r.findings);

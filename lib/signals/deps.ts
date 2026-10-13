@@ -4,6 +4,7 @@ import { briefingtekstenBoardId } from '@lib/briefingteksten/board';
 import { readTekstRijen } from '@lib/briefingteksten/read';
 import { loadAgendaBoards } from '@lib/evaluations';
 import { labelsBoardId } from '@lib/labels';
+import { leesDoelen, leesGewensteLabels, leesKeuzelijst } from '@lib/labels/keuzelijst-sync';
 import { createFailureStore } from '@lib/mail';
 import { createRedisClient, createUpstashKvStore } from '@lib/recommend/kv';
 import { createKnopProbleemStore } from '@lib/report/knop-store';
@@ -99,6 +100,20 @@ export function buildDailyCheckDeps(options: {
       readKnopProblemen: () =>
         createKnopProbleemStore(createUpstashKvStore(createRedisClient())).list(),
       readBriefingteksten: () => readTekstRijen(client, briefingtekstenBoardId()),
+      readKeuzelijsten: async () => {
+        const [gewenst, doelen] = await Promise.all([
+          leesGewensteLabels(client),
+          leesDoelen(client),
+        ]);
+        const lijsten = await Promise.all(
+          doelen.map(async (doel) => ({
+            boardId: doel.boardId,
+            bord: doel.naam,
+            opties: (await leesKeuzelijst(client, doel)).opties,
+          }))
+        );
+        return { gewenst, lijsten };
+      },
       writer: options.dryRun ? null : createSignalWriter(write, boardId, runId, now),
       groups: options.groups,
       now,

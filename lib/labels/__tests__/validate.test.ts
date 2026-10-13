@@ -42,9 +42,10 @@ describe('validateCatalog', () => {
     expect(validateCatalog(complete())).toEqual([]);
   });
 
-  it('meldt een ontbrekend label, ook al is elke aanwezige rij correct', () => {
+  /** Welke labels er zijn beslist het bord, niet de code. */
+  it('meldt geen ontbrekend of nieuw label', () => {
     const rows = complete().filter((r) => r.code !== 'FT');
-    expect(validateCatalog(rows)).toEqual([{ kind: 'missing_label', code: 'FT' }]);
+    expect(validateCatalog([...rows, { ...base, code: 'ITG' }])).toEqual([]);
   });
 
   /**
@@ -52,18 +53,8 @@ describe('validateCatalog', () => {
    * bepaalt hangt dan af van de volgorde waarin Monday ze teruggeeft.
    */
   it('meldt een dubbel label', () => {
-    const rows = [...complete(), { ...base, code: 'IT' as const }];
-    expect(validateCatalog(rows)).toContainEqual({ kind: 'duplicate_label', code: 'IT' });
-  });
-
-  it('meldt een label dat wij niet kennen', () => {
-    const rows = complete();
-    // Geen cast: `validateCatalog` keurt bordrijen, en daar is `code` een gewone string.
-    const stray = { ...base, code: 'YNS' };
-    expect(validateCatalog([...rows, stray])).toContainEqual({
-      kind: 'unknown_label',
-      code: 'YNS',
-    });
+    const rows = [...complete(), { ...base, code: 'it' }];
+    expect(validateCatalog(rows)).toContainEqual({ kind: 'duplicate_label', code: 'it' });
   });
 
   it('meldt een kleur die geen hex is', () => {
@@ -97,13 +88,11 @@ describe('validateCatalog', () => {
   });
 
   it('verzamelt ALLE problemen in plaats van bij de eerste te stoppen', () => {
-    const rows = complete().filter((r) => r.code !== 'FT' && r.code !== 'CP');
+    const rows = complete();
     rows[0] = { ...rows[0], kleur: 'x', volledigeNaam: '' };
-    const kinds = validateCatalog(rows).map((p) => p.kind);
-    expect(kinds).toContain('missing_label');
-    expect(kinds).toContain('bad_colour');
-    expect(kinds).toContain('empty_field');
-    expect(validateCatalog(rows).filter((p) => p.kind === 'missing_label')).toHaveLength(2);
+    rows[1] = { ...rows[1], rapportterm: '' };
+    const problems = validateCatalog(rows);
+    expect(problems.map((p) => p.kind)).toEqual(['empty_field', 'bad_colour', 'empty_field']);
   });
 });
 

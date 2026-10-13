@@ -54,6 +54,8 @@ export function findingName(finding: Finding): string {
       return `Label "${finding.label}" is niet ingesteld — ${trainingen(finding.trainingen)}`;
     case 'label-ontbreekt':
       return `Label "${finding.code}" heeft geen rij op het Labels-bord — ${trainingen(finding.trainingen)}`;
+    case 'label-niet-in-keuzelijst':
+      return `Label "${finding.code}" staat niet in de keuzelijst van ${finding.bord}`;
     case 'label-onvolledig':
       /**
        * Het aantal trainingen én de reden per veld horen hier, ook al leest de zin er voller
@@ -121,8 +123,8 @@ export function findingDetail(finding: Finding): string {
           'waarde staat niet op het Labels-bord en is ook geen bekende schrijfwijze van een ' +
           'bestaand label.',
         'Gevolg: voor deze trainingen wordt geen evaluatierapport en geen briefing gemaakt.',
-        'Is dit een echt label? Zet het op het Labels-bord, met volledige naam, kleur, ' +
-          'rapportterm, logo, voorblad en achterblad.',
+        `Is dit een echt label? Zet een rij "${finding.label}" op het Labels-bord, met volledige ` +
+          'naam, kleur, term, rapportterm, logo, voorblad en achterblad.',
         'Is het een schrijffout of een oud label? Pas de agenda aan. ' + AFVINKEN,
       ].join('\n\n');
 
@@ -132,6 +134,17 @@ export function findingDetail(finding: Finding): string {
           '— maar er staat geen rij voor op het Labels-bord.',
         'Gevolg: voor deze trainingen wordt geen evaluatierapport gemaakt.',
         `Maak een rij "${finding.code}" aan op het Labels-bord en vul hem volledig in.`,
+      ].join('\n\n');
+
+    case 'label-niet-in-keuzelijst':
+      return [
+        `"${finding.code}" staat op het Labels-bord, maar niet in de keuzelijst Label van ` +
+          `${finding.bord}. Daar kan het dus nog niet gekozen worden.`,
+        'Normaal zet de koppeling een nieuw label er vanzelf in, meteen bij het aanmaken van de ' +
+          'rij en elke nacht nog eens. Staat deze melding er, dan is dat niet gelukt: de ' +
+          'keuzelijst zit vol (Monday staat 40 labels toe), of Monday weigerde de wijziging.',
+        `Zet het label met de hand in de keuzelijst, met precies de naam "${finding.code}". ` +
+          'De melding verdwijnt bij de volgende controle.',
       ].join('\n\n');
 
     case 'label-onvolledig':
@@ -286,6 +299,7 @@ export function findingOnderdeel(finding: Finding): string {
     case 'onbekend-label':
     case 'label-ontbreekt':
     case 'label-onvolledig':
+    case 'label-niet-in-keuzelijst':
       return 'Labelconfiguratie';
     case 'thema-ontbreekt':
     case 'thema-zonder-inhoud':

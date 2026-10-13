@@ -260,9 +260,8 @@ export const AANDACHT_GEEN = 1;
  *
  * Een FT-briefing krijgt dus een lege Trainingscode-regel, en dat is de bedoeling. Wie hier
  * later een `FT`-kolom bijzet lost een probleem op dat niet bestaat en introduceert een
- * verzonnen product; vraag eerst aan ITG of de challenge inmiddels wél gemaakt is. TMT is
- * bovendien geen briefinglabel (`SUPPORTED_LABELS` kent het niet), dus die speelt helemaal
- * niet mee.
+ * verzonnen product; vraag eerst aan ITG of de challenge inmiddels wél gemaakt is. Een label
+ * dat ITG later toevoegt heeft hier ook geen kolom, en krijgt dus net zo een lege regel.
  */
 export const THEMAS_MC_COLUMNS: Readonly<Record<string, string>> = {
   IT: 'itg_mc_it',

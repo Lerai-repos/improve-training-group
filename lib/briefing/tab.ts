@@ -357,7 +357,7 @@ function controlesVoor(input: {
             uitleg:
               leeg.label === label
                 ? `De kolom ${label} is leeg. In het document komt op die plek een zichtbare regel; vul hem in Monday in.`
-                : `${leeg.label}. Kies in Monday een label waarvoor een sjabloon bestaat.`,
+                : `${leeg.label}.`,
           }
     );
   };

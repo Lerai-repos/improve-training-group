@@ -53,10 +53,17 @@ describe('mapLabelItems', () => {
     expect(records[0]?.code).toBe('SST');
   });
 
-  it('meldt een rij zonder geldige labelcode apart, in plaats van hem over te slaan', () => {
-    const { records, unknown } = mapLabelItems([filled('IT'), filled('YNS')]);
+  /** Sinds 13-Oct-2026 is elke rij een label: zo voegt ITG er zelf een toe. */
+  it('leest een rij met een nieuwe naam als een nieuw label', () => {
+    const { records, unknown } = mapLabelItems([filled('IT'), filled('ITG')]);
+    expect(records.map((r) => r.code)).toEqual(['IT', 'ITG']);
+    expect(unknown).toEqual([]);
+  });
+
+  it('meldt een rij zonder naam apart, in plaats van hem over te slaan', () => {
+    const { records, unknown } = mapLabelItems([filled('IT'), filled('  ')]);
     expect(records).toHaveLength(1);
-    expect(unknown).toEqual(['YNS']);
+    expect(unknown).toEqual(['i-  ']);
   });
 
   /**
@@ -178,13 +185,17 @@ describe('readLabels', () => {
     await expect(readLabels(empty, 'b1')).rejects.toThrow('niet gevonden');
   });
 
-  /**
-   * Fail-closed is hier het hele punt: een ontbrekend label levert anders een rapport op in
-   * de standaardkleur, en dat ziet er volkomen normaal uit voor wie het merk niet kent.
-   */
-  it('werpt als een label ontbreekt, en noemt welk', async () => {
+  /** Welke labels er zijn beslist het bord; een ontbrekende rij meldt de dagelijkse controle. */
+  it('geeft wat er staat, ook als een van de negen ontbreekt', async () => {
     const rows = allNine().filter((i) => i.name !== 'CP');
-    await expect(readLabels(clientFor(rows), 'b1')).rejects.toThrow('CP');
+    const labels = await readLabels(clientFor(rows), 'b1');
+    expect(labels.size).toBe(8);
+    expect(labels.has('CP')).toBe(false);
+  });
+
+  it('geeft een label dat ITG toevoegde, op zijn sleutel', async () => {
+    const labels = await readLabels(clientFor([...allNine(), filled('Itg')]), 'b1');
+    expect(labels.get('ITG')?.code).toBe('Itg');
   });
 
   it('werpt op een dubbele rij', async () => {
@@ -193,25 +204,49 @@ describe('readLabels', () => {
     );
   });
 
-  it('werpt op een kleur die geen hex is, en noemt de waarde', async () => {
+  /**
+   * Fail-closed PER LABEL: een rij die ITG nog aan het invullen is, of een kleur die geen hex
+   * is, laat dat ene label weg — anders een rapport in de verkeerde huisstijl — maar de rest
+   * loopt door.
+   */
+  it('laat een label met een kleur die geen hex is weg, en de rest niet', async () => {
     const rows = allNine();
     rows[0] = filled('IT', []);
     rows[0].column_values = rows[0].column_values.map((c) =>
       c.id === C.kleur ? { ...c, text: 'donkerblauw' } : c
     );
-    await expect(readLabels(clientFor(rows), 'b1')).rejects.toThrow('donkerblauw');
+    const labels = await readLabels(clientFor(rows), 'b1');
+    expect(labels.has('IT')).toBe(false);
+    expect(labels.size).toBe(8);
   });
 
-  it('noemt een rij met een onbekende naam in de foutmelding', async () => {
-    await expect(readLabels(clientFor([...allNine(), filled('TMT')]), 'b1')).rejects.toThrow('TMT');
+  it('laat een half ingevuld nieuw label weg', async () => {
+    const labels = await readLabels(clientFor([...allNine(), item('ITG')]), 'b1');
+    expect(labels.has('ITG')).toBe(false);
+    expect(labels.size).toBe(9);
   });
 
-  /** Alle problemen in één melding, zodat een reparatieronde er niet drie kost. */
-  it('somt meerdere problemen tegelijk op', async () => {
-    const rows = allNine().filter((i) => i.name !== 'CP' && i.name !== 'FT');
-    const message = await readLabels(clientFor(rows), 'b1').catch((e: Error) => e.message);
-    expect(message).toContain('CP');
-    expect(message).toContain('FT');
+  /**
+   * Een rij `WorkJoy` is het label `WJ`: een training met `WJ` (of `WorkJoy`) moet hem vinden,
+   * en naast een rij `WJ` is hij dubbel.
+   */
+  it('zet een rij met een schrijfwijze onder het label waar hij bij hoort', async () => {
+    const rows = allNine().map((r) => (r.name === 'WJ' ? filled('WorkJoy') : r));
+    const labels = await readLabels(clientFor(rows), 'b1');
+    expect(labels.get('WJ')?.code).toBe('WorkJoy');
+    expect(labels.has('WORKJOY')).toBe(false);
+  });
+
+  it('ziet een rij met een schrijfwijze naast het label zelf als dubbel', async () => {
+    await expect(readLabels(clientFor([...allNine(), filled('WorkJoy')]), 'b1')).rejects.toThrow(
+      'meerdere keren'
+    );
+  });
+
+  it('werpt op een dubbele rij, ook als die anders geschreven is', async () => {
+    await expect(readLabels(clientFor([...allNine(), filled('it')]), 'b1')).rejects.toThrow(
+      'meerdere keren'
+    );
   });
 
   /** Lege briefingvelden mogen het rapport niet blokkeren — zo staat FT vandaag op het bord. */
@@ -241,13 +276,6 @@ describe('readLabels', () => {
  * ontbrekende rij is daar geen storing maar de melding zelf.
  */
 describe('readLabelRows', () => {
-  it('geeft een ontbrekende rij terug als probleem in plaats van te werpen', async () => {
-    const rows = allNine().filter((r) => r.name !== 'CP');
-    const { records, problems } = await readLabelRows(clientFor(rows), 'b1');
-    expect(records).toHaveLength(8);
-    expect(problems).toContainEqual({ kind: 'missing_label', code: 'CP' });
-  });
-
   it('geeft een leeg verplicht veld terug als probleem in plaats van te werpen', async () => {
     // Een rij waarvan de Kleur-cel leeg is; de rest staat er gewoon.
     const leegITem = item('IT', [
@@ -279,8 +307,11 @@ describe('readLabelRows', () => {
     await expect(readLabelRows(empty, 'b1')).rejects.toThrow('niet gevonden');
   });
 
-  it('laat de strikte lezer ongemoeid: die weigert een ontbrekende rij nog steeds', async () => {
-    const rows = allNine().filter((r) => r.name !== 'CP');
-    await expect(readLabels(clientFor(rows), 'b1')).rejects.toThrow('CP');
+  it('laat de strikte lezer het onvolledige label weglaten, en de diagnostische het tonen', async () => {
+    const rows = [...allNine(), item('ITG')];
+    const { records, problems } = await readLabelRows(clientFor(rows), 'b1');
+    expect(records.map((r) => r.code)).toContain('ITG');
+    expect(problems).toContainEqual({ kind: 'empty_field', code: 'ITG', field: 'Volledige naam' });
+    expect((await readLabels(clientFor(rows), 'b1')).has('ITG')).toBe(false);
   });
 });

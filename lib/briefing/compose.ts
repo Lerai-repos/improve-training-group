@@ -151,6 +151,11 @@ export interface BriefingDocumentData {
   /** De cyaan regel(s) boven de gegevenstabel. */
   readonly mondayChallenges: readonly string[];
   readonly opdrachtgever: string;
+  /**
+   * De Term van het label met een hoofdletter, voor de gegevenstabel: "Training", "Workshop".
+   * Alleen het algemene sjabloon gebruikt hem; de negen eigen sjablonen hebben het woord vast.
+   */
+  readonly term: string;
   readonly thema: string;
   readonly klanttitel: string;
   readonly duur: string;
@@ -185,6 +190,11 @@ export interface BriefingDocumentData {
   /** Wat er staat als het formulier niet is ingevuld. */
   readonly inventarisatieLeeg: readonly DocumentSectie[];
   readonly inventarisatie: readonly InventoryAnswer[];
+}
+
+/** `training` → `Training`; de term staat in de teksten in kleine letters. */
+function metHoofdletter(tekst: string): string {
+  return tekst.charAt(0).toLocaleUpperCase('nl-NL') + tekst.slice(1);
 }
 
 /** De secties van de algemene tekst, in documentvolgorde. */
@@ -313,6 +323,7 @@ export function composeBriefing(
       (regel) => regel.tekst
     ),
     opdrachtgever: training.opdrachtgever.trim(),
+    term: metHoofdletter(teksten.term),
     thema: training.themas.join(' & '),
     klanttitel: training.klanttitel.trim(),
     duur: cyclusDuur === '' ? formatDuration(training.duur) : cyclusDuur,

@@ -31,16 +31,19 @@ describe('resolveLabelCode', () => {
   });
 
   /**
-   * De vier die live op de agenda staan zonder configuratie, samen 19 trainingen. Er is geen
-   * merk om ze op te laten wijzen; raden zou een rapport in de huisstijl van een ánder bedrijf
-   * opleveren. Ze horen `null` te geven zodat de aanroeper ze kan melden.
+   * Sinds 13-Oct-2026 is elke waarde zijn eigen label: of het werkt beslist het Labels-bord. De
+   * vier die vandaag zonder rij op de agenda staan raden we nog steeds niet naar een ander merk;
+   * ze krijgen hun eigen sleutel, en zonder rij meldt de dagelijkse controle ze.
    */
-  it.each(['YNS', 'TMT', 'ST - StressTrainer', 'Email'])(
-    'weigert het onbekende label %j te raden',
-    (raw) => {
-      expect(resolveLabelCode(raw)).toBeNull();
-    }
-  );
+  it.each([
+    ['YNS', 'YNS'],
+    ['TMT', 'TMT'],
+    ['ST - StressTrainer', 'ST - STRESSTRAINER'],
+    ['Email', 'EMAIL'],
+    [' itg ', 'ITG'],
+  ])('geeft %j zijn eigen sleutel %j in plaats van te raden', (raw, expected) => {
+    expect(resolveLabelCode(raw)).toBe(expected);
+  });
 
   it('geeft null voor leeg', () => {
     expect(resolveLabelCode('')).toBeNull();
@@ -50,11 +53,10 @@ describe('resolveLabelCode', () => {
 
 describe('isLabelCode blijft strikt', () => {
   /**
-   * De itemnaam op het Labels-bord IS de code. Zou `isLabelCode` de schrijfwijzen accepteren,
-   * dan kon er een rij "WorkJoy" naast de rij "WJ" ontstaan: twee rijen, één merk, en welke
-   * van de twee de huisstijl bepaalt hangt af van de volgorde van Monday.
+   * `isLabelCode` zegt of iets een van de negen oorspronkelijke labels is, letterlijk. Een
+   * schrijfwijze is dat niet: die wijst naar zo'n label, maar is er zelf geen.
    */
-  it.each(Object.keys(LABEL_ALIASES))('accepteert de schrijfwijze %j niet als bordrij', (alias) => {
+  it.each(Object.keys(LABEL_ALIASES))('accepteert de schrijfwijze %j niet als label', (alias) => {
     expect(isLabelCode(alias)).toBe(false);
   });
 

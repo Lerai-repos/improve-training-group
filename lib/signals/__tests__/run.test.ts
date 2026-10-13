@@ -51,6 +51,8 @@ function deps(over: Partial<DailyCheckDeps> = {}): DailyCheckDeps {
     readKnopProblemen: async () => [],
     // Een compleet bord in orde: levert geen enkele melding op.
     readBriefingteksten: async () => VOLLEDIG_BORD,
+    // Elke keuzelijst compleet: levert geen enkele melding op.
+    readKeuzelijsten: async () => ({ gewenst: [], lijsten: [] }),
     readTrainers: async (): Promise<ReadonlySet<string>> => new Set(),
     writer: null,
     groups: GROUPS,
@@ -333,6 +335,50 @@ describe('het bord Briefingteksten', () => {
     );
     expect(report.failures.map((f) => f.check)).toContain('briefingteksten');
     expect(report.findings.some((f) => f.kind.startsWith('briefingtekst'))).toBe(false);
+  });
+});
+
+describe('de keuzelijsten', () => {
+  const optie = (id: number, label: string) => ({
+    id,
+    label,
+    color: id,
+    index: null,
+    isDone: false,
+    isDeactivated: false,
+    hex: null,
+    description: null,
+  });
+
+  /** Het toevoegen gaat vanzelf; dit is de melding als dat niet lukte. */
+  it('meldt een label dat in een keuzelijst ontbreekt, per bord', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readKeuzelijsten: async () => ({
+          gewenst: ['IT', 'ITG'],
+          lijsten: [
+            { boardId: 'o', bord: 'Opportunities', opties: [optie(1, 'IT'), optie(17, 'ITG')] },
+            { boardId: 'a', bord: 'Agenda 2026', opties: [optie(0, 'IT')] },
+          ],
+        }),
+      })
+    );
+    expect(report.findings.filter((f) => f.kind === 'label-niet-in-keuzelijst')).toEqual([
+      { kind: 'label-niet-in-keuzelijst', code: 'ITG', boardId: 'a', bord: 'Agenda 2026' },
+    ]);
+  });
+
+  it('meldt een onleesbare keuzelijst als mislukte controle', async () => {
+    const report = await runDailyCheck(
+      deps({
+        writer: null,
+        readKeuzelijsten: async () => {
+          throw new Error('kolom weg');
+        },
+      })
+    );
+    expect(report.failures.map((f) => f.check)).toContain('keuzelijsten');
   });
 });
 

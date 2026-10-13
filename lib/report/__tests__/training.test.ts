@@ -217,14 +217,21 @@ describe('readTrainingForReport', () => {
     ).rejects.toThrow('welke kolom de trainers draagt');
   });
 
-  it('lost een labelalias op en meldt een onbekend label als null', async () => {
+  /**
+   * Een label zonder code is sinds 13-Oct-2026 gewoon een label: of het een rij op het
+   * Labels-bord heeft, beslist `readLabel`, en zonder rij komt er `unknown_label`.
+   */
+  it('lost een labelalias op en geeft elk ander label zijn eigen sleutel', async () => {
     const alias = withCell(item(AGENDA_2026, []), C.label, 'WorkJoy');
     expect((await readTrainingForReport(clientFor(alias), 'i1', BOARDS))?.labelCode).toBe('WJ');
 
-    const onbekend = withCell(item(AGENDA_2026, []), C.label, 'TMT');
-    const t = await readTrainingForReport(clientFor(onbekend), 'i1', BOARDS);
-    expect(t?.labelCode).toBeNull();
-    expect(t?.rawLabel).toBe('TMT');
+    const nieuw = withCell(item(AGENDA_2026, []), C.label, 'Itg');
+    const t = await readTrainingForReport(clientFor(nieuw), 'i1', BOARDS);
+    expect(t?.labelCode).toBe('ITG');
+    expect(t?.rawLabel).toBe('Itg');
+
+    const leeg = withCell(item(AGENDA_2026, []), C.label, '');
+    expect((await readTrainingForReport(clientFor(leeg), 'i1', BOARDS))?.labelCode).toBeNull();
   });
 
   it('geeft null als het item niet bestaat', async () => {

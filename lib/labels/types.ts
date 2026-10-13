@@ -6,8 +6,15 @@
  * evaluatieformulier-URL. Vandaar één bord in plaats van drie losse lijstjes.
  */
 
-/** De negen labelafkortingen. Komt overeen met `status23` op het agendabord. */
-export type LabelCode = 'IT' | 'JE' | 'TT' | 'FV' | 'SST' | 'WJ' | 'CC' | 'CP' | 'FT';
+/**
+ * Een labelafkorting: de naam van een rij op het Labels-bord, en dezelfde tekst in `status23`
+ * op de agenda en in `Label` op de Opportunity.
+ *
+ * Een gewone string sinds 13-Oct-2026: ITG voegt zelf labels toe door een rij op het bord te
+ * zetten (Peter, voor de dertien testsites onder `ITG`). De negen waarmee het bord begon staan
+ * nog in `LABEL_CODES`, omdat zij een eigen briefingsjabloon hebben.
+ */
+export type LabelCode = string;
 
 /**
  * Wat er per label op het bord staat.

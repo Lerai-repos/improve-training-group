@@ -6,7 +6,7 @@ import { config as loadEnv } from 'dotenv';
 
 loadEnv({ path: '.env.local' });
 
-import { labelsBoardId } from '@lib/labels';
+import { labelSleutel, labelsBoardId } from '@lib/labels';
 import { readLabels } from '@lib/labels/read';
 import { MONDAY_API_VERSION } from '@lib/monday/board-config';
 import { createMondayGraphQLClient } from '@lib/monday/graphql-client';
@@ -17,7 +17,6 @@ import { createPdfRenderer } from '@lib/report/pdf';
 import { renderReportHtml } from '@lib/report/template';
 
 import type { EvaluationResponse } from '@lib/evaluations/types';
-import type { LabelCode } from '@lib/labels';
 
 /**
  * Eén echt rapport renderen om naar te kijken. ONTWIKKELGEREEDSCHAP, geen productiepad.
@@ -170,7 +169,7 @@ async function main(): Promise<void> {
 
   const client = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
   const labels = await readLabels(client, labelsBoardId());
-  const label = labels.get(labelArg as LabelCode);
+  const label = labels.get(labelSleutel(labelArg));
   if (label === undefined) {
     throw new Error(`Label "${labelArg}" staat niet op het Labels-bord.`);
   }

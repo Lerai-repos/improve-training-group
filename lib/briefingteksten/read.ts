@@ -1,3 +1,4 @@
+import { labelSleutel } from '@lib/labels/catalog';
 import { LABEL_COLUMNS } from '@lib/labels/columns';
 import { assertColumns } from '@lib/monday/schema-check';
 
@@ -110,9 +111,10 @@ export async function readMerk(
        cursor items { id name column_values(ids: $c) { id text } } } } }`,
     { b: [labelsBoardId], c: [LABEL_COLUMNS.volledigeNaam, LABEL_COLUMNS.term] }
   );
-  const code = label.trim().toUpperCase();
+  /** Op de sleutel, zodat `WJ` op de agenda ook de rij `WorkJoy` vindt, en andersom. */
+  const code = labelSleutel(label);
   const rijen = (data.boards?.[0]?.items_page?.items ?? []).filter(
-    (item) => item.name.trim().toUpperCase() === code
+    (item) => labelSleutel(item.name) === code
   );
   if (rijen.length !== 1) {
     throw new Error(

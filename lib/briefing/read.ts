@@ -18,6 +18,7 @@ import { herstelAlineas } from './alineas';
 import { BRIEFING_REQUIRED_FIELDS } from './required';
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
 import { assertColumns } from '@lib/monday/schema-check';
+import { labelSleutel } from '@lib/labels/catalog';
 
 import { agendaBoardId, THEMAS_BOARD, TRAINERS_BOARD } from '@lib/monday/board-config';
 
@@ -94,19 +95,6 @@ export const BRIEFING_EXPECTED_COLUMNS: ExpectedColumn[] = [
 
 /** Zonder deze velden is de briefing zichtbaar kapot, niet alleen karig. */
 const REQUIRED = BRIEFING_REQUIRED_FIELDS;
-
-/** De negen labels waarvoor een sjabloon bestaat. Een ander label kan niet gegenereerd worden. */
-export const SUPPORTED_LABELS: readonly string[] = [
-  'CC',
-  'CP',
-  'FT',
-  'FV',
-  'IT',
-  'JE',
-  'SST',
-  'TT',
-  'WJ',
-];
 
 interface RawColumn {
   id: string;
@@ -758,7 +746,7 @@ export async function readBriefingTraining(
   const amId = people.length > 0 ? String(people[0].id) : null;
 
   const [themaItems, trainers, accountmanager, opportunity] = await Promise.all([
-    readThemas(client, themaIds, THEMAS_MC_COLUMNS[text(item, C.label).trim().toUpperCase()]),
+    readThemas(client, themaIds, THEMAS_MC_COLUMNS[labelSleutel(text(item, C.label))]),
     readTrainers(client, trainerIds, coSet),
     readAccountmanager(client, amId),
     readContact(client, opportunityItemId, text(item, C.contactpersoonNaam)),
@@ -841,15 +829,5 @@ export async function readBriefingTraining(
   if (opportunity.achtergrond.trim() === '') {
     missing.push({ column: OPPORTUNITY_COLUMNS.achtergrond, label: 'Achtergrondinformatie' });
   }
-  /**
-   * Een label dat we niet kennen is erger dan een leeg label: `TMT`, `YNS`,
-   * `ST - StressTrainer` en `Email` staan wél op het bord (16 trainingen) maar hebben geen
-   * sjabloon. Zonder deze controle zou het genereren pas verderop struikelen, op een
-   * ontbrekend bestand.
-   */
-  if (training.label !== '' && !SUPPORTED_LABELS.includes(training.label)) {
-    missing.push({ column: C.label, label: `Label "${training.label}" heeft geen sjabloon` });
-  }
-
   return { ...training, missing };
 }

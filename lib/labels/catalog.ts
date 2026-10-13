@@ -1,12 +1,13 @@
 import type { LabelCode, LabelConfig } from './types';
 
 /**
- * De negen labels, in code. Dit is de LEDENLIJST; het bord is de configuratie.
+ * De negen labels waarmee het bord begon. Dit is GEEN ledenlijst meer.
  *
- * Bewust niet van het bord gelezen. Elk label heeft een eigen briefingsjabloon in
- * `lib/briefing/templates/`, en dat is een bestand in de repo: een tiende rij op het bord
- * levert dus geen tiende label op maar een briefing die niet gegenereerd kan worden. Code
- * beslist wélke labels bestaan, het bord beslist hoe ze eruitzien.
+ * Tot 13-Oct-2026 was dit de lijst van wat er mocht bestaan, en weigerde de code elke andere
+ * rij op het Labels-bord. Nu is elke rij een label: ITG zet een rij neer en het label werkt
+ * overal (Peter wil zo de dertien testsites onder één label `ITG` laten binnenkomen). Wat de
+ * negen nog bijzonder maakt: elk heeft een eigen briefingsjabloon in `lib/briefing/templates/`.
+ * Een nieuw label krijgt het algemene sjabloon met het logo van zijn rij.
  *
  * De volgorde is die van het agendabord (`status23`), niet alfabetisch, zodat de rijen op het
  * bord in dezelfde volgorde staan als in de dropdown die ITG dagelijks ziet.
@@ -26,15 +27,28 @@ export const LABEL_CODES: readonly LabelCode[] = [
 const CODES: ReadonlySet<string> = new Set(LABEL_CODES);
 
 /**
- * Of een waarde een canonieke labelcode is.
+ * Of een waarde een van de negen oorspronkelijke labels is, letterlijk.
  *
- * STRIKT, met opzet: dit bewaakt de rijen op het Labels-bord, waar de itemnaam de code IS.
- * Een rij die "WorkJoy" heet moet geweigerd worden, want die zou naast de rij "WJ" komen te
- * staan en dan zijn er twee rijen voor één merk. Voor de agenda, waar zulke schrijfwijzen wél
- * voorkomen, is er `resolveLabelCode`.
+ * Alleen nog om onderscheid te maken in een melding: een van de negen zonder rij is een rij
+ * die verdwenen is, een ander label zonder rij is er nooit geweest.
  */
-export function isLabelCode(value: string): value is LabelCode {
+export function isLabelCode(value: string): boolean {
   return CODES.has(value);
+}
+
+/**
+ * De sleutel waarop een label wordt opgezocht: een bekende schrijfwijze wordt het label waar hij
+ * bij hoort (`workjoy` → `WJ`), al het andere zonder spaties eromheen en in hoofdletters.
+ *
+ * ÉÉN sleutel voor beide kanten. De agenda is met de hand gevuld, en `itg ` is dezelfde keuze als
+ * `ITG`. En sinds elke rij op het Labels-bord een label is, kan ook die rij `WorkJoy` heten: zonder
+ * de schrijfwijze in de sleutel zou een training met `WJ` die rij niet meer vinden, en zouden de
+ * rijen `WJ` en `WorkJoy` niet als dubbel gezien worden. Elke opzoeking en elke dubbelcontrole
+ * gaat daarom hierlangs.
+ */
+export function labelSleutel(value: string): string {
+  const trimmed = value.trim();
+  return LABEL_ALIASES[trimmed.toLowerCase()] ?? trimmed.toUpperCase();
 }
 
 /**
@@ -51,9 +65,9 @@ export function isLabelCode(value: string): value is LabelCode {
  * dropdown.
  *
  * De vier die overblijven — `YNS`, `TMT`, `ST - StressTrainer`, `Email`, samen 19 trainingen —
- * staan hier NIET in. Dat zijn geen schrijfwijzen maar onbekende labels: er is geen merk om
- * ze op te laten wijzen, en er raden zou een rapport in de huisstijl van een ander bedrijf
- * opleveren. Die horen gemeld te worden, zoals hetzelfde document voorschrijft.
+ * staan hier NIET in. Dat zijn geen schrijfwijzen maar eigen labels: er raden zou een rapport
+ * in de huisstijl van een ander bedrijf opleveren. Ze werken zodra ITG er een rij voor op het
+ * Labels-bord zet, en tot dan meldt de dagelijkse controle ze.
  */
 export const LABEL_ALIASES: Readonly<Record<string, LabelCode>> = {
   workjoy: 'WJ',
@@ -62,21 +76,16 @@ export const LABEL_ALIASES: Readonly<Record<string, LabelCode>> = {
 };
 
 /**
- * De labelcode achter een waarde uit `status23`, of `null` als wij het label niet kennen.
+ * De opzoeksleutel achter een waarde uit `status23` of de Opportunity, of `null` als de cel
+ * leeg is.
  *
- * Hoofdletterongevoelig en met spaties eraf: de agenda is met de hand gevuld, en `WJ ` of
- * `workjoy` is dezelfde keuze als `WJ`.
+ * Een bekende schrijfwijze wijst naar het label waar hij bij hoort (`workjoy` → `WJ`); elke
+ * andere waarde is zijn eigen label, en of dat label een rij op het Labels-bord heeft beslist
+ * het bord. Zo werkt een label dat ITG toevoegt zonder dat de code het kent.
  */
 export function resolveLabelCode(raw: string): LabelCode | null {
-  const trimmed = raw.trim();
-  if (isLabelCode(trimmed)) {
-    return trimmed;
-  }
-  const upper = trimmed.toUpperCase();
-  if (isLabelCode(upper)) {
-    return upper;
-  }
-  return LABEL_ALIASES[trimmed.toLowerCase()] ?? null;
+  const sleutel = labelSleutel(raw);
+  return sleutel === '' ? null : sleutel;
 }
 
 /**

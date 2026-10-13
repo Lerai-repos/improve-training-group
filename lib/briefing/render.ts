@@ -2,7 +2,8 @@
  * Het sjabloon kiezen, invullen en een bestandsnaam kiezen.
  *
  * De negen sjablonen in `templates/` zijn gegenereerd uit ITG's `.dotx`-bronnen door
- * `tools/briefing-templates/convert.py`. Ze staan in Git omdat ze mee moeten versioneren
+ * `tools/briefing-templates/convert.py`, het algemene `_algemeen.docx` daarvan door
+ * `algemeen.py`. Ze staan in Git omdat ze mee moeten versioneren
  * met de veldnamen die ze invullen: een sjabloon dat `+++duur+++` verwacht en code die
  * `duurTekst` levert, levert een leeg document op zonder dat er iets faalt.
  */
@@ -22,7 +23,12 @@ import { sanitiseItemName } from '@lib/sharepoint/paths';
 
 import { createReport } from 'docx-templates';
 
+import { labelSleutel } from '@lib/labels/catalog';
+
+import { metLogo } from './logo';
+
 import type { BriefingDocumentData } from './compose';
+import type { LabelLogo } from './logo';
 
 /** De delimiters waar de sjablonen op zijn gebouwd. */
 const CMD_DELIMITER: [string, string] = ['+++', '+++'];
@@ -58,19 +64,39 @@ export const ASSETS_DIR = path.join(RESOURCE_DIR, 'assets');
 /** Breedte van het cyclusschema in de briefing, in centimeters. */
 const DIAGRAM_WIDTH_CM = 16;
 
+/** Het sjabloon voor elk label zonder eigen sjabloon; zie `tools/briefing-templates/algemeen.py`. */
+export const ALGEMEEN_SJABLOON = '_algemeen.docx';
+
+/** Een labelnaam die als bestandsnaam van een eigen sjabloon kan dienen. */
+const SJABLOONNAAM = /^[A-Z0-9]{1,12}$/;
+
 /**
- * Het sjabloonbestand voor een label.
+ * Het sjabloon voor een label: zijn eigen, of het algemene.
  *
- * Elk van de negen labels heeft een eigen huisstijl, voorblad en achterblad. Een onbekend
- * label is een `throw` en geen terugval op een standaardsjabloon: dan zou een training van
- * een nieuw label een briefing krijgen met het logo van een ander merk erop.
+ * De negen labels waarmee ITG begon hebben elk een eigen sjabloon. Een label dat ITG later op
+ * het Labels-bord zet krijgt het algemene, met het logo van zijn eigen rij erin (`logo.ts`) — en
+ * dus nooit het logo van een ander merk. Tot 13-Oct-2026 was een onbekend label hier een fout.
+ *
+ * Een leeg label blijft een fout: dan is er geen rij om een logo van te halen.
  */
-export function templatePath(label: string, dir: string = TEMPLATES_DIR): string {
-  const clean = label.trim().toUpperCase();
-  if (!/^[A-Z]{2,3}$/.test(clean)) {
-    throw new Error(`Briefing: onbekend label ${JSON.stringify(label)}; geen sjabloon beschikbaar`);
+export function sjabloonVoor(
+  label: string,
+  dir: string = TEMPLATES_DIR
+): { readonly pad: string; readonly eigen: boolean } {
+  /** Op de sleutel: `WorkJoy` op de agenda is `WJ`, en dat heeft een eigen sjabloon. */
+  const clean = labelSleutel(label);
+  if (clean === '') {
+    throw new Error('Briefing: de training heeft geen label; geen sjabloon beschikbaar');
   }
-  return path.join(dir, `${clean}.docx`);
+  const eigen = path.join(dir, `${clean}.docx`);
+  return SJABLOONNAAM.test(clean) && existsSync(eigen)
+    ? { pad: eigen, eigen: true }
+    : { pad: path.join(dir, ALGEMEEN_SJABLOON), eigen: false };
+}
+
+/** Of dit label een eigen sjabloon heeft; zonder heeft de briefing het logo van het bord nodig. */
+export function heeftEigenSjabloon(label: string, dir: string = TEMPLATES_DIR): boolean {
+  return label.trim() !== '' && sjabloonVoor(label, dir).eigen;
 }
 
 /** `24-03-2026` uit `2026-03-24`; leeg wanneer er geen bruikbare datum is. */
@@ -119,9 +145,22 @@ export function briefingFilename(input: {
 export async function renderBriefing(
   label: string,
   data: BriefingDocumentData,
-  options: { templatesDir?: string; assetsDir?: string } = {}
+  options: {
+    templatesDir?: string;
+    assetsDir?: string;
+    /** Het logo van het Labels-bord; verplicht voor een label zonder eigen sjabloon. */
+    logo?: LabelLogo;
+  } = {}
 ): Promise<Uint8Array> {
-  const file = templatePath(label, options.templatesDir);
+  const sjabloon = sjabloonVoor(label, options.templatesDir);
+  const file = sjabloon.pad;
+  /** Vóór het renderen: zonder logo komt er geen document, ook geen half. */
+  if (!sjabloon.eigen && options.logo === undefined) {
+    throw new Error(
+      `Briefing: label ${label.trim()} heeft geen eigen sjabloon, dus het algemene sjabloon heeft ` +
+        'het logo van het Labels-bord nodig, en dat is er niet.'
+    );
+  }
   if (!existsSync(file)) {
     /**
      * Een kale ENOENT noemt wél het pad maar niet de oorzaak, en de oorzaak is bijna altijd
@@ -197,7 +236,7 @@ export async function renderBriefing(
       );
     }
   }
-  return buffer;
+  return sjabloon.eigen || options.logo === undefined ? buffer : metLogo(buffer, options.logo);
 }
 
 /** Hoogte gedeeld door breedte, uit de PNG-header. */

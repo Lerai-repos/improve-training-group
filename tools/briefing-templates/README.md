@@ -109,3 +109,26 @@ python3 tools/briefing-templates/achtergrond-koppen.py
 ```
 
 Volgorde na opnieuw genereren: `teksten.py`, `volgorde.py`, dan dit.
+
+## Stap zes: de inventarisatie zoals ITG's voorbeeld (13-Oct-2026)
+
+Elke vraag van het inventarisatieformulier vet, het antwoord eronder, en een witregel tussen twee
+paren:
+
+```bash
+python3 tools/briefing-templates/inventarisatie-opmaak.py
+```
+
+## Stap zeven: het algemene sjabloon (13-Oct-2026)
+
+ITG voegt zelf labels toe op het Labels-bord. Zo'n label heeft geen eigen sjabloon en krijgt
+`_algemeen.docx`: een kopie van `IT.docx` waarin de twee logo's (voorblad en voettekst) de
+relatie-id `rIdLabelLogo` en een leeg plaatje hebben, en het woord "Training" in de gegevenstabel
+`+++term+++` is. Bij het renderen zet `lib/briefing/logo.ts` het logo van het Labels-bord erin.
+
+```bash
+python3 tools/briefing-templates/algemeen.py
+```
+
+**Draai dit als laatste**, na elke stap die alle sjablonen omzet: het script kopieert `IT.docx`
+opnieuw, dus een omzetting van daarvoor komt vanzelf mee, en een van daarna niet.

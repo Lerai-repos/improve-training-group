@@ -95,6 +95,27 @@ describe('labelFindings', () => {
     expect(found).toEqual([{ kind: 'label-ontbreekt', code: 'WJ', trainingen: 65 }]);
   });
 
+  /** Een label dat ITG zelf op het bord zette, wordt gecontroleerd als elk ander. */
+  it('controleert een nieuw label op zijn rij, hoe het op de agenda ook geschreven is', () => {
+    const found = labelFindings(
+      usage({ labels: new Map([['itg', 3], ['ITG', 2]]) }),
+      configured(['ITG', record({ code: 'ITG', voorblad: null })])
+    );
+    expect(found).toEqual([
+      {
+        kind: 'label-onvolledig',
+        code: 'ITG',
+        velden: [{ veld: 'voorblad', reden: 'leeg' }],
+        trainingen: 5,
+      },
+    ]);
+  });
+
+  it('meldt een nieuw label zonder rij zoals het op de agenda staat', () => {
+    const found = labelFindings(usage({ labels: new Map([['Itg', 4]]) }), configured());
+    expect(found).toEqual([{ kind: 'onbekend-label', label: 'Itg', trainingen: 4 }]);
+  });
+
   it('slaat een lege labelcel over — dat is geen onbekend label', () => {
     const found = labelFindings(usage({ labels: new Map([['', 12]]) }), configured());
     expect(found).toEqual([]);

@@ -9,7 +9,7 @@ import {
   type AgendaBoardSet,
   type BoardsQueryClient,
 } from '@lib/evaluations';
-import { labelsBoardId } from '@lib/labels';
+import { labelSleutel, labelsBoardId } from '@lib/labels';
 import {
   createFailureStore,
   createGraphMailSender,
@@ -233,7 +233,8 @@ export function buildReportRunDeps(deadlineMs?: () => number | null): ReportRunD
 
   return {
     readTraining: async (id) => readTrainingForReport(client, id, (await boards()).boards),
-    readLabel: async (code) => (await readLabels(client, labelsBoardId())).get(code) ?? null,
+    readLabel: async (code) =>
+      (await readLabels(client, labelsBoardId())).get(labelSleutel(code)) ?? null,
     readResponses: async () =>
       (
         await googleSheetsSource(

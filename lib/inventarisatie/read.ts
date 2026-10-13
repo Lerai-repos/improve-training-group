@@ -1,5 +1,5 @@
 import { OPPORTUNITY_BOARD, OPPORTUNITY_COLUMNS } from '@lib/briefing/columns';
-import { LABEL_COLUMNS, labelsBoardId } from '@lib/labels';
+import { LABEL_COLUMNS, labelSleutel, labelsBoardId } from '@lib/labels';
 import { readLabelRows } from '@lib/labels/read';
 import { assertColumns } from '@lib/monday/schema-check';
 
@@ -12,7 +12,7 @@ const LABEL = OPPORTUNITY_COLUMNS.label;
 const LINK = OPPORTUNITY_COLUMNS.inventarisatie;
 
 const VELDEN = `id board { id } column_values(ids: ["${LABEL}", "${LINK}"]) {
-  id ... on StatusValue { index } ... on LinkValue { url url_text }
+  id text ... on StatusValue { index } ... on LinkValue { url url_text }
 }`;
 
 /**
@@ -40,6 +40,7 @@ async function keur(
 
 interface Cel {
   readonly id: string;
+  readonly text?: string | null;
   readonly index?: number | null;
   readonly url?: string | null;
   readonly url_text?: string | null;
@@ -88,6 +89,7 @@ function stand(rij: Rij): OpportunityStand {
   return {
     itemId: String(rij.id),
     labelIndex: typeof label.index === 'number' ? label.index : null,
+    labelTekst: (label.text ?? '').trim(),
     link: (link.url ?? '').trim(),
     tekst: (link.url_text ?? '').trim(),
   };
@@ -157,7 +159,7 @@ export async function leesAlleOpportunities(
 /**
  * De website per label, live van het Labels-bord: past ITG een website aan, dan volgen de
  * links vanzelf. De soepele lezer, want een label zonder website (FT) is hier geen fout maar
- * "geen link".
+ * "geen link". Op de sleutel van het label (`labelSleutel`), net als de rapportlezer.
  */
 export async function leesWebsites(
   client: MondayGraphQLClient
@@ -174,5 +176,5 @@ export async function leesWebsites(
       `Labels-bord ${boardId}: geen enkel label heeft een website. Gestopt zonder links te wissen.`
     );
   }
-  return new Map(records.map((r) => [r.code, r.website]));
+  return new Map(records.map((r) => [labelSleutel(r.code), r.website]));
 }

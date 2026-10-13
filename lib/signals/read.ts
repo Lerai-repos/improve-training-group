@@ -1,5 +1,6 @@
 import { THEMAS_BOARD, TRAINERS_BOARD } from '@lib/monday/board-config';
 import { THEMAS_COLUMNS } from '@lib/briefing/columns';
+import { labelSleutel } from '@lib/labels';
 import { readLabelRows } from '@lib/labels/read';
 import { assertColumns } from '@lib/monday/schema-check';
 import { trainerRelationColumns } from '@lib/evaluations';
@@ -249,5 +250,5 @@ export async function readLabelsForCheck(
   boardId: string
 ): Promise<ReadonlyMap<LabelCode, LabelRecord>> {
   const { records } = await readLabelRows(client, boardId);
-  return new Map(records.map((r) => [r.code, r]));
+  return new Map(records.map((r) => [labelSleutel(r.code), r]));
 }

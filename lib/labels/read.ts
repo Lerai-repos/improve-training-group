@@ -1,16 +1,17 @@
 import { LABEL_COLUMNS } from './columns';
-import { isLabelCode } from './catalog';
+import { labelSleutel } from './catalog';
 import { describeProblem, validateCatalog } from './validate';
 
 import type { CatalogProblem } from './validate';
 import type { LabelCode, LabelConfig } from './types';
 
 /**
- * Het Labels-bord lezen: negen rijen, tien kolommen, één keer per rapportrun.
+ * Het Labels-bord lezen: één rij per label, één keer per rapportrun.
  *
- * Fail-closed, net als de Instellingen-lezer. Een halve labelconfiguratie levert geen halve
- * fout op maar een compleet, professioneel ogend rapport in de verkeerde huisstijl — en dat is
- * precies het soort resultaat waar niemand naar kijkt.
+ * Fail-closed PER LABEL. Een halve labelconfiguratie levert geen halve fout op maar een
+ * compleet, professioneel ogend rapport in de verkeerde huisstijl — en dat is precies het soort
+ * resultaat waar niemand naar kijkt. Sinds ITG zelf labels toevoegt (13-Oct-2026) mag een rij
+ * die nog wordt ingevuld de andere labels niet stilleggen: zo'n rij telt gewoon nog niet mee.
  */
 
 /**
@@ -180,10 +181,9 @@ function toRecord(item: LabelItem, code: LabelCode): { record: LabelRecord; ambi
 /**
  * Zet de ruwe items om, zonder Monday. Apart zodat de vertaling getest kan worden.
  *
- * De itemnaam IS de labelcode — dat is hoe `02-datamodel-monday.md` het bord specificeert.
- * Een rij met een naam die geen labelcode is komt er als `unknown` uit in plaats van te
- * worden overgeslagen: stil negeren zou een verkeerd gespelde `SST ` laten verdwijnen en het
- * label als ontbrekend melden, wat naar de verkeerde reparatie wijst.
+ * De itemnaam IS de labelcode — dat is hoe `02-datamodel-monday.md` het bord specificeert, en
+ * elke naam is een label. Alleen een rij zonder naam komt er als `unknown` uit: die is aan geen
+ * agendawaarde te koppelen.
  */
 export function mapLabelItems(items: readonly LabelItem[]): {
   records: LabelRecord[];
@@ -195,8 +195,8 @@ export function mapLabelItems(items: readonly LabelItem[]): {
   const ambiguous: string[] = [];
   for (const item of items) {
     const code = item.name.trim();
-    if (!isLabelCode(code)) {
-      unknown.push(code);
+    if (code === '') {
+      unknown.push(item.id);
       continue;
     }
     const mapped = toRecord(item, code);
@@ -221,9 +221,9 @@ export function mapLabelItems(items: readonly LabelItem[]): {
  * of een leeg veld is precies wat zij hoort te melden.
  *
  * Structurele problemen horen bij geen van beide thuis en blijven hier staan: een bord dat niet
- * bestaat, twee rijen met dezelfde code, een rij waarvan de naam geen labelcode is, of een
- * bestandskolom met meer dan één bruikbaar bestand. Bij die vier is niet te zeggen wélke rij of
- * wélk bestand bedoeld is, en dat kan geen enkele melding uitdrukken.
+ * bestaat, twee rijen met dezelfde code, een rij zonder naam, of een bestandskolom met meer dan
+ * één bruikbaar bestand. Bij die vier is niet te zeggen wélke rij of wélk bestand bedoeld is, en
+ * dat kan geen enkele melding uitdrukken.
  */
 export async function readLabelRows(
   client: LabelsReader,
@@ -245,13 +245,11 @@ export async function readLabelRows(
   const { records, unknown, ambiguous } = mapLabelItems(board.items_page?.items ?? []);
   const problems = validateCatalog(records);
 
-  const structureel = problems.filter(
-    (p) => p.kind === 'duplicate_label' || p.kind === 'unknown_label'
-  );
+  const structureel = problems.filter((p) => p.kind === 'duplicate_label');
   if (structureel.length > 0 || unknown.length > 0 || ambiguous.length > 0) {
     const lines = [
       ...structureel.map(describeProblem),
-      ...unknown.map((name) => `"${name}": rij zonder geldige labelcode als naam`),
+      ...unknown.map((id) => `item ${id}: rij zonder naam`),
       ...ambiguous,
     ];
     throw new Error(
@@ -264,25 +262,26 @@ export async function readLabelRows(
 }
 
 /**
- * De strikte lezer: alles moet kloppen, anders werpt hij.
+ * De strikte lezer: alleen de labels die volledig kloppen, op hun sleutel (`labelSleutel`).
  *
- * Dit is de lezer voor de RAPPORTMOTOR. De dagelijkse controle gebruikt hem met opzet niet —
- * zie `readLabelRows` en `lib/signals/deps.ts`.
+ * Dit is de lezer voor de RAPPORTMOTOR. Een rij met een leeg verplicht veld of een kleur die
+ * geen hex is staat er NIET in: voor dat label komt er geen rapport (`unknown_label`), en de
+ * dagelijkse controle meldt welk veld er mist. De andere labels lopen gewoon door. Tot
+ * 13-Oct-2026 wierp deze lezer voor het hele bord; dat kon zolang de negen rijen vaststonden,
+ * maar een label dat ITG net aanmaakt is per definitie even half ingevuld.
+ *
+ * De dagelijkse controle gebruikt hem met opzet niet — zie `readLabelRows` en
+ * `lib/signals/deps.ts`.
  */
 export async function readLabels(
   client: LabelsReader,
   boardId: string
 ): Promise<ReadonlyMap<LabelCode, LabelRecord>> {
   const { records, problems } = await readLabelRows(client, boardId);
-
-  if (problems.length > 0) {
-    const lines = problems.map(describeProblem);
-    throw new Error(
-      `Het Labels-bord (${boardId}) klopt niet:\n  ${lines.join('\n  ')}\n` +
-        'Zonder een kloppende labelconfiguratie wordt een rapport in de verkeerde huisstijl ' +
-        'gerenderd, en dat is aan het resultaat niet te zien.'
-    );
-  }
-
-  return new Map(records.map((r) => [r.code, r]));
+  const onvolledig = new Set(problems.map((p) => labelSleutel(p.code)));
+  return new Map(
+    records
+      .filter((r) => !onvolledig.has(labelSleutel(r.code)))
+      .map((r) => [labelSleutel(r.code), r])
+  );
 }

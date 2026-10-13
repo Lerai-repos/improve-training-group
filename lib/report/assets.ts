@@ -24,14 +24,17 @@ export interface InlinedAsset {
 
 export type AssetResult = { kind: 'ok'; asset: InlinedAsset } | { kind: 'failed'; reason: string };
 
+/** Het opgehaalde bestand, nog niet ingebed. */
+export type FetchedAsset =
+  | { kind: 'ok'; bytes: Buffer; contentType: string }
+  | { kind: 'failed'; reason: string };
+
 /**
- * Eén afbeelding ophalen.
- *
- * Geeft een MISLUKKING terug in plaats van te werpen. Een ontbrekend logo mag geen rapport
- * tegenhouden — het document is zonder logo nog steeds bruikbaar — maar het moet wél
- * zichtbaar zijn dat het miste, en dat is aan de aanroeper.
+ * Eén afbeelding ophalen, met dezelfde grenzen als het rapport: binnen de tijd, een
+ * afbeeldingstype en niet te groot. Ook voor het logo in de briefing van een label zonder eigen
+ * sjabloon.
  */
-export async function inlineAsset(asset: LabelAsset): Promise<AssetResult> {
+export async function fetchAsset(asset: LabelAsset): Promise<FetchedAsset> {
   try {
     const response = await fetch(asset.publicUrl, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -54,19 +57,33 @@ export async function inlineAsset(asset: LabelAsset): Promise<AssetResult> {
         reason: `${asset.name}: ${Math.round(buffer.byteLength / 1024 / 1024)} MB is te groot`,
       };
     }
-
-    return {
-      kind: 'ok',
-      asset: {
-        dataUri: `data:${contentType};base64,${buffer.toString('base64')}`,
-        bytes: buffer.byteLength,
-        contentType,
-      },
-    };
+    return { kind: 'ok', bytes: buffer, contentType };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { kind: 'failed', reason: `${asset.name}: ${message}` };
   }
+}
+
+/**
+ * Eén afbeelding ophalen en als data-URI teruggeven.
+ *
+ * Geeft een MISLUKKING terug in plaats van te werpen. Een ontbrekend logo mag geen rapport
+ * tegenhouden — het document is zonder logo nog steeds bruikbaar — maar het moet wél
+ * zichtbaar zijn dat het miste, en dat is aan de aanroeper.
+ */
+export async function inlineAsset(asset: LabelAsset): Promise<AssetResult> {
+  const fetched = await fetchAsset(asset);
+  if (fetched.kind === 'failed') {
+    return fetched;
+  }
+  return {
+    kind: 'ok',
+    asset: {
+      dataUri: `data:${fetched.contentType};base64,${fetched.bytes.toString('base64')}`,
+      bytes: fetched.bytes.byteLength,
+      contentType: fetched.contentType,
+    },
+  };
 }
 
 export interface LabelArtwork {

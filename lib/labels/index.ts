@@ -4,6 +4,7 @@ export {
   LABEL_GAPS,
   LABEL_SEED,
   isLabelCode,
+  labelSleutel,
   resolveLabelCode,
 } from './catalog';
 export { LABELS_PRODUCTION_BOARD, labelsBoardId } from './board';

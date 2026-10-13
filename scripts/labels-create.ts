@@ -27,15 +27,15 @@ import {
   seedColumnValues,
   validateCatalog,
 } from '@lib/labels';
-import { readLabels } from '@lib/labels/read';
+import { readLabelRows, readLabels } from '@lib/labels/read';
 
 /**
  * Maakt het Labels-bord: negen merken, één rij per merk.
  *
- * Vervangt Airtable's tabel `Label Configuratie`. Het bord bepaalt hoe een label ERUITZIET —
- * kleur, naam, rapportterm, formulieren, afbeeldingen. WELKE labels bestaan blijft in code
- * (`LABEL_CODES`), want elk label heeft ook een briefingsjabloon in de repo: een tiende rij
- * hier levert geen tiende label op maar een briefing die niet gegenereerd kan worden.
+ * Vervangt Airtable's tabel `Label Configuratie`. Het bord bepaalt hoe een label eruitziet —
+ * kleur, naam, rapportterm, formulieren, afbeeldingen — en sinds 13-Oct-2026 ook WELKE labels er
+ * zijn: ITG zet zelf een rij erbij, en `pnpm labels:keuzelijsten` zet hem in de keuzelijsten.
+ * Dit script maakt alleen de negen rijen waarmee het bord begon (`LABEL_SEED`).
  *
  *   pnpm labels:create            # droogloop
  *   pnpm labels:create --apply
@@ -318,6 +318,16 @@ async function ensureRows(
  * bord lezen", dus dat is wat er gecontroleerd wordt.
  */
 async function verify(read: Read, boardId: string): Promise<void> {
+  /**
+   * `readLabels` laat een onvolledige rij weg in plaats van te werpen (een label dat ITG nog
+   * invult mag de rest niet stilleggen). Hier moet alles kloppen, dus de problemen apart.
+   */
+  const { problems } = await readLabelRows(read, boardId);
+  if (problems.length > 0) {
+    throw new Error(
+      `Het Labels-bord klopt niet:\n  ${problems.map(describeProblem).join('\n  ')}`
+    );
+  }
   const labels = await readLabels(read, boardId);
   console.log(`\n  Teruggelezen: ${labels.size} labels`);
   for (const [code, record] of labels) {

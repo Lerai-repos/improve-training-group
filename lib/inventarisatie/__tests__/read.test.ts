@@ -74,14 +74,20 @@ describe('leesOpportunity', () => {
           id: '42',
           board: { id: OPP },
           column_values: [
-            { id: 'label', index: 9 },
+            { id: 'label', index: 9, text: 'Incompany Trainer' },
             { id: 'itg_inventarisatie', url: 'https://x.nl/a', url_text: 'klik hier' },
           ],
         },
       }),
       '42'
     );
-    expect(stand).toEqual({ itemId: '42', labelIndex: 9, link: 'https://x.nl/a', tekst: 'klik hier' });
+    expect(stand).toEqual({
+      itemId: '42',
+      labelIndex: 9,
+      labelTekst: 'Incompany Trainer',
+      link: 'https://x.nl/a',
+      tekst: 'klik hier',
+    });
   });
 
   /**

@@ -47,7 +47,8 @@ import {
 } from '@lib/recommend/travel-cache';
 import { createUpstashKvStore, createRedisClient } from '@lib/recommend/kv';
 import { loadSettingsOnce } from '@lib/settings/load';
-import { briefingFilename, renderBriefing } from '@lib/briefing/render';
+import { haalLabelLogo } from '@lib/briefing/label-logo';
+import { briefingFilename, heeftEigenSjabloon, renderBriefing } from '@lib/briefing/render';
 import { BRIE } from '@lib/briefing/types';
 import { briefingtekstenBoardId } from '@lib/briefingteksten/board';
 import { readBriefingTeksten } from '@lib/briefingteksten/read';
@@ -474,6 +475,10 @@ async function main(): Promise<void> {
       label: training.label,
     }),
   };
+  /** Zoals de knop: een label zonder eigen sjabloon krijgt het logo van het Labels-bord. */
+  const logo = heeftEigenSjabloon(training.label)
+    ? undefined
+    : await haalLabelLogo(client, labelsBoardId(), training.label);
   /**
    * De gegevenstabel is voor iedereen bijna gelijk, dus die wordt één keer getoond — met de
    * eerste ontvanger als voorbeeld. Wat per persoon verschilt (Klantcontactmoment, straks de
@@ -573,7 +578,7 @@ async function main(): Promise<void> {
       }
     }
 
-    const buffer = await renderBriefing(training.label, eigen);
+    const buffer = await renderBriefing(training.label, eigen, { logo });
     const filename = briefingFilename({
       opdrachtgever: eigen.opdrachtgever,
       thema: eigen.thema,

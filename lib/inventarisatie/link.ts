@@ -1,3 +1,5 @@
+import { resolveLabelCode } from '@lib/labels';
+
 import type { LabelCode } from '@lib/labels';
 
 /**
@@ -12,10 +14,13 @@ import type { LabelCode } from '@lib/labels';
 
 /**
  * De kolom `Label` op de Opportunity, op labelnummer (gemeten 12-Oct-2026). Hij mengt codes en
- * volledige namen, dus beide wijzen naar hetzelfde label. Op nummer, zodat ITG ze mag hernoemen.
+ * volledige namen, dus beide wijzen naar hetzelfde label. Op nummer, zodat ITG deze negen mag
+ * hernoemen.
  *
- * Niet hier, dus nooit een link: 5 (leeg), 11 `ST - StressTrainer`, 14 `Email`, 15 `TMT` en
- * 17 `ITG`. Die hebben geen eigen website op het Labels-bord.
+ * Elk ander nummer gaat op de tekst van het label, zie `labelVanOpportunity`: zo werkt een label
+ * dat ITG later toevoegt (17 `ITG`) zonder dat het hier hoeft te staan. 5 (leeg),
+ * 11 `ST - StressTrainer`, 14 `Email` en 15 `TMT` hebben geen rij op het Labels-bord en krijgen
+ * dus geen link.
  */
 const OPPORTUNITY_LABEL: Readonly<Record<number, LabelCode>> = {
   0: 'TT',
@@ -33,8 +38,15 @@ const OPPORTUNITY_LABEL: Readonly<Record<number, LabelCode>> = {
   16: 'CP',
 };
 
-export function labelVanOpportunity(labelIndex: number | null): LabelCode | null {
-  return labelIndex === null ? null : (OPPORTUNITY_LABEL[labelIndex] ?? null);
+/** De opzoeksleutel van het label (`labelSleutel`), of `null` als de cel leeg is. */
+export function labelVanOpportunity(
+  labelIndex: number | null,
+  labelTekst: string
+): LabelCode | null {
+  if (labelIndex === null) {
+    return null;
+  }
+  return OPPORTUNITY_LABEL[labelIndex] ?? resolveLabelCode(labelTekst);
 }
 
 /**
@@ -57,14 +69,17 @@ export interface OpportunityLabel {
   readonly itemId: string;
   /** Het labelnummer van `Label`, of `null` als de cel leeg is. */
   readonly labelIndex: number | null;
+  /** De tekst van dat label; telt alleen voor een nummer dat niet in `OPPORTUNITY_LABEL` staat. */
+  readonly labelTekst: string;
 }
 
 /** De link die er hoort te staan, of `null` als er geen hoort te staan. */
 export function gewensteLink(
   opportunity: OpportunityLabel,
+  /** Op de sleutel van het label, zie `leesWebsites`. */
   websites: ReadonlyMap<LabelCode, string>
 ): string | null {
-  const label = labelVanOpportunity(opportunity.labelIndex);
+  const label = labelVanOpportunity(opportunity.labelIndex, opportunity.labelTekst);
   const website = label === null ? undefined : websites.get(label);
   return website === undefined ? null : inventarisatieLink(website, opportunity.itemId);
 }

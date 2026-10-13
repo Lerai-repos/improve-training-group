@@ -32,6 +32,17 @@ export type Finding =
       readonly velden: readonly LabelFieldIssue[];
       readonly trainingen: number;
     }
+  /**
+   * Een label van het Labels-bord staat niet in een keuzelijst (Opportunity of agenda). Het
+   * toevoegen gaat vanzelf (`lib/labels/keuzelijst-sync.ts`); dit is de melding als dat niet lukte.
+   * Geen aantal trainingen: zonder het label in de keuzelijst kan er nog geen training aan hangen.
+   */
+  | {
+      readonly kind: 'label-niet-in-keuzelijst';
+      readonly code: LabelCode;
+      readonly boardId: string;
+      readonly bord: string;
+    }
   /** Een training verwijst naar een thema-item dat niet meer bestaat. */
   | { readonly kind: 'thema-ontbreekt'; readonly themaId: string; readonly trainingen: number }
   /** Een training verwijst naar een trainer-item dat niet meer bestaat. */
@@ -168,6 +179,9 @@ export function findingKey(finding: Finding): string {
       return `label-ontbreekt:${finding.code}`;
     case 'label-onvolledig':
       return `label-onvolledig:${finding.code}`;
+    // Op bord-id: een hernoemd bord is hetzelfde bord.
+    case 'label-niet-in-keuzelijst':
+      return `label-niet-in-keuzelijst:${finding.code}:${finding.boardId}`;
     case 'thema-ontbreekt':
       return `thema-ontbreekt:${finding.themaId}`;
     case 'trainer-ontbreekt':

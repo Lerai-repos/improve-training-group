@@ -18,6 +18,8 @@ import { labelsBoardId } from '@lib/labels';
 import { loadSettingsOnce } from '@lib/settings/load';
 
 import { readHistorie } from './historie';
+import { haalLabelLogo } from './label-logo';
+import { heeftEigenSjabloon } from './render';
 import { readTrainerAddresses, resolveBriefingTravel } from './reis';
 import { extraInfoRegels, readExtraInfo } from './updates';
 
@@ -198,10 +200,15 @@ export async function buildGenerateContext(
     labelsBoardId: labelsBoardId(),
     label: training.label,
   });
+  /** Alleen voor een label zonder eigen sjabloon; zie `render.ts`. */
+  const logo = heeftEigenSjabloon(training.label)
+    ? undefined
+    : await haalLabelLogo(client, labelsBoardId(), training.label);
 
   return {
     context: {
       teksten,
+      logo,
       historie,
       extraInfo: extraInfoRegels(training.extraInfo, extraInfo.lines),
       reis,

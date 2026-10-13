@@ -32,13 +32,13 @@ function stel(
 
 describe('syncLink', () => {
   it('schrijft de link op een nieuwe Opportunity', async () => {
-    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 1, link: '', tekst: '' }]);
+    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 1, labelTekst: '', link: '', tekst: '' }]);
     expect(await syncLink(deps, '1')).toBe('geschreven');
     expect(geschreven).toEqual([['1', IT('1')]]);
   });
 
   it('schrijft niets als de juiste link er al staat', async () => {
-    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 9, link: IT('1'), tekst: IT('1') }]);
+    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 9, labelTekst: '', link: IT('1'), tekst: IT('1') }]);
     expect(await syncLink(deps, '1')).toBe('ongewijzigd');
     expect(geschreven).toEqual([]);
   });
@@ -46,7 +46,7 @@ describe('syncLink', () => {
   /** De URL is ook de zichtbare tekst, zodat hij te kopiëren is; "klik hier" verbergt hem. */
   it('zet de tekst terug als iemand hem veranderde', async () => {
     const { deps, geschreven } = stel([
-      { itemId: '1', labelIndex: 1, link: IT('1'), tekst: 'klik hier' },
+      { itemId: '1', labelIndex: 1, labelTekst: '', link: IT('1'), tekst: 'klik hier' },
     ]);
     expect(await syncLink(deps, '1')).toBe('geschreven');
     expect(geschreven).toEqual([['1', IT('1')]]);
@@ -54,26 +54,26 @@ describe('syncLink', () => {
 
   /** Een gedupliceerde Opportunity neemt de link van het origineel mee, met diens id. */
   it('vervangt de link van een andere Opportunity', async () => {
-    const { deps, geschreven } = stel([{ itemId: '2', labelIndex: 1, link: IT('1'), tekst: '' }]);
+    const { deps, geschreven } = stel([{ itemId: '2', labelIndex: 1, labelTekst: '', link: IT('1'), tekst: '' }]);
     expect(await syncLink(deps, '2')).toBe('geschreven');
     expect(geschreven).toEqual([['2', IT('2')]]);
   });
 
   /** Anders wijst hij naar de website van het vorige label. */
   it('haalt de link weg als het label geen website heeft', async () => {
-    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 14, link: IT('1'), tekst: '' }]);
+    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 14, labelTekst: '', link: IT('1'), tekst: '' }]);
     expect(await syncLink(deps, '1')).toBe('gewist');
     expect(geschreven).toEqual([['1', null]]);
   });
 
   it('laat een lege cel leeg als er geen link hoort', async () => {
-    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: null, link: '', tekst: '' }]);
+    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: null, labelTekst: '', link: '', tekst: '' }]);
     expect(await syncLink(deps, '1')).toBe('ongewijzigd');
     expect(geschreven).toEqual([]);
   });
 
   it('schrijft niets in een droogloop, maar zegt wel wat hij zou doen', async () => {
-    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 1, link: '', tekst: '' }], {
+    const { deps, geschreven } = stel([{ itemId: '1', labelIndex: 1, labelTekst: '', link: '', tekst: '' }], {
       dryRun: true,
     });
     expect(await syncLink(deps, '1')).toBe('geschreven');
@@ -90,10 +90,10 @@ describe('syncAlleLinks', () => {
   it('telt per uitkomst, en zet een mislukte schrijfactie apart zonder de rest te stoppen', async () => {
     const { deps, geschreven } = stel(
       [
-        { itemId: '1', labelIndex: 1, link: '', tekst: '' },
-        { itemId: '2', labelIndex: 1, link: IT('2'), tekst: IT('2') },
-        { itemId: '3', labelIndex: 15, link: IT('3'), tekst: '' },
-        { itemId: '4', labelIndex: 1, link: '', tekst: '' },
+        { itemId: '1', labelIndex: 1, labelTekst: '', link: '', tekst: '' },
+        { itemId: '2', labelIndex: 1, labelTekst: '', link: IT('2'), tekst: IT('2') },
+        { itemId: '3', labelIndex: 15, labelTekst: '', link: IT('3'), tekst: '' },
+        { itemId: '4', labelIndex: 1, labelTekst: '', link: '', tekst: '' },
       ],
       { faalOp: '1' }
     );

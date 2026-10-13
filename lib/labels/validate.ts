@@ -1,6 +1,6 @@
-import { LABEL_CODES, isLabelCode } from './catalog';
+import { labelSleutel } from './catalog';
 
-import type { LabelCode, LabelConfig } from './types';
+import type { LabelConfig } from './types';
 
 /**
  * Alles wat er mis kan zijn met de labelconfiguratie, op één plek en zonder Monday.
@@ -37,20 +37,10 @@ const REPORT_REQUIRED: ReadonlyArray<readonly ['volledigeNaam' | 'kleur' | 'rapp
     ['rapportterm', 'Rapportterm'],
   ];
 
-/**
- * Wat er gekeurd wordt: een rij zoals hij van het BORD komt, met `code` als gewone string.
- *
- * Niet `LabelConfig`, want daarin is `code` al een `LabelCode` — en dan is de tak
- * `unknown_label` per definitie onbereikbaar zonder de compiler voor te liegen. Precies dát
- * gat maakte een cast in de test nodig, en een cast om een tak te bereiken betekent dat de
- * tak in productie niet bereikt kán worden. De boordwaarde is een string; dat hoort dit type
- * te zeggen.
- */
-export type UncheckedLabelRow = Omit<LabelConfig, 'code'> & { readonly code: string };
+/** Een rij zoals hij van het bord komt. Sinds elke rij een label is, gewoon `LabelConfig`. */
+export type UncheckedLabelRow = LabelConfig;
 
 export type CatalogProblem =
-  | { kind: 'missing_label'; code: LabelCode }
-  | { kind: 'unknown_label'; code: string }
   | { kind: 'duplicate_label'; code: string }
   | { kind: 'bad_colour'; code: string; found: string }
   | { kind: 'empty_field'; code: string; field: string };
@@ -58,26 +48,26 @@ export type CatalogProblem =
 /**
  * Keurt de hele verzameling, niet één rij.
  *
- * Ontbrekende en dubbele labels zijn per definitie eigenschappen van het geheel: een rij die
- * er niet is kan zichzelf niet melden, en een duplicaat is pas te zien naast zijn tweelingbroer.
- * Vandaar dat dit de complete lijst binnenkrijgt en een lijst problemen teruggeeft in plaats
- * van bij de eerste te stoppen — wie het bord repareert wil alles in één keer zien.
+ * Een dubbel label is een eigenschap van het geheel: een duplicaat is pas te zien naast zijn
+ * tweelingbroer. Vandaar dat dit de complete lijst binnenkrijgt en een lijst problemen
+ * teruggeeft in plaats van bij de eerste te stoppen — wie het bord repareert wil alles in één
+ * keer zien.
+ *
+ * Een ontbrekend label meldt dit niet meer: welke labels er zijn beslist het bord. Een label dat
+ * op de agenda staat zonder rij meldt de dagelijkse controle (`labelFindings`).
  */
 export function validateCatalog(rows: readonly UncheckedLabelRow[]): readonly CatalogProblem[] {
   const problems: CatalogProblem[] = [];
   const seen = new Set<string>();
 
   for (const row of rows) {
-    if (seen.has(row.code)) {
+    /** Op de sleutel: `itg` en `ITG` zijn op de agenda hetzelfde label, dus ook hier. */
+    const sleutel = labelSleutel(row.code);
+    if (seen.has(sleutel)) {
       problems.push({ kind: 'duplicate_label', code: row.code });
       continue;
     }
-    seen.add(row.code);
-
-    if (!isLabelCode(row.code)) {
-      problems.push({ kind: 'unknown_label', code: row.code });
-      continue;
-    }
+    seen.add(sleutel);
 
     for (const [field, title] of REPORT_REQUIRED) {
       if (row[field].trim() === '') {
@@ -90,22 +80,12 @@ export function validateCatalog(rows: readonly UncheckedLabelRow[]): readonly Ca
     }
   }
 
-  for (const code of LABEL_CODES) {
-    if (!seen.has(code)) {
-      problems.push({ kind: 'missing_label', code });
-    }
-  }
-
   return problems;
 }
 
 /** Eén probleem als Nederlandse regel, voor een foutmelding of een scriptuitvoer. */
 export function describeProblem(problem: CatalogProblem): string {
   switch (problem.kind) {
-    case 'missing_label':
-      return `${problem.code}: geen rij op het Labels-bord`;
-    case 'unknown_label':
-      return `${problem.code}: onbekend label — de negen labels staan in LABEL_CODES`;
     case 'duplicate_label':
       return `${problem.code}: staat meerdere keren op het bord`;
     case 'bad_colour':

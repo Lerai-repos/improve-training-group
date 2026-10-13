@@ -112,6 +112,7 @@ describe('runDailyCheckExclusive', () => {
     readLabels: async () => new Map(),
     readThemas: async () => new Map(),
     readBriefingteksten: async () => VOLLEDIG_BORD,
+    readKeuzelijsten: async () => ({ gewenst: [], lijsten: [] }),
     readMailFailures: async () => [],
     readKnopProblemen: async () => [],
     readTrainers: async () => new Set(),

@@ -34,6 +34,10 @@
       "schedule": "30 2 * * *"
     },
     {
+      "path": "/api/cron/label-keuzelijsten",
+      "schedule": "15 2 * * *"
+    },
+    {
       "path": "/api/cron/sync-webhooks",
       "schedule": "7 * * * *"
     }

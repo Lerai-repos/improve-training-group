@@ -131,6 +131,14 @@ describe('readMerk', () => {
     });
   });
 
+  /** `WJ` op de agenda en een rij `WorkJoy` op het bord zijn hetzelfde label, en andersom. */
+  it('vindt de rij via de schrijfwijze, in beide richtingen', async () => {
+    const { client } = reader([labelItem('WorkJoy', 'WorkJoy', 'Workshop')]);
+    expect(await readMerk(client, '9', 'WJ')).toEqual({ merk: 'WorkJoy', term: 'Workshop' });
+    const { client: andersom } = reader([labelItem('WJ', 'WorkJoy', 'Workshop')]);
+    expect(await readMerk(andersom, '9', 'workjoy')).toEqual({ merk: 'WorkJoy', term: 'Workshop' });
+  });
+
   it('weigert een label zonder rij of met een lege term', async () => {
     const { client } = reader([labelItem('IT', 'Incompany Trainer', '')]);
     await expect(readMerk(client, '9', 'WJ')).rejects.toThrow(/geen rij voor WJ/);

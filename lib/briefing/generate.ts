@@ -5,6 +5,7 @@ import { briefingFilename, renderBriefing } from './render';
 import type { BriefingTeksten } from '@lib/briefingteksten/types';
 import type { BriefingChecklist, HistoryRow } from './blocks';
 import type { TravelInput } from './format';
+import type { LabelLogo } from './logo';
 import type { BriefingTraining } from './types';
 
 /**
@@ -59,6 +60,11 @@ export interface GenerateContext {
    * te dragen. Zonder dit veld viel `composeBriefing` stil terug op de beginteksten.
    */
   readonly teksten: BriefingTeksten;
+  /**
+   * Het logo van het Labels-bord, alleen voor een label zonder eigen sjabloon: dat krijgt het
+   * algemene sjabloon, en `renderBriefing` weigert dat zonder logo.
+   */
+  readonly logo?: LabelLogo;
 }
 
 export interface GeneratedDocument {
@@ -136,7 +142,7 @@ export async function generateBriefings(
       trainerNaam: ontvanger.trainer.naam,
       role: ontvanger.role,
       filename: filenameFor(identiteit, ontvanger.trainer.naam),
-      bytes: await renderBriefing(training.label, eigen),
+      bytes: await renderBriefing(training.label, eigen, { logo: context.logo }),
       open: openIssues(eigen),
     });
   }
