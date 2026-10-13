@@ -74,6 +74,7 @@ const TRAINING: BriefingTraining = {
   conceptProgramma: '',
   extraInfo: '',
   aandacht: null,
+  inventarisatie: { kind: 'niet-gelezen' },
   opdrachten: { trainingCycle: true, homework: false, preparatoryAssignment: false },
   cyclus: { sessies: [sessie('900', '2026-09-22'), sessie('901', '2027-01-04')], anker: '900' },
   cyclusKeuze: { opties: [optie('900', true), optie('901', false)], openstaand: false },
@@ -133,6 +134,36 @@ describe('BriefingView', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Extra aandacht nodig: Complexe opdracht, aub extra check bij AM'
     );
+  });
+
+  it('zegt wanneer de klant het inventarisatieformulier invulde', () => {
+    const { view, generate } = stel({
+      training: {
+        inventarisatie: {
+          kind: 'ingevuld',
+          op: '13-10-2026 10:41',
+          antwoorden: [{ vraag: 'Wat is je naam?', antwoord: 'Paula' }],
+        },
+      },
+    });
+    render(<BriefingView view={view} generate={generate} />);
+
+    expect(screen.getByText(/Ingevuld door de klant op 13-10-2026 10:41/)).not.toBeNull();
+  });
+
+  it('zegt dat de klant het inventarisatieformulier nog niet invulde', () => {
+    const { view, generate } = stel({ training: { inventarisatie: { kind: 'leeg' } } });
+    render(<BriefingView view={view} generate={generate} />);
+
+    expect(screen.getByText(/Nog niet ingevuld door de klant/)).not.toBeNull();
+  });
+
+  it('verwijst niet naar een link als de training geen Opportunity heeft', () => {
+    const { view, generate } = stel({ training: { inventarisatie: { kind: 'geen-opportunity' } } });
+    render(<BriefingView view={view} generate={generate} />);
+
+    expect(screen.getByText(/Geen Opportunity gekoppeld/)).not.toBeNull();
+    expect(screen.queryByText(/De link staat op de Opportunity/)).toBeNull();
   });
 
   it('toont geen melding als er geen extra aandacht nodig is', () => {

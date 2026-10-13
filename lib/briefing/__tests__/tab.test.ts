@@ -46,6 +46,7 @@ const TRAINING: BriefingTraining = {
   conceptProgramma: '',
   extraInfo: '',
   aandacht: null,
+  inventarisatie: { kind: 'niet-gelezen' },
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
@@ -743,6 +744,41 @@ describe('buildTabView', () => {
       opgeslagen({ checklist: { ...EMPTY_CHECKLIST, conceptInhoud: 'Alleen dit.' } })
     );
     expect(uit.conceptResultaat).toEqual(['Alleen dit.']);
+  });
+
+  /** De student ziet in één regel of de klant het formulier invulde; de antwoorden staan in het document. */
+  it('vat het inventarisatieformulier samen zonder de antwoorden mee te sturen', () => {
+    const uit = buildTabView(
+      {
+        ...TRAINING,
+        inventarisatie: {
+          kind: 'ingevuld',
+          op: '13-10-2026 10:41:23',
+          antwoorden: [
+            { vraag: 'Wat is je naam?', antwoord: 'Paula' },
+            { vraag: 'Voor welke organisatie werk je?', antwoord: 'Probiblio' },
+          ],
+        },
+      },
+      opgeslagen()
+    );
+    expect(uit.inventarisatie).toEqual({ kind: 'ingevuld', op: '13-10-2026 10:41:23', aantal: 2 });
+  });
+
+  /** De klant vult hem in, niet de student: "nog niet ingevuld" maakt de briefing niet onaf. */
+  it('maakt de briefing niet onaf als de klant het formulier nog niet invulde', () => {
+    const leeg = buildTabView({ ...TRAINING, inventarisatie: { kind: 'leeg' } }, opgeslagen());
+    const nietGelezen = buildTabView(TRAINING, opgeslagen());
+    expect(leeg.inventarisatie).toEqual({ kind: 'leeg' });
+    expect(leeg.issues).toEqual(nietGelezen.issues);
+  });
+
+  it('geeft door dat er geen Opportunity is', () => {
+    const uit = buildTabView(
+      { ...TRAINING, inventarisatie: { kind: 'geen-opportunity' } },
+      opgeslagen()
+    );
+    expect(uit.inventarisatie).toEqual({ kind: 'geen-opportunity' });
   });
 
   /** Een melding in de tab, en geen issue: de briefing is er niet minder compleet door. */

@@ -52,6 +52,7 @@ const trainingVoor = (itemId: string, over: Partial<BriefingTraining> = {}): Bri
   conceptProgramma: '',
   extraInfo: '',
   aandacht: null,
+  inventarisatie: { kind: 'niet-gelezen' },
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,

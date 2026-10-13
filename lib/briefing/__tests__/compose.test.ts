@@ -52,6 +52,7 @@ const PROBIBLIO: BriefingTraining = {
   conceptProgramma: '',
   extraInfo: '',
   aandacht: null,
+  inventarisatie: { kind: 'niet-gelezen' },
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
@@ -876,5 +877,41 @@ describe('de bullets van de Opportunity', () => {
   it('laten het skelet staan als de Opportunity niets heeft', () => {
     const data = composeBriefing({ ...PROBIBLIO, themaInhoud: 'Skelet.' }, EMPTY_CHECKLIST);
     expect(data.bullets).toEqual(['Skelet.']);
+  });
+});
+
+/** Het inventarisatieformulier: integraal in de briefing (`docs/build/06-briefing.md`). */
+describe('de inventarisatie', () => {
+  it('zet de vragen en antwoorden van de klant erin', () => {
+    const data = composeBriefing(
+      {
+        ...PROBIBLIO,
+        inventarisatie: {
+          kind: 'ingevuld',
+          op: '13-10-2026 10:41:23',
+          antwoorden: [{ vraag: 'Wat is je naam?', antwoord: 'Paula' }],
+        },
+      },
+      EMPTY_CHECKLIST
+    );
+    expect(data.inventarisatie).toEqual([{ vraag: 'Wat is je naam?', antwoord: 'Paula' }]);
+  });
+
+  /** Leeg is de vervangtekst van het sjabloon ("nog niet ingevuld"), geen openstaande regel. */
+  it('laat de lijst leeg als de klant hem nog niet invulde', () => {
+    const data = composeBriefing({ ...PROBIBLIO, inventarisatie: { kind: 'leeg' } }, EMPTY_CHECKLIST);
+    expect(data.inventarisatie).toEqual([]);
+    expect(openIssues(data).some((r) => r.includes('inventarisatie'))).toBe(false);
+  });
+
+  /** Een storing bij Google mag nooit lezen als "de klant vulde niets in". */
+  it('zet een openstaande regel neer als het formulier niet te lezen was', () => {
+    const data = composeBriefing(
+      { ...PROBIBLIO, inventarisatie: { kind: 'onleesbaar', fout: 'Google 503' } },
+      EMPTY_CHECKLIST
+    );
+    expect(data.inventarisatie).toHaveLength(1);
+    expect(data.inventarisatie[0]?.vraag).toContain('nog niet bepaald');
+    expect(openIssues(data).some((r) => r.includes('inventarisatie'))).toBe(true);
   });
 });

@@ -13,6 +13,7 @@
  *   doet bij de aanbevelingen.
  */
 
+import type { InventarisatieStand } from '@lib/inventarisatie/antwoorden';
 import type { BriefingOpdrachten } from './blocks';
 
 /** Een leeg veld dat de adviseur moet invullen. `label` is wat er in Monday staat. */
@@ -198,6 +199,11 @@ export interface BriefingTraining {
    * vraagt, anders `null`. Alleen voor de melding in de tab, niet voor het document.
    */
   readonly aandacht: string | null;
+  /**
+   * Het inventarisatieformulier van de Opportunity. `niet-gelezen` waar niemand erom vroeg (het
+   * bevestigen van een cyclus); de tab en het genereren lezen het via `readBriefingMetCyclus`.
+   */
+  readonly inventarisatie: InventarisatieStand;
   /** Cyclus, huiswerk en voorbereidende opdracht, zoals het agendabord ze aangeeft. */
   readonly opdrachten: BriefingOpdrachten;
   /**

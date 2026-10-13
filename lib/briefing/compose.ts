@@ -59,13 +59,10 @@ import { gevuldeSectie, standaardTekstenVoor, type GevuldeSectie } from './tekst
 
 import { classify, type Recipient, type RoleOverrides } from './recipients';
 import type { BriefingTeksten, TekstSleutel } from '@lib/briefingteksten/types';
+import type { InventarisatieStand, InventoryAnswer } from '@lib/inventarisatie/antwoorden';
 import type { BriefingTrainer, BriefingTraining } from './types';
 
-/** Eén vraag en antwoord uit het inventarisatieformulier. */
-export interface InventoryAnswer {
-  readonly vraag: string;
-  readonly antwoord: string;
-}
+export type { InventoryAnswer };
 
 /**
  * Alles wat niet uit het agendabord komt.
@@ -374,7 +371,7 @@ export function composeBriefing(
     concept: losseSectie(teksten, 'concept.inleiding', true),
     inventarisatieIntro: losseSectie(teksten, 'inventarisatie.inleiding', true),
     inventarisatieLeeg: losseSectie(teksten, 'inventarisatie.leeg', false),
-    inventarisatie: extras.inventarisatie ?? [{ vraag: MISSING.inventarisatie, antwoord: '' }],
+    inventarisatie: extras.inventarisatie ?? inventarisatieRegels(training.inventarisatie),
   };
 }
 
@@ -430,6 +427,35 @@ function achtergrondAlineas(
   }
   const alineas = herstelAlineas(training.achtergrond).split('\n').filter((r) => r !== '');
   return (alineas.length > 0 ? alineas : [MISSING.achtergrond]).map(alinea);
+}
+
+/**
+ * Wat er onder "Inventarisatie klant" komt.
+ *
+ * Leeg betekent "nog niet ingevuld door de klant": het sjabloon zet dan zijn vervangtekst neer, en
+ * dat maakt de briefing niet onaf, want de student kan er niets aan doen. Een sheet die niet te
+ * lezen was is iets anders, en wordt een openstaande regel.
+ */
+function inventarisatieRegels(stand: InventarisatieStand): readonly InventoryAnswer[] {
+  switch (stand.kind) {
+    case 'ingevuld':
+      return stand.antwoorden;
+    case 'leeg':
+    case 'geen-opportunity':
+      return [];
+    case 'onleesbaar':
+      return [
+        {
+          vraag: notDecided(
+            'inventarisatie klant',
+            `het formulier kon niet worden gelezen (${stand.fout})`
+          ),
+          antwoord: '',
+        },
+      ];
+    case 'niet-gelezen':
+      return [{ vraag: MISSING.inventarisatie, antwoord: '' }];
+  }
 }
 
 /** De gekoppelde personen die in de groep `Acteurs` staan; voor de voorinvulling. */

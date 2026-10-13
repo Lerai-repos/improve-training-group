@@ -12,6 +12,7 @@ import { CyclusPanel } from './cyclus-panel';
 import { GeneratePanel, type GenerateState } from './generate-panel';
 import { ConceptPanel } from './concept-panel';
 import { DocumentsPanel } from './documents-panel';
+import { InventarisatieRegel } from './inventarisatie-regel';
 import { ReadinessPanel } from './readiness-panel';
 
 import type { UseBriefingView } from './use-briefing-view';
@@ -235,6 +236,7 @@ export const BriefingView = ({ view, generate }: BriefingViewProps) => {
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
           <ReadinessPanel gereedheid={tab.gereedheid} />
+          <InventarisatieRegel stand={tab.inventarisatie} />
           <fieldset
             disabled={bewerkenOpSlot}
             className={cn('min-w-0', bewerkenOpSlot && 'opacity-60')}

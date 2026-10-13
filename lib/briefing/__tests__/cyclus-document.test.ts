@@ -41,6 +41,7 @@ const TRAINING: BriefingTraining = {
   conceptProgramma: '',
   extraInfo: '',
   aandacht: null,
+  inventarisatie: { kind: 'niet-gelezen' },
   opdrachten: { trainingCycle: true, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,

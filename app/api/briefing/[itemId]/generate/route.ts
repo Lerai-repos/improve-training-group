@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { buildGenerateContext } from '@lib/briefing/context';
 import { ankerMetAntwoorden, raaktDezeCyclus } from '@lib/briefing/cyclus-antwoorden';
 import { CyclusDruk, readBriefingMetCyclus, type GeladenBriefing } from '@lib/briefing/load';
+import { leesInventarisatieBron } from '@lib/inventarisatie/sheet';
 import { createBriefingRecorder } from '@lib/briefing/record';
 import { runGenerate } from '@lib/briefing/run-generate';
 import { siteConfigFromEnv } from '@lib/sharepoint/config';
@@ -170,6 +171,7 @@ export async function POST(
             relations: scope.relations,
             cycli,
             checklists,
+            inventarisatie: leesInventarisatieBron,
           });
           hekken.set(geladen.training, geladen);
           return geladen.training;

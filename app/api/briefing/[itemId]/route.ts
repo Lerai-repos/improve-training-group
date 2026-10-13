@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { ankerMetAntwoorden, raaktDezeCyclus } from '@lib/briefing/cyclus-antwoorden';
 import { CyclusDruk, readBriefingMetCyclus } from '@lib/briefing/load';
+import { leesInventarisatieBron } from '@lib/inventarisatie/sheet';
 
 import { guard, requireAgendaItem } from './guard';
 
@@ -48,6 +49,7 @@ export async function GET(
       relations: scope.relations,
       cycli,
       checklists,
+      inventarisatie: leesInventarisatieBron,
     });
     /**
      * De antwoorden van een trainingscyclus staan onder het anker, zodat de tab op elke sessie

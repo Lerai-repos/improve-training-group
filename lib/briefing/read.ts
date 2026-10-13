@@ -800,6 +800,8 @@ export async function readBriefingTraining(
     conceptProgramma: opportunity.conceptProgramma,
     extraInfo: opportunity.extraInfo,
     aandacht: opportunity.aandacht,
+    // Een andere bron (Google); zie `readBriefingMetCyclus`.
+    inventarisatie: { kind: 'niet-gelezen' },
     opdrachten: readOpdrachten(item),
     // De cyclus vraagt een zoektocht over alle agendaborden; zie `readBriefingMetCyclus`.
     cyclus: null,

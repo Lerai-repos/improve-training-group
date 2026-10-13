@@ -24,7 +24,8 @@ import { resolveRecipientRoles } from '@lib/briefing/recipients';
 import { readHistorie } from '@lib/briefing/historie';
 import { loadAgendaBoards } from '@lib/evaluations';
 import { briefingRelationsFor, readBriefingTraining } from '@lib/briefing/read';
-import { readBriefingMetCyclus } from '@lib/briefing/load';
+import { metInventarisatie, readBriefingMetCyclus } from '@lib/briefing/load';
+import { leesInventarisatieBron } from '@lib/inventarisatie/sheet';
 import { createUpstashChecklistStore } from '@lib/briefing/checklist-store';
 import { createUpstashCyclusStore } from '@lib/briefing/cyclus-store';
 import { cyclusItemIds } from '@lib/briefing/context';
@@ -286,7 +287,12 @@ async function leesTraining(
     };
   } catch {
     console.log('  Let op: geen Redis, dus zonder bevestigde trainingscyclus gelezen.');
-    return readBriefingTraining(client, itemId, { boardId });
+    // Het formulier hangt niet aan Redis; zonder dit stond er "nog niet aangesloten".
+    const [training, bron] = await Promise.all([
+      readBriefingTraining(client, itemId, { boardId }),
+      leesInventarisatieBron(),
+    ]);
+    return metInventarisatie(training, bron);
   }
   const bord = (await loadAgendaBoards(client)).boards.find((b) => b.boardId === boardId);
   if (bord === undefined) {
@@ -296,6 +302,7 @@ async function leesTraining(
     boardId,
     relations: briefingRelationsFor(bord),
     ...stores,
+    inventarisatie: leesInventarisatieBron,
   });
   /**
    * Dezelfde grendel als de knop: de inhoud (klanttitel, contactpersoon, trainers) komt van de

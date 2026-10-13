@@ -350,6 +350,7 @@ const TRAINING: BriefingTraining = {
   conceptProgramma: '',
   extraInfo: '',
   aandacht: null,
+  inventarisatie: { kind: 'niet-gelezen' },
   opdrachten: { trainingCycle: false, homework: false, preparatoryAssignment: false },
   cyclus: null,
   cyclusKeuze: null,
@@ -464,6 +465,28 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
       '<w:b/>'
     );
     expect(xml).not.toContain('[object Object]');
+  });
+
+  /** Zoals ITG's eigen voorbeeldbriefing: de vraag vet, het antwoord eronder, een witregel ertussen. */
+  it('zet de vragen van de inventarisatie vet, met een witregel ervoor', async () => {
+    const training = {
+      ...TRAINING,
+      label,
+      inventarisatie: {
+        kind: 'ingevuld' as const,
+        op: '13-10-2026',
+        antwoorden: [
+          { vraag: 'Wat is je naam?', antwoord: 'Paula Hollander' },
+          { vraag: 'Voor welke organisatie werk je?', antwoord: 'Probiblio' },
+        ],
+      },
+    };
+    const bytes = await renderBriefing(label, composeBriefing(training, EMPTY_CHECKLIST));
+    const xml = await zipReadText(bytes, 'word/document.xml');
+
+    expect(paragraphAt(xml, positionOf(xml, 'Wat is je naam?'))).toContain('<w:b/>');
+    expect(paragraphAt(xml, positionOf(xml, 'Paula Hollander'))).not.toContain('<w:b/>');
+    expect(blanksBefore(xml, 'Voor welke organisatie werk je?')).toBe(1);
   });
 
   it('geeft de concept-regels een opsommingsteken', async () => {

@@ -31,6 +31,7 @@ import { EMPTY_SAVED, type SavedChecklist } from './answers';
 
 import type { BriefingSessie, BriefingTraining, BriefingTrainer, CyclusKeuze } from './types';
 import type { ConceptBron } from './concept';
+import type { InventarisatieStand } from '@lib/inventarisatie/antwoorden';
 
 /** Eén gekoppelde persoon, zoals de tab hem toont bij de acteurvraag. */
 export interface TabPerson {
@@ -154,6 +155,8 @@ export interface TabView {
    * `null`. Een melding bovenaan de tab, niet in het document: de trainer heeft er niets aan.
    */
   readonly aandacht: string | null;
+  /** Of de klant het inventarisatieformulier invulde. Alleen de stand: de antwoorden staan in het document. */
+  readonly inventarisatie: TabInventarisatie;
   /** Wat de adviseur zelf heeft getypt, of `null` als hij het niet heeft aangeraakt. */
   readonly achtergrondEigen: string | null;
   readonly documenten: readonly TabDocument[];
@@ -236,6 +239,19 @@ function korteNaam(wat: string): string {
     return 'Huiswerkverwijzing';
   }
   return wat;
+}
+
+export type TabInventarisatie =
+  | { readonly kind: 'ingevuld'; readonly op: string; readonly aantal: number }
+  | { readonly kind: 'leeg' }
+  | { readonly kind: 'geen-opportunity' }
+  | { readonly kind: 'onleesbaar'; readonly fout: string }
+  | { readonly kind: 'niet-gelezen' };
+
+function samenvatInventarisatie(stand: InventarisatieStand): TabInventarisatie {
+  return stand.kind === 'ingevuld'
+    ? { kind: 'ingevuld', op: stand.op, aantal: stand.antwoorden.length }
+    : stand;
 }
 
 const VOLGORDE: Record<TabControle['status'], number> = { blokkeert: 0, ontbreekt: 1, ok: 2 };
@@ -784,6 +800,7 @@ export function buildTabView(opgehaald: BriefingTraining, saved: SavedChecklist 
     conceptResultaat,
     achtergrondBron: opgehaald.achtergrond,
     aandacht: training.aandacht,
+    inventarisatie: samenvatInventarisatie(training.inventarisatie),
     achtergrondEigen: antwoorden.checklist.achtergrondInhoud ?? null,
     documenten,
     cyclusKeuze: training.cyclusKeuze,

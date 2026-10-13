@@ -14,6 +14,7 @@ import {
   type CyclusStore,
 } from './cyclus-bevestiging';
 import type { ChecklistStore, Fence } from './checklist-store';
+import type { InventarisatieBron } from '@lib/inventarisatie/sheet';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 import type { BriefingTraining } from './types';
 
@@ -39,15 +40,52 @@ export interface GeladenBriefing {
   readonly geblokkeerd: readonly string[];
 }
 
+export interface LaadOpties {
+  readonly boardId: string;
+  readonly relations: BriefingRelations;
+  readonly cycli: CyclusStore;
+  readonly checklists: ChecklistStore;
+  /**
+   * Het inventarisatieformulier (`leesInventarisatieBron`). Weggelaten blijft het
+   * `niet-gelezen`, en zegt het document "nog niet aangesloten".
+   */
+  readonly inventarisatie?: () => Promise<InventarisatieBron>;
+}
+
 export async function readBriefingMetCyclus(
   client: MondayGraphQLClient,
   itemId: string,
-  options: {
-    readonly boardId: string;
-    readonly relations: BriefingRelations;
-    readonly cycli: CyclusStore;
-    readonly checklists: ChecklistStore;
+  options: LaadOpties
+): Promise<GeladenBriefing> {
+  // Tegelijk met de training: de sheet hangt niet af van de Opportunity, het opzoeken wel.
+  const bron = options.inventarisatie?.();
+  const geladen = await laadMetCyclus(client, itemId, options);
+  if (bron === undefined) {
+    return geladen;
   }
+  return { ...geladen, training: metInventarisatie(geladen.training, await bron) };
+}
+
+/**
+ * De antwoorden van de Opportunity van deze training erbij. Los van de cyclus, zodat het script
+ * zonder Redis ze ook krijgt.
+ */
+export function metInventarisatie(
+  training: BriefingTraining,
+  opzoeken: InventarisatieBron
+): BriefingTraining {
+  const opportunity = training.opportunityItemId;
+  return {
+    ...training,
+    inventarisatie:
+      opportunity === null ? { kind: 'geen-opportunity' } : opzoeken(opportunity),
+  };
+}
+
+async function laadMetCyclus(
+  client: MondayGraphQLClient,
+  itemId: string,
+  options: LaadOpties
 ): Promise<GeladenBriefing> {
   const [training, borden] = await Promise.all([
     readBriefingTraining(client, itemId, options),
