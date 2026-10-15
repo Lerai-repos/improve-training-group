@@ -167,25 +167,17 @@ function opVolgorde(bestaand: readonly StatusOptie[]): readonly StatusOptie[] {
   );
 }
 
-export function planKeuzelijst(
+/**
+ * De bestaande labels zoals `update_status_column` ze terug wil: ongewijzigd, op hun plek.
+ *
+ * Weigert een kleur die we niet kennen: de hele lijst terugschrijven met een geraden kleur zou dat
+ * label omkleuren.
+ */
+export function alsInvoer(
   bestaand: readonly StatusOptie[],
-  gewenst: readonly string[],
   waar: string
-): KeuzePlan {
-  const namen = ontbrekend(bestaand, gewenst);
-  if (namen.length === 0) {
-    return { kind: 'compleet' };
-  }
-  const gebruikt = new Set(bestaand.map((o) => o.color));
-  const vrij = Object.keys(STATUS_KLEUR)
-    .map(Number)
-    .filter((kleur) => !gebruikt.has(kleur));
-  if (bestaand.length + namen.length > MAX_LABELS || vrij.length < namen.length) {
-    return { kind: 'vol', namen };
-  }
-
-  const volgorde = opVolgorde(bestaand);
-  const labels: StatusLabelInvoer[] = volgorde.map((o, plek) => {
+): readonly StatusLabelInvoer[] {
+  return opVolgorde(bestaand).map((o, plek) => {
     const color = STATUS_KLEUR[o.color];
     if (color === undefined) {
       throw new Error(
@@ -203,11 +195,31 @@ export function planKeuzelijst(
       ...(o.description === null ? {} : { description: o.description }),
     };
   });
+}
+
+export function planKeuzelijst(
+  bestaand: readonly StatusOptie[],
+  gewenst: readonly string[],
+  waar: string
+): KeuzePlan {
+  const namen = ontbrekend(bestaand, gewenst);
+  if (namen.length === 0) {
+    return { kind: 'compleet' };
+  }
+  const gebruikt = new Set(bestaand.map((o) => o.color));
+  const vrij = Object.keys(STATUS_KLEUR)
+    .map(Number)
+    .filter((kleur) => !gebruikt.has(kleur));
+  if (bestaand.length + namen.length > MAX_LABELS || vrij.length < namen.length) {
+    return { kind: 'vol', namen };
+  }
+
+  const labels = [...alsInvoer(bestaand, waar)];
   namen.forEach((naam, i) => {
     labels.push({
       label: naam,
       color: STATUS_KLEUR[vrij[i]],
-      index: volgorde.length + i,
+      index: bestaand.length + i,
       is_done: false,
       is_deactivated: false,
     });
