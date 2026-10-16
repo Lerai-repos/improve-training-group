@@ -150,11 +150,53 @@ const codesIn = (raw: string | null): readonly string[] =>
   (raw ?? '').split(/[,\s]+/).filter((c) => c !== '');
 
 /** De reden in mensentaal, voor de update en het Systeem-bord. */
+/** Een training die dezelfde IE-code draagt, met wat de regel "één sessie" vergelijkt. */
+interface Codegenoot {
+  readonly itemId: string;
+  readonly datum: string | null;
+  readonly clientKey: string | null;
+  readonly themaKey: string | null;
+}
+
+/**
+ * Waarom een gedeelde code niet als één sessie telt, en wat ITG eraan doet.
+ *
+ * De regel is "zelfde Opportunity én zelfde Thema" (`attribute.ts`). De melding noemde eerst
+ * altijd het bedrijf, ook als dat gelijk was en het Thema ontbrak (Dirkje, 16-Oct-2026, Total
+ * Specific Solutions): dan zoekt iemand op de verkeerde plek.
+ */
+/** De twee kolommen die de regel vergelijkt, met hoe ITG ze in Monday ziet. */
+const SESSIEKOLOMMEN = [
+  { veld: 'clientKey', naam: 'Opportunity' },
+  { veld: 'themaKey', naam: "Thema's" },
+] as const;
+
+function waaromGedeeld(groep: readonly Codegenoot[]): string {
+  /**
+   * ALLE redenen, niet de eerste: wie alleen het Thema invult terwijl ook de Opportunity
+   * verschilt, drukt opnieuw op de knop en krijgt dan pas de tweede weigering.
+   */
+  const redenen = SESSIEKOLOMMEN.flatMap(({ veld, naam }) => {
+    const leeg = groep.filter((g) => g[veld] === null).map((g) => `item ${g.itemId}`);
+    const waarden = new Set(groep.flatMap((g) => (g[veld] === null ? [] : [g[veld]])));
+    return [
+      ...(leeg.length > 0 ? [`${naam} is leeg bij ${leeg.join(', ')}`] : []),
+      ...(waarden.size > 1 ? [`${naam} verschilt tussen de trainingen`] : []),
+    ];
+  });
+  return (
+    "Is het één sessie, geef dan elke training dezelfde Opportunity én hetzelfde thema in de kolom " +
+    "Thema's (de koppeling naar het Thema's-bord, niet de tekstkolom Thema)" +
+    (redenen.length === 0 ? '.' : `. Nu: ${redenen.join('; ')}.`)
+  );
+}
+
 function redenVoor(
   result: EvalResult,
   training: TrainingForReport,
-  anderen: readonly { readonly itemId: string; readonly datum: string | null }[]
+  groep: readonly Codegenoot[]
 ): string {
+  const anderen = groep.filter((g) => g.itemId !== training.itemId);
   switch (result.kind) {
     case 'unknown_label':
       return (
@@ -167,8 +209,8 @@ function redenVoor(
       const lijst = anderen.map((a) => `item ${a.itemId}, ${nlDatum(a.datum)}`).join('; ');
       return (
         `IE-code ${training.rawIeCode ?? ''} staat ook op een andere training (${lijst}), ` +
-        'en het is niet te zien bij welke sessie de reacties horen. Haal de code weg op de ' +
-        'training waar hij niet hoort, of koppel op beide hetzelfde bedrijf als het één sessie is.'
+        'en het is niet te zien bij welke sessie de reacties horen. Hoort de code daar niet, ' +
+        `haal hem dan weg op de training waar hij niet hoort. ${waaromGedeeld(groep)}`
       );
     }
     default:
@@ -248,13 +290,18 @@ async function verwerk(deps: EvalKnopDeps, itemId: string): Promise<Afloop> {
   }
   if (result.kind !== 'ok' && result.kind !== 'no_responses') {
     const mijnCodes = new Set(codesIn(training.rawIeCode));
-    const anderen = agenda
+    /** Deze training én de andere met dezelfde code, zodat de melding ze kan vergelijken. */
+    const groep = agenda
       .filter(
-        (t) =>
-          t.trainingItemId !== itemId && codesIn(t.ref.rawIeCode).some((c) => mijnCodes.has(c))
+        (t) => t.trainingItemId === itemId || codesIn(t.ref.rawIeCode).some((c) => mijnCodes.has(c))
       )
-      .map((t) => ({ itemId: t.trainingItemId, datum: t.datum }));
-    return probleem(redenVoor(result, training, anderen));
+      .map((t) => ({
+        itemId: t.trainingItemId,
+        datum: t.datum,
+        clientKey: t.ref.clientKey,
+        themaKey: t.ref.themaKey,
+      }));
+    return probleem(redenVoor(result, training, groep));
   }
 
   const verwerkt = await verwerkTraining(

@@ -299,6 +299,66 @@ describe('runEvalKnop', () => {
       expect(h.updates[0]).toContain(probleem.reden);
     });
 
+    /**
+     * Total Specific Solutions, 16-Oct-2026: zelfde Opportunity, geen Thema. De melding zei
+     * "koppel hetzelfde bedrijf", terwijl dat al gelijk was; het Thema ontbrak.
+     */
+    it('noemt het ontbrekende Thema als dat de reden is, en niet het bedrijf', async () => {
+      const h = harness({
+        readAgenda: async () => [
+          agendaItem('i1', { themaKey: null }),
+          agendaItem('i2', { themaKey: null, datum: '2026-08-28' }),
+        ],
+      });
+      await runEvalKnop(h.deps, 'i1', BORD);
+      const [probleem] = await h.problemen.list();
+      expect(probleem.reden).toContain("Nu: Thema's is leeg bij item i1, item i2.");
+      expect(probleem.reden).not.toContain('Opportunity is leeg');
+      expect(probleem.reden).not.toContain('Opportunity verschilt');
+    });
+
+    it('noemt een verschillende Opportunity als het Thema wel klopt', async () => {
+      const h = harness({
+        readAgenda: async () => [
+          agendaItem('i1'),
+          agendaItem('i2', { clientKey: 'ANDER', datum: '2026-08-28' }),
+        ],
+      });
+      await runEvalKnop(h.deps, 'i1', BORD);
+      const [probleem] = await h.problemen.list();
+      expect(probleem.reden).toContain('Nu: Opportunity verschilt tussen de trainingen.');
+    });
+
+    /** Anders vult ITG het ene in, drukt opnieuw, en krijgt dan pas het andere te horen. */
+    it('noemt alle redenen tegelijk: een leeg Thema én een andere Opportunity', async () => {
+      const h = harness({
+        readAgenda: async () => [
+          agendaItem('i1', { themaKey: null }),
+          agendaItem('i2', { themaKey: null, clientKey: 'ANDER', datum: '2026-08-28' }),
+        ],
+      });
+      await runEvalKnop(h.deps, 'i1', BORD);
+      const [probleem] = await h.problemen.list();
+      expect(probleem.reden).toContain(
+        "Nu: Opportunity verschilt tussen de trainingen; Thema's is leeg bij item i1, item i2."
+      );
+    });
+
+    it('noemt alle redenen tegelijk: een lege Opportunity én een ander Thema', async () => {
+      const h = harness({
+        readAgenda: async () => [
+          agendaItem('i1', { clientKey: null }),
+          agendaItem('i2', { themaKey: 'ANDER', datum: '2026-08-28' }),
+          agendaItem('i3', { datum: '2026-08-29' }),
+        ],
+      });
+      await runEvalKnop(h.deps, 'i1', BORD);
+      const [probleem] = await h.problemen.list();
+      expect(probleem.reden).toContain(
+        "Nu: Opportunity is leeg bij item i1; Thema's verschilt tussen de trainingen."
+      );
+    });
+
     it('meldt een label zonder instellingen', async () => {
       const h = harness({ readTraining: async () => ({ ...training, rawLabel: 'Email', labelCode: null }) });
       await runEvalKnop(h.deps, 'i1', BORD);
