@@ -259,11 +259,48 @@ const opNummer = (item: RawItem, id: string, woorden: Readonly<Record<number, st
  * relatiekolommen met honderden trainers erin, en die zouden hier bij elke briefing
  * meekomen zonder dat iemand ze gebruikt.
  */
+/** `MC-code Assertief Plus` → `Assertief Plus`; de rest van de titel is het label. */
+const MC_TITEL = /^\s*mc[\s-]*code\s+/i;
+
+/**
+ * De MC-kolom van een label, of `undefined` als het label er geen heeft.
+ *
+ * De acht waarmee het begon staan op een vast id (`THEMAS_MC_COLUMNS`), zodat ITG die kolommen
+ * mag hernoemen. Elk ander label zoekt een tekstkolom met de titel `MC-code <label>`: zo voegt ITG
+ * voor een label dat ze zelf aanmaakten de codes toe zonder dat er code bij hoeft (22-Oct-2026).
+ * Hoofdletters en spaties eromheen tellen niet, net als bij het label zelf.
+ */
+export function mcKolomVoor(
+  label: string,
+  columns: readonly { readonly id: string; readonly title: string; readonly type: string }[]
+): string | undefined {
+  const sleutel = labelSleutel(label);
+  const vast = THEMAS_MC_COLUMNS[sleutel];
+  if (vast !== undefined || sleutel === '') {
+    return vast;
+  }
+  /**
+   * Op titel en NIET op type. Zet iemand de kolom om naar een ander type, dan moet dat een fout
+   * worden (`assertColumns` in `readThemas` eist een tekstkolom) en geen label dat stil "geen
+   * MC-kolom" heeft.
+   */
+  const treffers = columns.filter(
+    (c) => MC_TITEL.test(c.title) && labelSleutel(c.title.replace(MC_TITEL, '')) === sleutel
+  );
+  if (treffers.length > 1) {
+    throw new Error(
+      `Briefing: het Thema's-bord heeft ${treffers.length} kolommen "MC-code ${label}" ` +
+        `(${treffers.map((c) => c.id).join(', ')}). Laat er één staan.`
+    );
+  }
+  return treffers[0]?.id;
+}
+
 async function readThemas(
   client: MondayGraphQLClient,
   ids: readonly string[],
-  /** De MC-kolom van dít label, of `undefined` bij een label dat er geen heeft. */
-  mcColumn: string | undefined
+  /** Het label van de training; bepaalt welke MC-kolom er gelezen wordt (`mcKolomVoor`). */
+  label: string
 ): Promise<Map<string, BriefingThema>> {
   if (ids.length === 0) {
     return new Map();
@@ -281,6 +318,7 @@ async function readThemas(
   if (themasBoard === undefined) {
     throw new Error(`Briefing: Themas-bord ${THEMAS_BOARD} niet gevonden of niet toegankelijk.`);
   }
+  const mcColumn = mcKolomVoor(label, themasBoard.columns);
   /**
    * De MC-kolom hoort er ook bij ZODRA het label er een heeft.
    *
@@ -746,7 +784,7 @@ export async function readBriefingTraining(
   const amId = people.length > 0 ? String(people[0].id) : null;
 
   const [themaItems, trainers, accountmanager, opportunity] = await Promise.all([
-    readThemas(client, themaIds, THEMAS_MC_COLUMNS[labelSleutel(text(item, C.label))]),
+    readThemas(client, themaIds, text(item, C.label)),
     readTrainers(client, trainerIds, coSet),
     readAccountmanager(client, amId),
     readContact(client, opportunityItemId, text(item, C.contactpersoonNaam)),

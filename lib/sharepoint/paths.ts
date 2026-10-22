@@ -9,7 +9,8 @@
  * ```
  * Documents / General
  *   0. ITG · 1. JE · 2. TT · 3. WJ · 4. FV · 10. ST · …     ← het label
- *     5. Klanten   (of `05. klanten` — zie hieronder)
+ *   10. Overige labels / Assertief Plus · Stress Trainer · …  ← of hier, op de naam van het label
+ *     5. Klanten   (of `05. klanten` — zie hieronder; onder Overige labels mag hij ontbreken)
  *       2026 · 2025 · 2024                                   ← soms wel, soms niet
  *         Antonius Ziekenhuis Nieuwegein
  *           Briefing … .docx
@@ -22,6 +23,8 @@
  * - **`5. Klanten` heet onder TT `05. klanten`.** Zowel het nummer als de schrijfwijze
  *   verschilt per label, dus beide niveaus hebben dezelfde losse vergelijking nodig.
  */
+
+import { labelSleutel } from '@lib/labels/catalog';
 
 /** `2. TT` → `TT`, `05. klanten` → `klanten`. Het nummer is de willekeurige helft. */
 const NUMBER_PREFIX = /^\d+\s*[.)-]?\s*/;
@@ -98,9 +101,37 @@ function matchOn(
   return { kind: 'found', name: treffers[0] };
 }
 
-/** `TT` vindt `2. TT`; het nummer telt niet mee. */
+/**
+ * `TT` vindt `2. TT`; het nummer telt niet mee.
+ *
+ * Ook op de sleutel van het label (`labelSleutel`), zodat een oude schrijfwijze dezelfde map
+ * vindt: `FT` vindt `Feedback Trainer`, en `Feedback Trainer` vindt `7. FT` zolang ITG die nog
+ * niet naar `Overige labels` heeft verhuisd.
+ */
 export function matchLabelFolder(children: readonly string[], label: string): FolderMatch {
-  return matchOn(children, label, normaliseNumbered);
+  const doel = normaliseNumbered(label);
+  const sleutel = labelSleutel(label);
+  if (doel === '' || sleutel === '') {
+    return { kind: 'missing' };
+  }
+  const treffers = children.filter(
+    (naam) =>
+      normaliseNumbered(naam) === doel || labelSleutel(naam.replace(NUMBER_PREFIX, '')) === sleutel
+  );
+  if (treffers.length === 0) {
+    return { kind: 'missing' };
+  }
+  return treffers.length > 1
+    ? { kind: 'ambiguous', names: treffers }
+    : { kind: 'found', name: treffers[0] };
+}
+
+/**
+ * `10. Overige labels`: de map waarin ITG sinds 21-Oct-2026 de labels van de kleine sites zet,
+ * één submap per label, op de naam van het label (`Assertief Plus`).
+ */
+export function matchOverigeLabelsFolder(children: readonly string[]): FolderMatch {
+  return matchOn(children, 'Overige labels', normaliseNumbered);
 }
 
 /** Vindt `5. Klanten` én `05. klanten`, en verder niets. */

@@ -177,7 +177,8 @@ describe('readLabels', () => {
   it('geeft de negen labels terug, op code', async () => {
     const labels = await readLabels(clientFor(allNine()), 'b1');
     expect(labels.size).toBe(9);
-    expect(labels.get('FT')?.volledigeNaam).toBe('Naam FT');
+    // De rij `FT` staat onder de sleutel van wat hij nu heet: Feedback Trainer.
+    expect(labels.get('FEEDBACK TRAINER')?.volledigeNaam).toBe('Naam FT');
   });
 
   it('werpt als het bord niet bestaat', async () => {
@@ -252,7 +253,7 @@ describe('readLabels', () => {
   /** Lege briefingvelden mogen het rapport niet blokkeren — zo staat FT vandaag op het bord. */
   it('accepteert lege website- en formuliervelden', async () => {
     const labels = await readLabels(clientFor(allNine()), 'b1');
-    expect(labels.get('FT')?.website).toBe('');
+    expect(labels.get('FEEDBACK TRAINER')?.website).toBe('');
   });
 
   it('werpt op een bestandskolom met twee bestanden, en noemt de kolom', async () => {

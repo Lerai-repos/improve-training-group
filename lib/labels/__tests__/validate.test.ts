@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LABEL_CODES, LABEL_SEED, isLabelCode } from '../catalog';
+import { LABEL_CODES, LABEL_SEED, isLabelCode, ontbrekendeSeedRijen } from '../catalog';
 import { describeProblem, normaliseHex, validateCatalog } from '../validate';
 
 import type { LabelConfig } from '../types';
@@ -122,9 +122,28 @@ describe('LABEL_SEED', () => {
         .filter((f) => l[f] === '')
         .map((f) => `${l.code}.${f}`)
     );
-    expect(leeg.sort()).toEqual(
-      ['FT.evaluatieformulier', 'FT.website'].sort()
-    );
+    expect(leeg.sort()).toEqual(['FT.evaluatieformulier', 'FT.website'].sort());
+  });
+});
+
+describe('ontbrekendeSeedRijen', () => {
+  it('geeft niets als elke beginrij er staat', () => {
+    expect(ontbrekendeSeedRijen(LABEL_CODES)).toEqual([]);
+  });
+
+  /**
+   * De rij `FT` heet sinds 21-Oct-2026 "Feedback Trainer". Een herstelrun van `labels:create`
+   * mag daar geen tweede `FT` naast zetten: dan is het bord dubbel en stopt elk rapport.
+   */
+  it('ziet een hernoemde rij als aanwezig, op de sleutel', () => {
+    const bord = [...LABEL_CODES.filter((c) => c !== 'FT'), 'Feedback Trainer', ' it '];
+    expect(ontbrekendeSeedRijen(bord)).toEqual([]);
+  });
+
+  it('geeft een rij die echt ontbreekt', () => {
+    expect(ontbrekendeSeedRijen(LABEL_CODES.filter((c) => c !== 'CP')).map((l) => l.code)).toEqual([
+      'CP',
+    ]);
   });
 });
 

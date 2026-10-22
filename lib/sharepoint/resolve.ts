@@ -3,6 +3,7 @@ import {
   matchClientFolder,
   matchKlantenFolder,
   matchLabelFolder,
+  matchOverigeLabelsFolder,
   matchYearFolder,
   type FolderMatch,
 } from './paths';
@@ -66,6 +67,57 @@ function vereis(match: FolderMatch, wat: string, pad: string): string | { reason
   };
 }
 
+/**
+ * De map van het label: direct onder de wortel op de afkorting (`2. TT`), en anders in
+ * `Overige labels` op de naam van het label (`Assertief Plus`).
+ *
+ * Eerst de wortel: zolang ITG `7. FT` nog niet naar `Overige labels` heeft verhuisd, blijft die
+ * gewoon werken. Daarna pas `Overige labels`, zodat een label nooit in twee mappen tegelijk kan
+ * landen. Allebei op dezelfde losse vergelijking: het nummer telt niet, hoofdletters niet.
+ */
+async function vindLabelMap(
+  lister: FolderLister,
+  root: string,
+  label: string
+): Promise<
+  | { readonly kind: 'ok'; readonly pad: string; readonly overig: boolean }
+  | { readonly kind: 'refused'; readonly reason: string }
+> {
+  const onderWortel = await lister.children(root);
+  const direct = matchLabelFolder(onderWortel, label);
+  if (direct.kind !== 'missing') {
+    const naam = vereis(direct, `voor label "${label}"`, root);
+    return typeof naam === 'string'
+      ? { kind: 'ok', pad: join(root, naam), overig: false }
+      : { kind: 'refused', reason: naam.reason };
+  }
+
+  const overige = matchOverigeLabelsFolder(onderWortel);
+  if (overige.kind === 'ambiguous') {
+    return {
+      kind: 'refused',
+      reason: `Meerdere mappen heten "Overige labels" in "${root}" (${overige.names.join(', ')}). Ruim er één op; ik gok hier niet tussen.`,
+    };
+  }
+  if (overige.kind === 'found') {
+    const overigePad = join(root, overige.name);
+    const sub = matchLabelFolder(await lister.children(overigePad), label);
+    if (sub.kind !== 'missing') {
+      const naam = vereis(sub, `voor label "${label}"`, overigePad);
+      return typeof naam === 'string'
+        ? { kind: 'ok', pad: join(overigePad, naam), overig: true }
+        : { kind: 'refused', reason: naam.reason };
+    }
+  }
+  return {
+    kind: 'refused',
+    reason:
+      `Geen map voor label "${label}" gevonden, niet in "${root}" en niet in "Overige labels". ` +
+      `Maak in "Overige labels" een map die precies "${label}" heet; ik maak hem niet zelf aan, ` +
+      'want de indeling is van jullie.',
+  };
+}
+
 export async function resolveBriefingLocation(
   lister: FolderLister,
   input: LocationInput
@@ -94,21 +146,33 @@ export async function resolveBriefingLocation(
     };
   }
 
-  const labelMatch = matchLabelFolder(await lister.children(input.root), input.label);
-  const labelNaam = vereis(labelMatch, `voor label "${input.label}"`, input.root);
-  if (typeof labelNaam !== 'string') {
-    return { kind: 'refused', reason: labelNaam.reason };
+  const plekLabel = await vindLabelMap(lister, input.root, input.label);
+  if (plekLabel.kind === 'refused') {
+    return plekLabel;
   }
-  const labelPad = join(input.root, labelNaam);
+  const labelPad = plekLabel.pad;
+  const onderLabel = await lister.children(labelPad);
 
-  const klantenMatch = matchKlantenFolder(await lister.children(labelPad));
-  const klantenNaam = vereis(klantenMatch, '"Klanten"', labelPad);
-  if (typeof klantenNaam !== 'string') {
-    return { kind: 'refused', reason: klantenNaam.reason };
+  /**
+   * De klantenmap, en onder `Overige labels` mag die ontbreken.
+   *
+   * Daar zette ITG de klanten bij het aanmaken soms los in de labelmap (`Storytelling Trainer/
+   * Vonk`, `Time Management Trainer/Pantarijn`) en soms in een `Klanten`-map. Staat er een, dan
+   * gaat de klant daarin, net als bij de negen; anders in de labelmap zelf, waar de andere
+   * klanten van dat label ook staan. Bij de negen blijft een ontbrekende klantenmap een fout:
+   * daar is hij er altijd geweest.
+   */
+  const klantenMatch = matchKlantenFolder(onderLabel);
+  let klantenPad = labelPad;
+  if (!(plekLabel.overig && klantenMatch.kind === 'missing')) {
+    const klantenNaam = vereis(klantenMatch, '"Klanten"', labelPad);
+    if (typeof klantenNaam !== 'string') {
+      return { kind: 'refused', reason: klantenNaam.reason };
+    }
+    klantenPad = join(labelPad, klantenNaam);
   }
-  const klantenPad = join(labelPad, klantenNaam);
 
-  const onderKlanten = await lister.children(klantenPad);
+  const onderKlanten = klantenPad === labelPad ? onderLabel : await lister.children(klantenPad);
 
   /**
    * De jaarmap is optioneel, en dat is het hele punt.

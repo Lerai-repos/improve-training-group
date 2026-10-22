@@ -237,6 +237,143 @@ describe('resolveBriefingLocation', () => {
     });
   });
 
+  /**
+   * De labels van de kleine sites, sinds 21-Oct-2026: één map `10. Overige labels`, daarin een
+   * map per label op zijn naam. Overgenomen van ITG's site, met de verschillen erin: soms een
+   * klantenmap (`2) Klanten`), soms de klanten los in de labelmap.
+   */
+  describe('Overige labels', () => {
+    const BOOM = {
+      General: [...LABELS, '7. FT', '10. Overige labels'],
+      'General/10. Overige labels': [
+        'Assertief Plus',
+        'Storytelling Trainer',
+        'Feedback Trainer',
+        'Mindfulness Coach',
+      ],
+      'General/10. Overige labels/Assertief Plus': ['1) Offertes', '2) Klanten'],
+      'General/10. Overige labels/Assertief Plus/2) Klanten': ['Calduran'],
+      'General/10. Overige labels/Storytelling Trainer': ['01. Offertes', 'Vonk'],
+      'General/7. FT': ['1. Offertes', '5. Klanten'],
+      'General/7. FT/5. Klanten': [],
+    };
+
+    it('vindt de labelmap op de naam van het label, en de klant in zijn klantenmap', async () => {
+      const uit = await resolveBriefingLocation(lister(BOOM), {
+        ...invoer,
+        label: 'assertief plus',
+      });
+      expect(uit).toEqual({
+        kind: 'ok',
+        location: {
+          path: 'General/10. Overige labels/Assertief Plus/2) Klanten/Calduran',
+          exists: true,
+        },
+      });
+    });
+
+    it('vindt een klant die los in de labelmap staat, als er geen klantenmap is', async () => {
+      const uit = await resolveBriefingLocation(lister(BOOM), {
+        ...invoer,
+        label: 'Storytelling Trainer',
+        klant: 'Vonk',
+      });
+      expect(uit).toEqual({
+        kind: 'ok',
+        location: { path: 'General/10. Overige labels/Storytelling Trainer/Vonk', exists: true },
+      });
+    });
+
+    it('zet een nieuwe klant in de labelmap zelf als er geen klantenmap is', async () => {
+      const uit = await resolveBriefingLocation(lister(BOOM), {
+        ...invoer,
+        label: 'Mindfulness Coach',
+        klant: 'Probiblio',
+      });
+      expect(uit).toEqual({
+        kind: 'ok',
+        location: { path: 'General/10. Overige labels/Mindfulness Coach/Probiblio', exists: false },
+      });
+    });
+
+    /** Het nummer is ITG's eigen indeling en telt nergens mee, ook niet als het ontbreekt. */
+    it('vindt label- en klantenmap met én zonder nummer', async () => {
+      const zonderNummer = {
+        General: ['TT', 'Overige labels'],
+        'General/TT': ['Klanten'],
+        'General/TT/Klanten': ['Aventus'],
+        'General/Overige labels': ['12. NLP Plus'],
+        'General/Overige labels/12. NLP Plus': ['Klanten'],
+        'General/Overige labels/12. NLP Plus/Klanten': [],
+      };
+      const tt = await resolveBriefingLocation(lister(zonderNummer), {
+        ...invoer,
+        label: 'TT',
+        klant: 'Aventus',
+      });
+      expect(tt.kind === 'ok' && tt.location.path).toBe('General/TT/Klanten/Aventus');
+      const nlp = await resolveBriefingLocation(lister(zonderNummer), {
+        ...invoer,
+        label: 'NLP Plus',
+        klant: 'X',
+      });
+      expect(nlp.kind === 'ok' && nlp.location.path).toBe(
+        'General/Overige labels/12. NLP Plus/Klanten/X'
+      );
+    });
+
+    /** Zolang ITG `7. FT` niet verhuisd heeft, blijft die gelden: nooit twee plekken tegelijk. */
+    it('geeft een map direct onder General voorrang', async () => {
+      const uit = await resolveBriefingLocation(lister(BOOM), {
+        ...invoer,
+        label: 'FT',
+        klant: 'X',
+      });
+      expect(uit.kind === 'ok' && uit.location.path).toBe('General/7. FT/5. Klanten/X');
+    });
+
+    /**
+     * FT heet sinds 21-Oct-2026 "Feedback Trainer". Een training met het oude `FT` vindt de
+     * verhuisde map, en een training met de nieuwe naam vindt `7. FT` zolang die er nog staat.
+     */
+    it('vindt de verhuisde map van FT op de nieuwe naam, ook met het oude label', async () => {
+      const verhuisd = {
+        ...BOOM,
+        General: [...LABELS, '10. Overige labels'],
+        'General/10. Overige labels/Feedback Trainer': ['5. Klanten'],
+        'General/10. Overige labels/Feedback Trainer/5. Klanten': [],
+      };
+      for (const label of ['FT', 'Feedbacktrainer', 'Feedback Trainer']) {
+        const uit = await resolveBriefingLocation(lister(verhuisd), {
+          ...invoer,
+          label,
+          klant: 'X',
+        });
+        expect(uit.kind === 'ok' && uit.location.path, label).toBe(
+          'General/10. Overige labels/Feedback Trainer/5. Klanten/X'
+        );
+      }
+    });
+
+    it('vindt 7. FT met de nieuwe naam zolang hij niet verhuisd is', async () => {
+      const uit = await resolveBriefingLocation(lister(BOOM), {
+        ...invoer,
+        label: 'Feedback Trainer',
+        klant: 'X',
+      });
+      expect(uit.kind === 'ok' && uit.location.path).toBe('General/7. FT/5. Klanten/X');
+    });
+
+    /** Bij de negen is de klantenmap er altijd geweest; ontbreekt hij, dan is er iets veranderd. */
+    it('blijft een ontbrekende klantenmap direct onder General weigeren', async () => {
+      const uit = await resolveBriefingLocation(
+        lister({ ...BOOM, 'General/7. FT': ['1. Offertes'] }),
+        { ...invoer, label: 'FT' }
+      );
+      expect(uit.kind).toBe('refused');
+    });
+  });
+
   describe('weigeren in plaats van verzinnen', () => {
     /**
      * Een label- of klantenmap draagt een nummer dat bij ITG's indeling hoort. Zelf een
@@ -247,7 +384,8 @@ describe('resolveBriefingLocation', () => {
 
       expect(uit.kind).toBe('refused');
       expect(uit.kind === 'refused' && uit.reason).toContain('SST');
-      expect(uit.kind === 'refused' && uit.reason).toContain('maak deze map niet zelf aan');
+      expect(uit.kind === 'refused' && uit.reason).toContain('niet zelf aan');
+      expect(uit.kind === 'refused' && uit.reason).toContain('Overige labels');
     });
 
     it('maakt geen klantenmap aan die er niet is', async () => {

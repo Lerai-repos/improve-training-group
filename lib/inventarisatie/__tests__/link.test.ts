@@ -33,6 +33,17 @@ describe('labelVanOpportunity', () => {
     expect(labelVanOpportunity(14, 'Email')).toBe('EMAIL');
   });
 
+  /** 8 is `Feedbacktrainer`, oftewel FT, en dat heet nu "Feedback Trainer". */
+  it('laat een vast nummer door de sleutel lopen, zodat het hernoemde FT gevonden wordt', () => {
+    expect(labelVanOpportunity(8, 'Feedbacktrainer')).toBe('FEEDBACK TRAINER');
+    expect(
+      gewensteLink(
+        { itemId: '42', labelIndex: 8, labelTekst: 'Feedbacktrainer' },
+        new Map([['FEEDBACK TRAINER', 'https://www.feedbacktrainer.nl/']])
+      )
+    ).toBe('https://www.feedbacktrainer.nl/inventarisatie?reference_id=42');
+  });
+
   it('kent geen label voor een lege cel', () => {
     expect(labelVanOpportunity(null, '')).toBeNull();
     expect(labelVanOpportunity(5, '')).toBeNull();

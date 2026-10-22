@@ -71,8 +71,17 @@ export function labelSleutel(value: string): string {
  */
 export const LABEL_ALIASES: Readonly<Record<string, LabelCode>> = {
   workjoy: 'WJ',
-  feedbacktrainer: 'FT',
   'company cursus': 'CC',
+  /**
+   * FT heet sinds 21-Oct-2026 "Feedback Trainer": Peter hernoemde de rij op het Labels-bord én
+   * het label op Agenda 2026. De oude schrijfwijzen wijzen daarom naar die rij, zodat een
+   * training of Opportunity met `FT` of `Feedbacktrainer` (42 Opportunities) gewoon werkt.
+   *
+   * Daarmee valt FT ook op het algemene sjabloon met het logo van die rij, en niet meer op
+   * `FT.docx`. Dat sjabloon droeg op het voorblad het logo van Incompany Trainer.
+   */
+  ft: 'FEEDBACK TRAINER',
+  feedbacktrainer: 'FEEDBACK TRAINER',
 };
 
 /**
@@ -199,3 +208,15 @@ export const LABEL_GAPS: Readonly<Record<string, string>> = {
   'FT.evaluatieformulier': 'ITG heeft er nooit een aangeleverd',
   'FT.website': 'feedbacktrainer.nl gaf 403; het echte adres is onbekend',
 };
+
+/**
+ * Welke rijen uit `LABEL_SEED` er nog niet op het bord staan, op hun sleutel (`labelSleutel`).
+ *
+ * Op de sleutel en niet op de letterlijke naam: de rij `FT` heet sinds 21-Oct-2026 "Feedback
+ * Trainer", en een herstelrun van `labels:create` zou anders een tweede `FT` naast die rij zetten,
+ * waarna het bord dubbel is en elk rapport stopt.
+ */
+export function ontbrekendeSeedRijen(namenOpBord: readonly string[]): readonly LabelConfig[] {
+  const aanwezig = new Set(namenOpBord.map(labelSleutel));
+  return LABEL_SEED.filter((label) => !aanwezig.has(labelSleutel(label.code)));
+}

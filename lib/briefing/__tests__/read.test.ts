@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { agendaBoardId } from '@lib/monday/board-config';
 
 import { BRIEFING_AGENDA_COLUMNS as C } from '../columns';
-import { BRIEFING_EXPECTED_COLUMNS, readBriefingTraining } from '../read';
+import { BRIEFING_EXPECTED_COLUMNS, mcKolomVoor, readBriefingTraining } from '../read';
 
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 
@@ -84,6 +84,8 @@ interface FakeOpts {
   extraInfo?: string;
   /** `Briefing: heeft deze extra aandacht nodig van WS?`, als labelnummer en tekst. */
   aandacht?: { index: number | null; text: string };
+  /** Extra kolommen op het Thema's-bord, zoals een `MC-code` voor een label dat ITG toevoegde. */
+  themaKolommen?: Array<{ id: string; title: string; type: string }>;
 }
 
 /** Een bord dat aan alle verwachtingen voldoet, tenzij de test iets omzet. */
@@ -212,6 +214,7 @@ function client(item: unknown, opts: FakeOpts = {}) {
                         settings_str: null,
                       },
                     ]),
+                ...(opts.themaKolommen ?? []).map((k) => ({ ...k, settings_str: null })),
               ],
             },
           ]
@@ -939,6 +942,18 @@ describe('readBriefingTraining', () => {
     ).rejects.toThrow(/missing column itg_mc_it/);
   });
 
+  /** Ook bij een label dat ITG zelf toevoegde: gevonden op titel, en dan het type geëist. */
+  it('werpt als de MC-kolom van een nieuw label een ander type heeft', async () => {
+    await expect(
+      readBriefingTraining(
+        client(agendaItem({ [C.label]: { text: 'Assertief Plus' } }), {
+          themaKolommen: [{ id: 'kleur_ap', title: 'MC-code Assertief Plus', type: 'status' }],
+        }),
+        '1'
+      )
+    ).rejects.toThrow(/kleur_ap is type 'status'/);
+  });
+
   it('werpt als de MC-kolom een ander type heeft gekregen', async () => {
     await expect(
       readBriefingTraining(client(agendaItem(), { mcColumnType: 'long_text' }), '1')
@@ -988,5 +1003,47 @@ describe('readBriefingTraining', () => {
     await expect(
       readBriefingTraining(client(agendaItem(), { conceptColumnType: 'text' }), '1')
     ).rejects.toThrow(/expected 'long_text'/);
+  });
+});
+
+describe('mcKolomVoor', () => {
+  const kolommen = [
+    { id: 'itg_mc_it', title: 'MC-code IT', type: 'text' },
+    { id: 'tekst_ap', title: 'MC-code Assertief Plus', type: 'text' },
+    { id: 'tekst_nlp', title: 'mc code nlp plus ', type: 'text' },
+    { id: 'status_x', title: 'MC-code Stress Trainer', type: 'status' },
+  ];
+
+  /** De acht van het begin op hun vaste id, zodat ITG die kolommen mag hernoemen. */
+  it('houdt de vaste kolom voor de oorspronkelijke labels, ook via een schrijfwijze', () => {
+    expect(mcKolomVoor('IT', [])).toBe('itg_mc_it');
+    expect(mcKolomVoor('WorkJoy', [])).toBe('itg_mc_wj');
+  });
+
+  /** Een label dat ITG zelf aanmaakte: de kolom `MC-code <label>` op het Thema's-bord. */
+  it('vindt de kolom van een nieuw label op zijn titel, hoofdletterongevoelig', () => {
+    expect(mcKolomVoor('Assertief Plus', kolommen)).toBe('tekst_ap');
+    expect(mcKolomVoor('NLP Plus', kolommen)).toBe('tekst_nlp');
+  });
+
+  it('geeft niets zonder kolom', () => {
+    expect(mcKolomVoor('Mindfulness Coach', kolommen)).toBeUndefined();
+    expect(mcKolomVoor('FT', kolommen)).toBeUndefined();
+  });
+
+  /**
+   * Een kolom van het verkeerde type wordt WEL gevonden: dan eist `readThemas` een tekstkolom en
+   * faalt hij hardop, in plaats van dat het label stil geen MC-codes meer heeft.
+   */
+  it('vindt een kolom ook als het type niet klopt, zodat de typecontrole hem weigert', () => {
+    expect(mcKolomVoor('Stress Trainer', kolommen)).toBe('status_x');
+  });
+
+  it('weigert twee kolommen voor hetzelfde label', () => {
+    const dubbel = [
+      ...kolommen,
+      { id: 'tekst_ap2', title: 'MC-code assertief plus', type: 'text' },
+    ];
+    expect(() => mcKolomVoor('Assertief Plus', dubbel)).toThrow(/2 kolommen/);
   });
 });

@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { EMPTY_CHECKLIST } from '../blocks';
 import { composeBriefing } from '../compose';
 import { resolveRecipientRoles } from '../recipients';
-import { renderBriefing, TEMPLATES_DIR } from '../render';
+import { leesLogo } from '../logo';
+import { heeftEigenSjabloon, renderBriefing, TEMPLATES_DIR } from '../render';
 import { zipReadText } from './zip-reader';
 
 import { SECTIES } from '@lib/briefingteksten/catalog';
@@ -34,6 +35,27 @@ import type { BriefingTraining } from '../types';
  */
 
 const LABELS = ['CC', 'CP', 'FT', 'FV', 'IT', 'JE', 'SST', 'TT', 'WJ'] as const;
+
+/**
+ * Wat er gerenderd wordt: de acht eigen sjablonen, en het algemene via een label dat er geen
+ * heeft (`ITG`). FT niet meer: dat heet sinds 21-Oct-2026 "Feedback Trainer" en valt op het
+ * algemene sjabloon, dus `FT.docx` wordt door geen label meer gebruikt.
+ */
+const GERENDERD = ['CC', 'CP', 'FV', 'IT', 'JE', 'SST', 'TT', 'WJ', 'ITG'] as const;
+
+/** Een doorzichtige PNG van 1x1 pixel: genoeg voor het algemene sjabloon. */
+const TESTLOGO = leesLogo(
+  Uint8Array.from(
+    atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+    ),
+    (c) => c.charCodeAt(0)
+  ),
+  'test.png'
+);
+
+/** Het logo alleen voor een label zonder eigen sjabloon, zoals de echte keten het doet. */
+const opties = (label: string) => (heeftEigenSjabloon(label) ? {} : { logo: TESTLOGO });
 
 /** Het eerste veld van de gegevenstabel; waar dit staat, staat de tabel. */
 const TABLE_MARKER = '+++opdrachtgever+++';
@@ -412,7 +434,8 @@ async function renderActor(label: string): Promise<string> {
   }
   const bytes = await renderBriefing(
     label,
-    composeBriefing(training, checklist, { historie: [], recipient: lead })
+    composeBriefing(training, checklist, { historie: [], recipient: lead }),
+    opties(label)
   );
   return zipReadText(bytes, 'word/document.xml');
 }
@@ -429,7 +452,8 @@ async function renderLead(label: string): Promise<string> {
   }
   const bytes = await renderBriefing(
     label,
-    composeBriefing(training, EMPTY_CHECKLIST, { historie: [], recipient: lead })
+    composeBriefing(training, EMPTY_CHECKLIST, { historie: [], recipient: lead }),
+    opties(label)
   );
   return zipReadText(bytes, 'word/document.xml');
 }
@@ -440,7 +464,7 @@ async function renderLead(label: string): Promise<string> {
  * leadtrainer en dus verantwoordelijk voor:" toen `docx-templates` de `<w:br/>` binnen de
  * `<w:t>` zette.
  */
-describe.each(LABELS)('gerenderde briefing %s', (label) => {
+describe.each(GERENDERD)('gerenderde briefing %s', (label) => {
   it('houdt de gegevenstabel buiten een tekstvak', async () => {
     const xml = await renderLead(label);
     expect(insideBox(xml, positionOf(xml, 'Opdrachtgever'))).toBe(false);
@@ -457,7 +481,11 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
       label,
       achtergrond: 'De aanleiding\nBinnen het team gaat het goed.',
     };
-    const bytes = await renderBriefing(label, composeBriefing(training, EMPTY_CHECKLIST));
+    const bytes = await renderBriefing(
+      label,
+      composeBriefing(training, EMPTY_CHECKLIST),
+      opties(label)
+    );
     const xml = await zipReadText(bytes, 'word/document.xml');
 
     expect(paragraphAt(xml, positionOf(xml, 'De aanleiding'))).toContain('<w:b/>');
@@ -481,7 +509,11 @@ describe.each(LABELS)('gerenderde briefing %s', (label) => {
         ],
       },
     };
-    const bytes = await renderBriefing(label, composeBriefing(training, EMPTY_CHECKLIST));
+    const bytes = await renderBriefing(
+      label,
+      composeBriefing(training, EMPTY_CHECKLIST),
+      opties(label)
+    );
     const xml = await zipReadText(bytes, 'word/document.xml');
 
     expect(paragraphAt(xml, positionOf(xml, 'Wat is je naam?'))).toContain('<w:b/>');
@@ -570,7 +602,8 @@ async function renderMet(
   }
   const bytes = await renderBriefing(
     label,
-    composeBriefing(training, checklist, { historie, recipient: lead })
+    composeBriefing(training, checklist, { historie, recipient: lead }),
+    opties(label)
   );
   return zipReadText(bytes, 'word/document.xml');
 }
@@ -583,7 +616,7 @@ const HISTORIE_RIJ: HistoryRow = {
   contactpersoon: 'Paula Hollander',
 };
 
-describe.each(LABELS)('witruimte tussen de secties, sjabloon %s', (label) => {
+describe.each(GERENDERD)('witruimte tussen de secties, sjabloon %s', (label) => {
   /** Geen enkel inhoudelijk blok: alleen de vaste witregels blijven over. */
   it('houdt één witregel als er geen blokken zijn', async () => {
     const xml = await renderMet(label, EMPTY_CHECKLIST, []);
@@ -672,7 +705,8 @@ async function renderBord(teksten: BriefingTeksten, checklist = EMPTY_CHECKLIST)
 function legeKoppen(xml: string): number {
   const paragraphs = xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
   return paragraphs.filter(
-    (p) => /w:val="Kop1"/.test(p) && !/<w:t[^>]*>[^<]*\S[^<]*<\/w:t>/.test(p) && !/<w:drawing/.test(p)
+    (p) =>
+      /w:val="Kop1"/.test(p) && !/<w:t[^>]*>[^<]*\S[^<]*<\/w:t>/.test(p) && !/<w:drawing/.test(p)
   ).length;
 }
 

@@ -8,7 +8,7 @@
 import { sectie } from '@lib/briefingteksten/catalog';
 import { vulIn } from '@lib/briefingteksten/plaatshouders';
 import { standaardTeksten } from '@lib/briefingteksten/teksten';
-import { LABEL_SEED, resolveLabelCode } from '@lib/labels/catalog';
+import { LABEL_SEED, labelSleutel } from '@lib/labels/catalog';
 
 import { notDecided } from './open-issues';
 
@@ -79,7 +79,7 @@ export function gevuldeSectie(
  * in de tab en de tests. Merk en term komen dan uit de code in plaats van van het Labels-bord.
  */
 export function standaardTekstenVoor(label: string): BriefingTeksten {
-  const code = resolveLabelCode(label);
-  const seed = LABEL_SEED.find((l) => l.code === code);
+  // Op de sleutel: `Feedback Trainer` is de rij `FT` van het begin.
+  const seed = LABEL_SEED.find((l) => labelSleutel(l.code) === labelSleutel(label));
   return standaardTeksten({ merk: seed?.volledigeNaam ?? '', term: seed?.term ?? '' });
 }

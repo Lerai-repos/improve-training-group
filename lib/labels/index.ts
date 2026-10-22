@@ -5,6 +5,7 @@ export {
   LABEL_SEED,
   isLabelCode,
   labelSleutel,
+  ontbrekendeSeedRijen,
   resolveLabelCode,
 } from './catalog';
 export { LABELS_PRODUCTION_BOARD, labelsBoardId } from './board';

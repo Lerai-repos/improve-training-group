@@ -9,7 +9,6 @@ import { LABEL_ALIASES, isLabelCode, resolveLabelCode } from '../catalog';
 describe('resolveLabelCode', () => {
   it.each([
     ['IT', 'IT'],
-    ['FT', 'FT'],
     ['CC', 'CC'],
   ])('laat de canonieke code %s ongemoeid', (raw, expected) => {
     expect(resolveLabelCode(raw)).toBe(expected);
@@ -17,8 +16,11 @@ describe('resolveLabelCode', () => {
 
   it.each([
     ['WorkJoy', 'WJ'],
-    ['Feedbacktrainer', 'FT'],
     ['Company Cursus', 'CC'],
+    /** FT is sinds 21-Oct-2026 de rij "Feedback Trainer"; beide oude schrijfwijzen wijzen daarheen. */
+    ['FT', 'FEEDBACK TRAINER'],
+    ['Feedbacktrainer', 'FEEDBACK TRAINER'],
+    ['Feedback Trainer', 'FEEDBACK TRAINER'],
   ])('lost de schrijfwijze %s op naar %s', (raw, expected) => {
     expect(resolveLabelCode(raw)).toBe(expected);
   });
@@ -60,9 +62,10 @@ describe('isLabelCode blijft strikt', () => {
     expect(isLabelCode(alias)).toBe(false);
   });
 
-  it('wijst elke schrijfwijze naar een bestaande code', () => {
+  /** Op FT na, dat sinds 21-Oct-2026 de rij "Feedback Trainer" is en geen afkorting meer heeft. */
+  it('wijst elke schrijfwijze naar een bestaande code, of naar Feedback Trainer', () => {
     for (const code of Object.values(LABEL_ALIASES)) {
-      expect(isLabelCode(code)).toBe(true);
+      expect(isLabelCode(code) || code === 'FEEDBACK TRAINER', code).toBe(true);
     }
   });
 });

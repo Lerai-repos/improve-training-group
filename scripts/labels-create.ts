@@ -23,6 +23,7 @@ import {
   LABEL_COLUMN_SPECS,
   LABEL_GAPS,
   LABEL_SEED,
+  ontbrekendeSeedRijen,
   describeProblem,
   seedColumnValues,
   validateCatalog,
@@ -283,15 +284,13 @@ async function ensureRows(
   }>('query ($b: [ID!]) { boards(ids: $b) { items_page(limit: 100) { items { id name } } } }', {
     b: [boardId],
   });
-  const present = new Set(
-    (data.boards?.[0]?.items_page?.items ?? []).map((i) => i.name.trim())
-  );
+  const namen = (data.boards?.[0]?.items_page?.items ?? []).map((i) => i.name);
+  const ontbrekend = ontbrekendeSeedRijen(namen);
+  for (const label of LABEL_SEED.filter((l) => !ontbrekend.includes(l))) {
+    console.log(`  rij bestaat al: ${label.code}`);
+  }
 
-  for (const label of LABEL_SEED) {
-    if (present.has(label.code)) {
-      console.log(`  rij bestaat al: ${label.code}`);
-      continue;
-    }
+  for (const label of ontbrekend) {
     await write.mutate(
       `mutation ($board: ID!, $group: String!, $name: String!, $values: JSON!) {
          create_item(board_id: $board, group_id: $group, item_name: $name, column_values: $values) { id }

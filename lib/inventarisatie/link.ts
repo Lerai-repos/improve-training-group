@@ -1,4 +1,4 @@
-import { resolveLabelCode } from '@lib/labels';
+import { labelSleutel, resolveLabelCode } from '@lib/labels';
 
 import type { LabelCode } from '@lib/labels';
 
@@ -46,7 +46,9 @@ export function labelVanOpportunity(
   if (labelIndex === null) {
     return null;
   }
-  return OPPORTUNITY_LABEL[labelIndex] ?? resolveLabelCode(labelTekst);
+  /** Ook het vaste nummer door de sleutel: 8 is `FT`, en dat heet nu "Feedback Trainer". */
+  const vast = OPPORTUNITY_LABEL[labelIndex];
+  return vast === undefined ? resolveLabelCode(labelTekst) : labelSleutel(vast);
 }
 
 /**

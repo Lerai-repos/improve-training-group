@@ -223,3 +223,16 @@ describe('metLogo', () => {
     await expect(metLogo(leeg, leesLogo(JPEG, 'x.jpg'))).rejects.toThrow(/geen plek voor het logo/);
   });
 });
+
+describe('standaardTekstenVoor', () => {
+  /** De voorvertoning van een FT-training: merk en term van de beginrij, onder elke naam. */
+  it.each(['FT', 'Feedbacktrainer', 'Feedback Trainer'])(
+    'vult merk en term in voor %j',
+    (label) => {
+      expect(standaardTekstenVoor(label)).toMatchObject({
+        merk: 'Feedback Trainer',
+        term: 'training',
+      });
+    }
+  );
+});
