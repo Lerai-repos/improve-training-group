@@ -107,7 +107,7 @@
     "lucide-react": "^0.446.0",
     "monday-sdk-js": "^0.5.9",
     "nanoid": "^5.0.8",
-    "next": "15.5.7",
+    "next": "15.5.28",
     "next-themes": "^0.3.0",
     "orderedmap": "^2.1.1",
     "puppeteer-core": "25.1.0",
