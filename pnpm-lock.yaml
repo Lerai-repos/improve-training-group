@@ -10,10 +10,10 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.72
-        version: 0.2.72(zod@3.25.76)
+        version: 0.2.72(zod@4.6.6)
       '@anthropic-ai/sdk':
         specifier: ^0.126.0
-        version: 0.126.0(zod@3.25.76)
+        version: 0.126.0(zod@4.6.6)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -153,8 +153,8 @@ importers:
         specifier: ^3.1.0
         version: 3.1.1(react@19.2.3)
       zod:
-        specifier: ^3.25.68
-        version: 3.25.76
+        specifier: ^4.6.6
+        version: 4.6.6
     devDependencies:
       '@playwright/test':
         specifier: ^1.50.1
@@ -3185,6 +3185,7 @@ packages:
   next@15.5.28:
     resolution: {integrity: sha512-JjhLBBY1PNnuwPtcZ7t8yxVeJVYvD2Jyp633J+gRCNbzSt7N0E+xqCf6uQiff3+3qmUkwcF/ksfSsK1xsZ76Tw==}
     engines: {node: ^18.18.0 || ^19.8.0 || >= 20.0.0}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/security-update-2025-12-11 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -4237,13 +4238,16 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
+
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.2.72(zod@3.25.76)':
+  '@anthropic-ai/claude-agent-sdk@0.2.72(zod@4.6.6)':
     dependencies:
-      zod: 3.25.76
+      zod: 4.6.6
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
       '@img/sharp-darwin-x64': 0.34.5
@@ -4255,12 +4259,12 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
 
-  '@anthropic-ai/sdk@0.126.0(zod@3.25.76)':
+  '@anthropic-ai/sdk@0.126.0(zod@4.6.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
     optionalDependencies:
-      zod: 3.25.76
+      zod: 4.6.6
 
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
@@ -8169,3 +8173,5 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   zod@3.25.76: {}
+
+  zod@4.6.6: {}

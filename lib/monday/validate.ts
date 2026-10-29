@@ -85,9 +85,10 @@ export const EMPTY_ACK: Acknowledgements = {
  */
 export const acknowledgementsSchema = z
   .object({
-    noBedrijfKlant: z.record(z.string()).default({}),
+    noBedrijfKlant: z.record(z.string(), z.string()).default({}),
     klantAliases: z
       .record(
+        z.string(),
         z
           .object({ decision: z.enum(['merge', 'separate']), canonical: z.string().optional() })
           .strict()
@@ -95,6 +96,7 @@ export const acknowledgementsSchema = z
       .default({}),
     qualConflicts: z
       .record(
+        z.string(),
         z
           .object({
             colours: z.array(z.enum(['groen', 'oranje', 'rood', 'grijs'])),
@@ -104,8 +106,10 @@ export const acknowledgementsSchema = z
       )
       .default({}),
     acknowledgedGroups: z.array(z.string()).default([]),
-    allowSourceDrop: z.record(z.object({ from: z.number(), to: z.number() }).strict()).default({}),
-    allowNoBaseline: z.record(z.number()).default({}),
+    allowSourceDrop: z
+      .record(z.string(), z.object({ from: z.number(), to: z.number() }).strict())
+      .default({}),
+    allowNoBaseline: z.record(z.string(), z.number()).default({}),
   })
   .strict();
 

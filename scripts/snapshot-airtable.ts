@@ -32,7 +32,7 @@ const pageSchema = z.object({
     z.object({
       id: z.string(),
       createdTime: z.string(),
-      fields: z.record(z.unknown()),
+      fields: z.record(z.string(), z.unknown()),
     })
   ),
   offset: z.string().optional(),

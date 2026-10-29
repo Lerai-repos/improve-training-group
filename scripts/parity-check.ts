@@ -44,7 +44,7 @@ const TRAVEL_TIME_CFG = {
 
 const recordSchema = z.object({
   id: z.string(),
-  fields: z.record(z.unknown()),
+  fields: z.record(z.string(), z.unknown()),
 });
 type Record = z.infer<typeof recordSchema>;
 
