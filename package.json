@@ -50,6 +50,7 @@
     "briefing:generate": "tsx scripts/briefing-generate.ts",
     "opportunity:achtergrond": "tsx scripts/opportunity-achtergrond.ts",
     "opportunity:kolommen": "tsx scripts/opportunity-achtergrond.ts",
+    "opportunity:achtergrond-doc": "tsx scripts/opportunity-achtergrond-doc.ts",
     "inventarisatie:links": "tsx scripts/inventarisatie-links.ts",
     "labels:keuzelijsten": "tsx scripts/labels-keuzelijsten.ts",
     "labels:webhook": "tsx scripts/labels-webhook.ts",

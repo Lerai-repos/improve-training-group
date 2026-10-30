@@ -3,6 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { herstelAlineas, isAchtergrondKop } from '../alineas';
 
 describe('herstelAlineas', () => {
+  /**
+   * Tekst uit het achtergronddocument is al in alinea's gesplitst en gaat bij het samenstellen
+   * nóg een keer door deze functie. Dat mag niets veranderen.
+   */
+  it('verandert niets aan tekst die al hersteld is', () => {
+    const bron =
+      'De aanleiding Binnen de winkels.  Over de organisatie  Groot, ongeveer 2  beschikbaar.';
+    const eenmaal = herstelAlineas(bron);
+    expect(herstelAlineas(eenmaal)).toBe(eenmaal);
+  });
+
   /** Zo levert Monday een enter in een lang tekstveld: twee spaties. */
   it('maakt van twee spaties na een zin een nieuwe alinea', () => {
     expect(herstelAlineas('Eerste alinea.  Tweede alinea.   Derde.')).toBe(

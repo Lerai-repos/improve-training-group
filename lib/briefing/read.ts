@@ -14,6 +14,7 @@
  * blijven naam en nummer per contactpersoon aan elkaar vast.
  */
 
+import { leesAchtergrondDoc, docObjectId } from './achtergrond-doc';
 import { herstelAlineas } from './alineas';
 import { BRIEFING_REQUIRED_FIELDS } from './required';
 import { assertNoDuplicateIds } from '@lib/monday/completeness';
@@ -46,7 +47,13 @@ import type { AgendaHistoryColumns } from '@lib/evaluations';
 import type { ExpectedColumn } from '@lib/monday/board-config';
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 import type { BriefingOpdrachten } from './blocks';
-import type { BriefingTraining, BriefingTrainer, MissingField, BriefingThema } from './types';
+import type {
+  AchtergrondKop,
+  BriefingTraining,
+  BriefingTrainer,
+  MissingField,
+  BriefingThema,
+} from './types';
 
 const C = BRIEFING_AGENDA_COLUMNS;
 
@@ -117,6 +124,8 @@ interface RawColumn {
   index?: number | null;
   /** `DropdownValue.values`: de gekozen labels. */
   values?: Array<{ id: string | number }> | null;
+  /** De ruwe JSON-waarde; alleen opgevraagd voor de Doc-kolom, waar `text` altijd leeg is. */
+  value?: string | null;
 }
 
 interface RawItem {
@@ -508,6 +517,8 @@ const OPPORTUNITY_EXPECTED_COLUMNS: ExpectedColumn[] = [
    * van "de kolom bestaat niet meer".
    */
   { id: OPPORTUNITY_COLUMNS.achtergrond, type: 'long_text' },
+  /** Door ons aangemaakt met `pnpm opportunity:kolommen`; om dezelfde reden gecontroleerd. */
+  { id: OPPORTUNITY_COLUMNS.achtergrondDoc, type: 'doc' },
   { id: OPPORTUNITY_COLUMNS.conceptProgramma, type: 'long_text' },
   { id: OPPORTUNITY_COLUMNS.extraInfo, type: 'long_text' },
   { id: OPPORTUNITY_COLUMNS.cyclus, type: 'status' },
@@ -518,6 +529,8 @@ const OPPORTUNITY_EXPECTED_COLUMNS: ExpectedColumn[] = [
 /** Wat de briefing van de Opportunity gebruikt, naast de contactpersoon. */
 interface OpportunityVelden {
   readonly achtergrond: string;
+  readonly achtergrondKoppen: readonly AchtergrondKop[];
+  readonly achtergrondUitDocument: boolean;
   readonly cyclusVariant: string;
   readonly conceptProgramma: string;
   readonly extraInfo: string;
@@ -526,6 +539,8 @@ interface OpportunityVelden {
 
 const GEEN_OPPORTUNITY: OpportunityVelden = {
   achtergrond: '',
+  achtergrondKoppen: [],
+  achtergrondUitDocument: false,
   cyclusVariant: '',
   conceptProgramma: '',
   extraInfo: '',
@@ -535,16 +550,51 @@ const GEEN_OPPORTUNITY: OpportunityVelden = {
 const OPPORTUNITY_IDS = [
   OPPORTUNITY_COLUMNS.contact,
   OPPORTUNITY_COLUMNS.achtergrond,
+  OPPORTUNITY_COLUMNS.achtergrondDoc,
   OPPORTUNITY_COLUMNS.conceptProgramma,
   OPPORTUNITY_COLUMNS.extraInfo,
   OPPORTUNITY_COLUMNS.cyclus,
   OPPORTUNITY_COLUMNS.aandacht,
 ];
 
-function opportunityVelden(item: RawItem): OpportunityVelden {
+type AchtergrondVelden = Pick<
+  OpportunityVelden,
+  'achtergrond' | 'achtergrondKoppen' | 'achtergrondUitDocument'
+>;
+
+/**
+ * De achtergrond: het document als daar tekst in staat, anders de lange-tekstkolom.
+ *
+ * Het document wint omdat de lange-tekstkolom bij 2.000 tekens afkapt; zie `achtergrond-doc.ts`.
+ * Een leeg document telt als niet ingevuld, zodat een Opportunity waar alleen de oude kolom is
+ * gevuld zijn tekst houdt.
+ */
+async function readAchtergrond(
+  client: MondayGraphQLClient,
+  item: RawItem
+): Promise<AchtergrondVelden> {
+  const objectId = docObjectId(cell(item, OPPORTUNITY_COLUMNS.achtergrondDoc).value);
+  const alineas = objectId === null ? [] : await leesAchtergrondDoc(client, objectId);
+  if (alineas.length === 0) {
+    return {
+      achtergrond: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.achtergrond)),
+      achtergrondKoppen: [],
+      achtergrondUitDocument: false,
+    };
+  }
+  return {
+    achtergrond: alineas.map((a) => a.tekst).join('\n'),
+    achtergrondKoppen: alineas.flatMap((a) =>
+      a.niveau === 0 ? [] : [{ tekst: a.tekst, niveau: a.niveau }]
+    ),
+    achtergrondUitDocument: true,
+  };
+}
+
+function opportunityVelden(item: RawItem, achtergrond: AchtergrondVelden): OpportunityVelden {
   const aandacht = cell(item, OPPORTUNITY_COLUMNS.aandacht);
   return {
-    achtergrond: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.achtergrond)),
+    ...achtergrond,
     cyclusVariant: text(item, OPPORTUNITY_COLUMNS.cyclus),
     conceptProgramma: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.conceptProgramma)),
     extraInfo: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.extraInfo)),
@@ -575,7 +625,7 @@ async function readContact(
        items(ids: $ids) {
          id name
          column_values(ids: ${JSON.stringify(OPPORTUNITY_IDS)}) {
-           id text ... on BoardRelationValue { linked_item_ids } ... on StatusValue { index }
+           id text value ... on BoardRelationValue { linked_item_ids } ... on StatusValue { index }
          }
        }
      }`,
@@ -599,7 +649,7 @@ async function readContact(
     // functie met een echte RawItem werkt in plaats van met een cast.
     throw new Error(`Briefing: Opportunity ${opportunityItemId} kon niet worden opgehaald`);
   }
-  const velden = opportunityVelden(oppItem);
+  const velden = opportunityVelden(oppItem, await readAchtergrond(client, oppItem));
   const linked = linkedIds(oppItem, OPPORTUNITY_COLUMNS.contact);
   if (linked.length === 0) {
     return { contact: naam === '' ? null : { naam, telefoon: '' }, ...velden };
@@ -823,6 +873,8 @@ export async function readBriefingTraining(
     acteuraantal: acteurRaw === '' ? null : Number(acteurRaw),
     opportunityItemId,
     achtergrond: opportunity.achtergrond,
+    achtergrondKoppen: opportunity.achtergrondKoppen,
+    achtergrondUitDocument: opportunity.achtergrondUitDocument,
     conceptProgramma: opportunity.conceptProgramma,
     extraInfo: opportunity.extraInfo,
     aandacht: opportunity.aandacht,

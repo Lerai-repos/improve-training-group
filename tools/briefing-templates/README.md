@@ -110,6 +110,16 @@ python3 tools/briefing-templates/achtergrond-koppen.py
 
 Volgorde na opnieuw genereren: `teksten.py`, `volgorde.py`, dan dit.
 
+### Drie groottes voor de kopjes (30-Oct-2026)
+
+De achtergrond komt nu uit een Monday-document met grote, middelgrote en kleine titels.
+`achtergrond-kopniveaus.py` maakt van de ene vette variant er drie: 13,5 pt, 13 pt en de gewone
+12,5 pt, alle drie onder de 14 pt van de sectiekoppen. Draai hem direct na `achtergrond-koppen.py`:
+
+```bash
+python3 tools/briefing-templates/achtergrond-kopniveaus.py
+```
+
 ## Stap zes: de inventarisatie zoals ITG's voorbeeld (13-Oct-2026)
 
 Elke vraag van het inventarisatieformulier vet, het antwoord eronder, en een witregel tussen twee

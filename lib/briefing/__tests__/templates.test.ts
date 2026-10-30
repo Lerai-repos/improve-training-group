@@ -495,6 +495,43 @@ describe.each(GERENDERD)('gerenderde briefing %s', (label) => {
     expect(xml).not.toContain('[object Object]');
   });
 
+  /**
+   * De drie titelsoorten uit het achtergronddocument elk op hun eigen grootte, en alle drie onder
+   * de 14 pt van de sectiekoppen (`Kop1`), zodat ze niet als een nieuwe sectie lezen.
+   */
+  it('zet de kopjes uit het achtergronddocument op drie groottes', async () => {
+    const training = {
+      ...TRAINING,
+      label,
+      achtergrond: 'Groot kopje\nMiddel kopje\nKlein kopje\nGewone tekst.',
+      achtergrondKoppen: [
+        { tekst: 'Groot kopje', niveau: 1 as const },
+        { tekst: 'Middel kopje', niveau: 2 as const },
+        { tekst: 'Klein kopje', niveau: 3 as const },
+      ],
+      achtergrondUitDocument: true,
+    };
+    const bytes = await renderBriefing(
+      label,
+      composeBriefing(training, EMPTY_CHECKLIST),
+      opties(label)
+    );
+    const xml = await zipReadText(bytes, 'word/document.xml');
+    const alinea = (tekst: string) => paragraphAt(xml, positionOf(xml, tekst));
+
+    expect(alinea('Groot kopje')).toContain('<w:b/>');
+    expect(alinea('Groot kopje')).toContain('<w:sz w:val="27"/>');
+    expect(alinea('Middel kopje')).toContain('<w:b/>');
+    expect(alinea('Middel kopje')).toContain('<w:sz w:val="26"/>');
+    expect(alinea('Klein kopje')).toContain('<w:b/>');
+    expect(alinea('Klein kopje')).not.toContain('<w:sz ');
+    expect(alinea('Gewone tekst.')).not.toContain('<w:b/>');
+    // Elke alinea precies één keer: geen variant die naast een andere blijft staan.
+    for (const tekst of ['Groot kopje', 'Middel kopje', 'Klein kopje', 'Gewone tekst.']) {
+      expect(xml.split(tekst).length - 1).toBe(1);
+    }
+  });
+
   /** Zoals ITG's eigen voorbeeldbriefing: de vraag vet, het antwoord eronder, een witregel ertussen. */
   it('zet de vragen van de inventarisatie vet, met een witregel ervoor', async () => {
     const training = {

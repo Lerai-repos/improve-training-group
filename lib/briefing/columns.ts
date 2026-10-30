@@ -190,6 +190,13 @@ export const OPPORTUNITY_COLUMNS = {
    */
   achtergrond: 'itg_achtergrond',
   /**
+   * De achtergrondinformatie als Monday-document, door ons aangemaakt met
+   * `pnpm opportunity:kolommen` (29-Oct-2026). Gaat vóór `achtergrond`: die lange-tekstkolom houdt
+   * hoogstens 2.000 tekens vast en kende geen kopjes. Is het document leeg, dan blijft
+   * `achtergrond` gelden; zie `lib/briefing/achtergrond-doc.ts`.
+   */
+  achtergrondDoc: 'itg_achtergrond_doc',
+  /**
    * `Trainingscyclus?`, door Dirkje aangemaakt 17-Sep-2026: `8+4u`, `2x4u`, `4+8u`, `2x8u`,
    * `3x4u` of `Nee`. Het cyclusdocument leest eruit hoeveel sessies er hóren te zijn. Dezelfde
    * kolom voedt de nachtelijke overname; zie `lib/overname/columns.ts` voor de label-indexen.

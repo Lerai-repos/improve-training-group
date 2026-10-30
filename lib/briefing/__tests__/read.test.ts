@@ -77,6 +77,12 @@ interface FakeOpts {
   oppAchtergrondType?: string;
   /** De tekst in `itg_achtergrond`; leeg is de begintoestand van die kolom. */
   achtergrond?: string;
+  /** De blokken van het document in `itg_achtergrond_doc`; afwezig = lege cel. */
+  achtergrondDoc?: Array<{ type: string; tekst: string }>;
+  /** Het document bestaat niet meer, terwijl de cel er nog naar wijst. */
+  achtergrondDocWeg?: boolean;
+  /** Bootst een van type veranderde Doc-kolom na. */
+  oppDocType?: string;
   /** `Trainingscyclus?` op de Opportunity, als labeltekst. */
   cyclusVariant?: string;
   /** De bullets en de extra info die de accountmanager op de Opportunity zette. */
@@ -110,6 +116,14 @@ function client(item: unknown, opts: FakeOpts = {}) {
         users: [{ id: 7, name: 'Dirkje Pril', mobile_phone: '+31648431025' }],
       } as T);
     }
+    if (doc.includes('docs(object_ids')) {
+      expect(vars?.ids).toEqual(['777']);
+      const blocks = (opts.achtergrondDoc ?? []).map((b) => ({
+        type: b.type,
+        content: JSON.stringify({ deltaFormat: [{ insert: b.tekst }] }),
+      }));
+      return Promise.resolve({ docs: opts.achtergrondDocWeg ? [] : [{ id: '1', blocks }] } as T);
+    }
     if (doc.includes('telefoon_mkn1hbyh')) {
       const asked = ((vars?.ids as string[]) ?? []).map(String);
       const namen: Record<string, [string, string]> = {
@@ -142,6 +156,14 @@ function client(item: unknown, opts: FakeOpts = {}) {
               {
                 id: 'itg_achtergrond',
                 text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.',
+              },
+              {
+                id: 'itg_achtergrond_doc',
+                text: '',
+                value:
+                  opts.achtergrondDoc === undefined
+                    ? null
+                    : JSON.stringify({ files: [{ fileType: 'MONDAY_DOC', objectId: 777 }] }),
               },
               { id: 'color_mm724vqh', text: opts.cyclusVariant ?? '' },
               { id: 'itg_conceptprogramma', text: opts.conceptProgramma ?? '' },
@@ -235,6 +257,12 @@ function client(item: unknown, opts: FakeOpts = {}) {
                     id: 'itg_achtergrond',
                     title: 'Achtergrondinformatie',
                     type: opts.oppAchtergrondType ?? 'long_text',
+                    settings_str: '{}',
+                  },
+                  {
+                    id: 'itg_achtergrond_doc',
+                    title: 'Achtergrondinformatie (document)',
+                    type: opts.oppDocType ?? 'doc',
                     settings_str: '{}',
                   },
                   {
@@ -790,6 +818,69 @@ describe('readBriefingTraining', () => {
   });
 
   /** Een van type veranderde kolom is schemadrift en moet hard falen, niet stil leeglopen. */
+  it('reads the achtergrond from the document before the long-text column', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), {
+        achtergrond: 'Afgekapt na 2000 tekens...',
+        achtergrondDoc: [
+          { type: 'medium title', tekst: 'Over de organisatie' },
+          { type: 'normal text', tekst: 'Amarijn leidt op.' },
+          { type: 'large title', tekst: 'Wat de klant vraagt' },
+          { type: 'bulleted list', tekst: 'rust in de groep' },
+        ],
+      }),
+      '1'
+    );
+    expect(t.achtergrond).toBe(
+      'Over de organisatie\nAmarijn leidt op.\nWat de klant vraagt\n• rust in de groep'
+    );
+    expect(t.achtergrondKoppen).toEqual([
+      { tekst: 'Over de organisatie', niveau: 2 },
+      { tekst: 'Wat de klant vraagt', niveau: 1 },
+    ]);
+    expect(t.achtergrondUitDocument).toBe(true);
+    expect(t.missing.map((m) => m.column)).not.toContain('itg_achtergrond');
+  });
+
+  /** Een Opportunity waar alleen de oude kolom gevuld is houdt zijn tekst. */
+  it('falls back to the long-text column when the document is empty', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), {
+        achtergrond: 'Oude tekst.  Tweede alinea.',
+        achtergrondDoc: [{ type: 'normal text', tekst: '   ' }],
+      }),
+      '1'
+    );
+    expect(t.achtergrond).toBe('Oude tekst.\nTweede alinea.');
+    expect(t.achtergrondKoppen).toEqual([]);
+    expect(t.achtergrondUitDocument).toBe(false);
+  });
+
+  it('reports a missing field when both the document and the column are empty', async () => {
+    const t = await readBriefingTraining(
+      client(agendaItem(), { achtergrond: '', achtergrondDoc: [] }),
+      '1'
+    );
+    expect(t.achtergrond).toBe('');
+    expect(t.missing.map((m) => m.column)).toContain('itg_achtergrond');
+  });
+
+  /** Een cel die naar een verdwenen document wijst is drift, geen lege tekst. */
+  it('fails when the document in the cell no longer exists', async () => {
+    await expect(
+      readBriefingTraining(
+        client(agendaItem(), { achtergrondDoc: [], achtergrondDocWeg: true }),
+        '1'
+      )
+    ).rejects.toThrow(/777/);
+  });
+
+  it('fails when the document column changed type', async () => {
+    await expect(
+      readBriefingTraining(client(agendaItem(), { oppDocType: 'long_text' }), '1')
+    ).rejects.toThrow(/itg_achtergrond_doc/);
+  });
+
   it('fails when the achtergrond column changed type', async () => {
     await expect(
       readBriefingTraining(client(agendaItem(), { oppAchtergrondType: 'text' }), '1')

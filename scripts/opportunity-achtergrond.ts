@@ -47,10 +47,19 @@ const EXIT_FAILURE = 1;
 const KOLOMMEN: ReadonlyArray<{
   readonly id: string;
   readonly titel: string;
-  readonly type: 'long_text' | 'link';
+  readonly type: 'long_text' | 'link' | 'doc';
 }> = [
   /** Gelijk aan het kopje in de briefing. */
   { id: OPPORTUNITY_COLUMNS.achtergrond, titel: 'Achtergrondinformatie', type: 'long_text' },
+  /**
+   * Een document omdat de lange-tekstkolom hierboven bij 2.000 tekens afkapt (29-Oct-2026). De
+   * briefing leest dit eerst; vullen vanuit de oude kolom doet `pnpm opportunity:achtergrond-doc`.
+   */
+  {
+    id: OPPORTUNITY_COLUMNS.achtergrondDoc,
+    titel: 'Achtergrondinformatie (document)',
+    type: 'doc',
+  },
   {
     id: OPPORTUNITY_COLUMNS.conceptProgramma,
     titel: 'Concept programma (briefing)',
@@ -75,10 +84,11 @@ async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
   const read = createMondayGraphQLClient({ token, apiVersion: MONDAY_API_VERSION });
 
-  const data = await read.query<{ boards: Array<{ id: string; name: string; columns: BoardColumn[] }> }>(
-    'query ($b: [ID!]) { boards(ids: $b) { id name columns { id title type } } }',
-    { b: [OPPORTUNITY_BOARD] }
-  );
+  const data = await read.query<{
+    boards: Array<{ id: string; name: string; columns: BoardColumn[] }>;
+  }>('query ($b: [ID!]) { boards(ids: $b) { id name columns { id title type } } }', {
+    b: [OPPORTUNITY_BOARD],
+  });
   const board = data.boards?.[0];
   if (board === undefined) {
     throw new Error(`Opportunitybord ${OPPORTUNITY_BOARD} niet gevonden of niet toegankelijk`);
@@ -113,7 +123,9 @@ async function main(): Promise<void> {
       continue;
     }
 
-    console.log(`${apply ? '  APPLY ' : '  would '}create column ${kolom.id} "${kolom.titel}" (${kolom.type})`);
+    console.log(
+      `${apply ? '  APPLY ' : '  would '}create column ${kolom.id} "${kolom.titel}" (${kolom.type})`
+    );
     if (!apply) {
       continue;
     }

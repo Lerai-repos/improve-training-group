@@ -54,6 +54,8 @@ import {
 } from './cyclus-document';
 import { isOpenIssue, notConnected, notDecided } from './open-issues';
 import { herstelAlineas, isAchtergrondKop } from './alineas';
+
+import type { KopNiveau } from './achtergrond-doc';
 import { resolveConceptInhoud, standaardConcept } from './concept';
 import { gevuldeSectie, standaardTekstenVoor, type GevuldeSectie } from './teksten';
 
@@ -139,11 +141,23 @@ export interface DocumentSectie extends GevuldeSectie {
 }
 
 /** Precies de velden die de negen sjablonen aanroepen. */
-/** Eén alinea van de achtergrond. Een kopje (`isAchtergrondKop`) komt vet in het document. */
+/**
+ * Eén alinea van de achtergrond. Een kopje komt vet in het document, op de grootte van `niveau`:
+ * 1 is 13,5 pt, 2 is 13 pt, 3 de gewone 12,5 pt; 0 is geen kopje. Het sjabloon kiest de alinea
+ * op `niveau` (`tools/briefing-templates/achtergrond-kopniveaus.py`).
+ */
 export interface AchtergrondAlinea {
   readonly tekst: string;
   readonly kop: boolean;
+  readonly niveau: KopNiveau;
 }
+
+/**
+ * De grootte van ITG's vaste kopjes in tekst die niet uit een document komt. Middel, omdat de
+ * migratie diezelfde kopjes als middelgrote titel in de documenten zette: zo ziet "De aanleiding"
+ * er overal hetzelfde uit.
+ */
+const VASTE_KOP_NIVEAU = 2;
 
 export interface BriefingDocumentData {
   /** De algemene tekst bovenaan, onder de kopband `Algemeen.`. */
@@ -414,9 +428,13 @@ function clientContactFor(training: BriefingTraining, recipient?: Recipient): st
 /**
  * De achtergrondinformatie als alinea's.
  *
- * Komt uit `itg_achtergrond` op de Opportunity — Dirkje: *"Denk dan in het opportunitybord een
- * lang tekstveld. We gebruiken wel altijd meerdere alinea's."* `extras.achtergrond` blijft
- * bestaan zodat een aanroeper hem kan overschrijven, maar de bron is nu de kolom.
+ * Komt van de Opportunity: het achtergronddocument, of anders de lange-tekstkolom (zie
+ * `readAchtergrond`). `extras.achtergrond` blijft bestaan zodat een aanroeper hem kan
+ * overschrijven, maar de bron is nu de Opportunity.
+ *
+ * Vet wordt een alinea die een van ITG's vaste kopjes is, of die in het document een titel is
+ * (`achtergrondKoppen`). Dat laatste op tekst, zodat een kopje ook vet blijft als de adviseur de
+ * tekst in de tab aanpast en het kopje laat staan.
  *
  * Een lege kolom is **geen ontbrekende bron** meer maar een leeg veld: de kolom bestaat, de
  * adviseur heeft hem nog niet ingevuld. Dat hoort in `training.missing` thuis, niet in een
@@ -427,16 +445,30 @@ function achtergrondAlineas(
   training: BriefingTraining,
   extras: BriefingExtras
 ): readonly AchtergrondAlinea[] {
+  const koppen = new Map(
+    (training.achtergrondKoppen ?? []).map((kop) => [kop.tekst.trim(), kop.niveau])
+  );
   /**
-   * Ook hier `herstelAlineas`, en niet alleen bij het lezen: tekst die vóór 12-Oct-2026 in de
-   * tab is opgeslagen staat er nog als één lap in, en die gaat de Opportunity voor.
+   * Uit het document zijn alinea's en kopjes echt: vet is wat daar een titel is, en verder niets.
+   * Raden zou "Organisatie X helpt klanten." splitsen in een vet "Organisatie" en een halve zin.
    */
-  const alinea = (tekst: string): AchtergrondAlinea => ({ tekst, kop: isAchtergrondKop(tekst) });
+  const uitDocument = training.achtergrondUitDocument === true;
+  const alinea = (tekst: string): AchtergrondAlinea => {
+    const niveau =
+      koppen.get(tekst.trim()) ?? (!uitDocument && isAchtergrondKop(tekst) ? VASTE_KOP_NIVEAU : 0);
+    return { tekst, kop: niveau !== 0, niveau };
+  };
   // Van de aanroeper: een lege array is "aangesloten en leeg" en drukt niets af.
   if (extras.achtergrond !== undefined) {
     return extras.achtergrond.map(alinea);
   }
-  const alineas = herstelAlineas(training.achtergrond).split('\n').filter((r) => r !== '');
+  /**
+   * Anders wél `herstelAlineas`, en niet alleen bij het lezen: tekst die vóór 12-Oct-2026 in de
+   * tab is opgeslagen staat er nog als één lap in, en die gaat de Opportunity voor.
+   */
+  const alineas = (uitDocument ? training.achtergrond : herstelAlineas(training.achtergrond))
+    .split('\n')
+    .filter((r) => r.trim() !== '');
   return (alineas.length > 0 ? alineas : [MISSING.achtergrond]).map(alinea);
 }
 

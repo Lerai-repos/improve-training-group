@@ -127,6 +127,12 @@ export interface BriefingCyclus {
   readonly anker: string;
 }
 
+/** Een kopje uit het achtergronddocument, met de grootte van zijn titelsoort (1 groot, 3 klein). */
+export interface AchtergrondKop {
+  readonly tekst: string;
+  readonly niveau: 1 | 2 | 3;
+}
+
 export interface BriefingTraining {
   /**
    * De Trainingscode MC zoals hij in de gegevenstabel komt.
@@ -180,12 +186,24 @@ export interface BriefingTraining {
   /** Item-id van de gekoppelde Opportunity, voor de updates en de contactpersoon. */
   readonly opportunityItemId: string | null;
   /**
-   * De achtergrondinformatie ("de aanleidingtekst") uit `itg_achtergrond` op de Opportunity.
+   * De achtergrondinformatie ("de aanleidingtekst") van de Opportunity: uit het document in
+   * `itg_achtergrond_doc`, en anders uit de lange-tekstkolom `itg_achtergrond`.
    *
-   * Eén alinea per regel (`herstelAlineas`). Leeg is normaal zolang ITG de kolom nog aan het
-   * vullen is — hij is op 20-Aug-2026 door ons aangemaakt en begon dus overal leeg.
+   * Eén alinea per regel (`herstelAlineas`). Leeg is normaal: niet elke Opportunity heeft er een.
    */
   readonly achtergrond: string;
+  /**
+   * De alinea's van `achtergrond` die in het achtergronddocument een titel zijn. Komen vet in de
+   * briefing, naast ITG's vaste kopjes (`isAchtergrondKop`). Leeg of afwezig als de tekst uit de
+   * lange-tekstkolom komt, die geen kopjes kent.
+   */
+  readonly achtergrondKoppen?: readonly AchtergrondKop[];
+  /**
+   * `true` als `achtergrond` uit het document komt. Dan zijn de alinea's en kopjes echt, en slaat
+   * de briefing het raden van `herstelAlineas` over; dat is alleen voor de lange-tekstkolom en
+   * tekst die in de tab is getypt.
+   */
+  readonly achtergrondUitDocument?: boolean;
   /**
    * De bullets voor `Concept inhoud` die de accountmanager op de Opportunity zette, één per
    * regel; leeg als hij dat niet deed. Gaat vóór het skelet van het thema; zie
