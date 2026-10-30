@@ -336,7 +336,7 @@ describe('buildTabView', () => {
       trainers: [],
       missing: [
         { column: BRIEFING_AGENDA_COLUMNS.trainerRelation, label: 'Trainer' },
-        { column: 'itg_achtergrond', label: 'Achtergrondinformatie' },
+        { column: 'itg_achtergrond_doc', label: 'Achtergrondinformatie' },
       ],
     };
 
@@ -636,7 +636,7 @@ describe('buildTabView', () => {
         {
           ...KLAAR,
           achtergrond: '',
-          missing: [{ column: 'itg_achtergrond', label: 'Achtergrondinformatie' }],
+          missing: [{ column: 'itg_achtergrond_doc', label: 'Achtergrondinformatie' }],
         },
         opgeslagen()
       );
@@ -683,7 +683,7 @@ describe('buildTabView', () => {
     const uit = buildTabView(
       {
         ...TRAINING,
-        missing: [{ column: 'itg_achtergrond', label: 'Achtergrondinformatie' }],
+        missing: [{ column: 'itg_achtergrond_doc', label: 'Achtergrondinformatie' }],
       },
       opgeslagen()
     );

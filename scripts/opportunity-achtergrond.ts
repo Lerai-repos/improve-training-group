@@ -49,14 +49,12 @@ const KOLOMMEN: ReadonlyArray<{
   readonly titel: string;
   readonly type: 'long_text' | 'link' | 'doc';
 }> = [
-  /** Gelijk aan het kopje in de briefing. */
-  { id: OPPORTUNITY_COLUMNS.achtergrond, titel: 'Achtergrondinformatie', type: 'long_text' },
   /**
-   * Een document omdat de lange-tekstkolom hierboven bij 2.000 tekens afkapt (29-Oct-2026). De
-   * briefing leest dit eerst; vullen vanuit de oude kolom doet `pnpm opportunity:achtergrond-doc`.
+   * Een document, omdat de lange-tekstkolom `itg_achtergrond` die hier eerst stond bij 2.000
+   * tekens afkapte. Die is op 29-Oct-2026 overgezet en wordt niet meer gelezen of aangemaakt.
    */
   {
-    id: OPPORTUNITY_COLUMNS.achtergrondDoc,
+    id: OPPORTUNITY_COLUMNS.achtergrond,
     titel: 'Achtergrondinformatie (document)',
     type: 'doc',
   },

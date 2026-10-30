@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  alineasNaarBlokken,
   blokkenNaarAlineas,
   DOC_BLOCK_PAGE,
   docObjectId,
   leesAchtergrondDoc,
 } from '../achtergrond-doc';
-import { herstelAlineas } from '../alineas';
 
 /** Een blok zoals `docs { blocks { type content } }` het teruggeeft. */
 function blok(type: string, ...inserts: Array<string | { insert: unknown; attributes?: object }>) {
@@ -105,40 +103,6 @@ describe('blokkenNaarAlineas', () => {
       { tekst: 'regel een', kop: false, niveau: 0 },
       { tekst: 'regel twee', kop: false, niveau: 0 },
     ]);
-  });
-});
-
-describe('alineasNaarBlokken', () => {
-  /** De migratie schrijft wat de briefing nu al uit de lange-tekstkolom haalt. */
-  it('splitst zoals herstelAlineas en maakt van ITGs vaste kopjes een titel', () => {
-    expect(
-      alineasNaarBlokken(
-        'De aanleiding Binnen de winkels gaat het mis.  Over de organisatie  Groot.'
-      )
-    ).toEqual([
-      { type: 'medium_title', tekst: 'De aanleiding' },
-      { type: 'normal_text', tekst: 'Binnen de winkels gaat het mis.' },
-      { type: 'medium_title', tekst: 'Over de organisatie' },
-      { type: 'normal_text', tekst: 'Groot.' },
-    ]);
-  });
-
-  it('levert niets op voor een lege tekst', () => {
-    expect(alineasNaarBlokken('   ')).toEqual([]);
-  });
-
-  /** Heen en terug: wat de migratie schrijft, leest de briefing exact zo terug. */
-  it('komt via de blokken ongewijzigd terug', () => {
-    const bron =
-      'Over de organisatie Amarijn leidt op.  De deelnemersgroep  Praktijkopleiders, ongeveer 2  beschikbaar.';
-    const blokken = alineasNaarBlokken(bron).map((b) =>
-      blok(b.type === 'medium_title' ? 'medium title' : 'normal text', b.tekst)
-    );
-    expect(
-      blokkenNaarAlineas(blokken)
-        .map((a) => a.tekst)
-        .join('\n')
-    ).toBe(herstelAlineas(bron));
   });
 });
 

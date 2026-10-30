@@ -428,9 +428,9 @@ function clientContactFor(training: BriefingTraining, recipient?: Recipient): st
 /**
  * De achtergrondinformatie als alinea's.
  *
- * Komt van de Opportunity: het achtergronddocument, of anders de lange-tekstkolom (zie
- * `readAchtergrond`). `extras.achtergrond` blijft bestaan zodat een aanroeper hem kan
- * overschrijven, maar de bron is nu de Opportunity.
+ * Komt uit het achtergronddocument op de Opportunity (zie `readAchtergrond`), of uit de tab.
+ * `extras.achtergrond` blijft bestaan zodat een aanroeper hem kan overschrijven, maar de bron is
+ * nu de Opportunity.
  *
  * Vet wordt een alinea die een van ITG's vaste kopjes is, of die in het document een titel is
  * (`achtergrondKoppen`). Dat laatste op tekst, zodat een kopje ook vet blijft als de adviseur de

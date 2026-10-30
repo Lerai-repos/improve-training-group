@@ -186,22 +186,22 @@ export interface BriefingTraining {
   /** Item-id van de gekoppelde Opportunity, voor de updates en de contactpersoon. */
   readonly opportunityItemId: string | null;
   /**
-   * De achtergrondinformatie ("de aanleidingtekst") van de Opportunity: uit het document in
-   * `itg_achtergrond_doc`, en anders uit de lange-tekstkolom `itg_achtergrond`.
+   * De achtergrondinformatie ("de aanleidingtekst") uit het document in `itg_achtergrond_doc` op
+   * de Opportunity, of zoals de adviseur hem in de tab typte (`metEigenAchtergrond`).
    *
-   * Eén alinea per regel (`herstelAlineas`). Leeg is normaal: niet elke Opportunity heeft er een.
+   * Eén alinea per regel. Leeg is normaal: niet elke Opportunity heeft er een.
    */
   readonly achtergrond: string;
   /**
    * De alinea's van `achtergrond` die in het achtergronddocument een titel zijn. Komen vet in de
-   * briefing, naast ITG's vaste kopjes (`isAchtergrondKop`). Leeg of afwezig als de tekst uit de
-   * lange-tekstkolom komt, die geen kopjes kent.
+   * briefing, op de grootte van hun titelsoort. Blijven gelden als de adviseur de tekst in de tab
+   * aanpast en het kopje laat staan.
    */
   readonly achtergrondKoppen?: readonly AchtergrondKop[];
   /**
    * `true` als `achtergrond` uit het document komt. Dan zijn de alinea's en kopjes echt, en slaat
-   * de briefing het raden van `herstelAlineas` over; dat is alleen voor de lange-tekstkolom en
-   * tekst die in de tab is getypt.
+   * de briefing het raden van `herstelAlineas` over; dat is alleen voor tekst die in de tab is
+   * getypt (daar staat nog tekst van vóór 12-Oct-2026 als één lap in).
    */
   readonly achtergrondUitDocument?: boolean;
   /**

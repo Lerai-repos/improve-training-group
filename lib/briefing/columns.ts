@@ -177,25 +177,19 @@ export const OPPORTUNITY_COLUMNS = {
   /** Board relation naar `Contacten 👫` (1279052020). */
   contact: 'deal_contact',
   /**
-   * De achtergrondinformatie, bij ITG "de aanleidingtekst". Aangemaakt door ons met
-   * `pnpm opportunity:achtergrond`.
+   * De achtergrondinformatie, bij ITG "de aanleidingtekst", als Monday-document (Doc-kolom).
+   * Aangemaakt door ons met `pnpm opportunity:kolommen` (29-Oct-2026); zie
+   * `lib/briefing/achtergrond-doc.ts`.
    *
-   * Dirkje in `docs/correspondence/correspondence_august.md`: *"Denk dan in het opportunitybord
-   * een lang tekstveld. We gebruiken wel altijd meerdere alinea's."* Vandaar `long_text` en
-   * niet `text`.
+   * Eerst was dit de lange-tekstkolom `itg_achtergrond`. Die hield hoogstens 2.000 tekens vast
+   * (ruim 125 van 169 teksten waren afgekapt) en kende geen kopjes. Alle teksten zijn op
+   * 29-Oct-2026 naar het document overgezet en die kolom wordt niet meer gelezen (30-Oct-2026).
    *
    * **Niet te verwarren met `beschrijving_2_0`** ("Beschrijving"), dat al op dit bord staat:
    * daar staat de aanvraag van de klant zelf in, in de ik-vorm, inclusief dingen als "ik ben
    * dinsdag telefonisch bereikbaar". Hooguit grondstof, geen briefingtekst.
    */
-  achtergrond: 'itg_achtergrond',
-  /**
-   * De achtergrondinformatie als Monday-document, door ons aangemaakt met
-   * `pnpm opportunity:kolommen` (29-Oct-2026). Gaat vóór `achtergrond`: die lange-tekstkolom houdt
-   * hoogstens 2.000 tekens vast en kende geen kopjes. Is het document leeg, dan blijft
-   * `achtergrond` gelden; zie `lib/briefing/achtergrond-doc.ts`.
-   */
-  achtergrondDoc: 'itg_achtergrond_doc',
+  achtergrond: 'itg_achtergrond_doc',
   /**
    * `Trainingscyclus?`, door Dirkje aangemaakt 17-Sep-2026: `8+4u`, `2x4u`, `4+8u`, `2x8u`,
    * `3x4u` of `Nee`. Het cyclusdocument leest eruit hoeveel sessies er hóren te zijn. Dezelfde

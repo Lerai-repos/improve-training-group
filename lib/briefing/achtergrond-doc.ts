@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-import { herstelAlineas, isAchtergrondKop } from './alineas';
-
 import type { MondayGraphQLClient } from '@lib/monday/graphql-client';
 
 /**
@@ -55,12 +53,6 @@ export interface DocAlinea {
 export interface RawDocBlock {
   readonly type: string;
   readonly content: string | null;
-}
-
-/** Wat de migratie per alinea schrijft, met de enumwaarde van `create_doc_block`. */
-export interface DocBlokSchrijven {
-  readonly type: 'medium_title' | 'normal_text';
-  readonly tekst: string;
 }
 
 const docCelSchema = z.object({
@@ -161,23 +153,6 @@ export function blokkenNaarAlineas(blokken: readonly RawDocBlock[]): DocAlinea[]
     }
   }
   return alineas;
-}
-
-/**
- * Een tekst uit de lange-tekstkolom als blokken voor het document.
- *
- * Dezelfde splitsing als de briefing er nu al op loslaat (`herstelAlineas`), zodat de migratie
- * niets verandert aan wat er in de briefing komt: wat daar vet stond (ITG's vaste kopjes) wordt
- * een titel, de rest gewone tekst.
- */
-export function alineasNaarBlokken(tekst: string): DocBlokSchrijven[] {
-  return herstelAlineas(tekst)
-    .split('\n')
-    .filter((regel) => regel !== '')
-    .map((regel) => ({
-      type: isAchtergrondKop(regel) ? 'medium_title' : 'normal_text',
-      tekst: regel,
-    }));
 }
 
 const docsSchema = z.object({

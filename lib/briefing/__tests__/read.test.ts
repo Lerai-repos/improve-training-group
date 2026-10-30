@@ -73,12 +73,11 @@ interface FakeOpts {
   reverseTrainers?: boolean;
   /** Trainer-ids die in de groep `Acteurs` op het trainersbord staan. */
   actorIds?: string[];
-  /** Bootst een van type veranderde achtergrondkolom na. */
-  oppAchtergrondType?: string;
-  /** De tekst in `itg_achtergrond`; leeg is de begintoestand van die kolom. */
-  achtergrond?: string;
-  /** De blokken van het document in `itg_achtergrond_doc`; afwezig = lege cel. */
-  achtergrondDoc?: Array<{ type: string; tekst: string }>;
+  /**
+   * De blokken van het document in `itg_achtergrond_doc`. Afwezig: één alinea over Probiblio;
+   * `null`: een lege cel zonder document.
+   */
+  achtergrondDoc?: Array<{ type: string; tekst: string }> | null;
   /** Het document bestaat niet meer, terwijl de cel er nog naar wijst. */
   achtergrondDocWeg?: boolean;
   /** Bootst een van type veranderde Doc-kolom na. */
@@ -118,7 +117,11 @@ function client(item: unknown, opts: FakeOpts = {}) {
     }
     if (doc.includes('docs(object_ids')) {
       expect(vars?.ids).toEqual(['777']);
-      const blocks = (opts.achtergrondDoc ?? []).map((b) => ({
+      const blocks = (
+        opts.achtergrondDoc ?? [
+          { type: 'normal text', tekst: 'Probiblio ondersteunt bibliotheken.' },
+        ]
+      ).map((b) => ({
         type: b.type,
         content: JSON.stringify({ deltaFormat: [{ insert: b.tekst }] }),
       }));
@@ -154,14 +157,10 @@ function client(item: unknown, opts: FakeOpts = {}) {
             column_values: [
               { id: 'deal_contact', linked_item_ids: ids },
               {
-                id: 'itg_achtergrond',
-                text: opts.achtergrond ?? 'Probiblio ondersteunt bibliotheken.',
-              },
-              {
                 id: 'itg_achtergrond_doc',
                 text: '',
                 value:
-                  opts.achtergrondDoc === undefined
+                  opts.achtergrondDoc === null
                     ? null
                     : JSON.stringify({ files: [{ fileType: 'MONDAY_DOC', objectId: 777 }] }),
               },
@@ -252,12 +251,6 @@ function client(item: unknown, opts: FakeOpts = {}) {
                     title: 'Contactpersoon',
                     type: opts.oppRelationType ?? 'board_relation',
                     settings_str: opts.oppSettings ?? '{"boardIds":[1279052020]}',
-                  },
-                  {
-                    id: 'itg_achtergrond',
-                    title: 'Achtergrondinformatie',
-                    type: opts.oppAchtergrondType ?? 'long_text',
-                    settings_str: '{}',
                   },
                   {
                     id: 'itg_achtergrond_doc',
@@ -753,14 +746,16 @@ describe('readBriefingTraining', () => {
   });
 
   /**
-   * De kolom is op 20-Aug-2026 door ons aangemaakt en begon overal leeg. Tot ITG hem vult
-   * moet elke training dit melden — dat is precies waarom er een verplicht-veld-melding voor
-   * is en geen `«nog niet aangesloten»`-regel: de bron bestaat, hij is nog niet ingevuld.
+   * Geen document in de cel: niet ingevuld. Een verplicht-veld-melding en geen
+   * `«nog niet aangesloten»`-regel: de bron bestaat, hij is nog niet ingevuld.
    */
-  it('reports an empty achtergrond column as a missing field', async () => {
-    const t = await readBriefingTraining(client(agendaItem(), { achtergrond: '' }), '1');
+  it('reports an empty document cell as a missing field', async () => {
+    const t = await readBriefingTraining(client(agendaItem(), { achtergrondDoc: null }), '1');
     expect(t.achtergrond).toBe('');
-    expect(t.missing.map((m) => m.label)).toContain('Achtergrondinformatie');
+    expect(t.missing).toContainEqual({
+      column: 'itg_achtergrond_doc',
+      label: 'Achtergrondinformatie',
+    });
   });
 
   it('reads the cycle variant from the linked Opportunity, empty without one', async () => {
@@ -771,24 +766,6 @@ describe('readBriefingTraining', () => {
       '1'
     );
     expect(zonder.cyclusVariant).toBe('');
-  });
-
-  it('reads the achtergrond text from the linked Opportunity', async () => {
-    const t = await readBriefingTraining(
-      client(agendaItem(), { achtergrond: 'Eerste alinea.\n\nTweede alinea.' }),
-      '1'
-    );
-    expect(t.achtergrond).toBe('Eerste alinea.\nTweede alinea.');
-    expect(t.missing.map((m) => m.label)).not.toContain('Achtergrondinformatie');
-  });
-
-  /** Monday levert een enter in een lang tekstveld als twee spaties; zie `herstelAlineas`. */
-  it('turns the double spaces Monday stores for an enter back into paragraphs', async () => {
-    const t = await readBriefingTraining(
-      client(agendaItem(), { achtergrond: 'Over de klant.  Aanleiding  Het team wil groeien.' }),
-      '1'
-    );
-    expect(t.achtergrond).toBe('Over de klant.\nAanleiding\nHet team wil groeien.');
   });
 
   /** Dirkje, 12-Oct-2026: de accountmanager vult bullets en extra info al op de Opportunity. */
@@ -817,11 +794,9 @@ describe('readBriefingTraining', () => {
     expect(await lees({ index: null, text: '' })).toBeNull();
   });
 
-  /** Een van type veranderde kolom is schemadrift en moet hard falen, niet stil leeglopen. */
-  it('reads the achtergrond from the document before the long-text column', async () => {
+  it('reads the achtergrond from the document on the Opportunity', async () => {
     const t = await readBriefingTraining(
       client(agendaItem(), {
-        achtergrond: 'Afgekapt na 2000 tekens...',
         achtergrondDoc: [
           { type: 'medium title', tekst: 'Over de organisatie' },
           { type: 'normal text', tekst: 'Amarijn leidt op.' },
@@ -839,30 +814,20 @@ describe('readBriefingTraining', () => {
       { tekst: 'Wat de klant vraagt', niveau: 1 },
     ]);
     expect(t.achtergrondUitDocument).toBe(true);
-    expect(t.missing.map((m) => m.column)).not.toContain('itg_achtergrond');
+    expect(t.missing.map((m) => m.column)).not.toContain('itg_achtergrond_doc');
   });
 
-  /** Een Opportunity waar alleen de oude kolom gevuld is houdt zijn tekst. */
-  it('falls back to the long-text column when the document is empty', async () => {
+  /**
+   * Een document zonder tekst telt als niet ingevuld. Er is geen terugval meer op de oude
+   * lange-tekstkolom (30-Oct-2026): die is overgezet en mag van het bord.
+   */
+  it('reports a document without text as a missing field', async () => {
     const t = await readBriefingTraining(
-      client(agendaItem(), {
-        achtergrond: 'Oude tekst.  Tweede alinea.',
-        achtergrondDoc: [{ type: 'normal text', tekst: '   ' }],
-      }),
-      '1'
-    );
-    expect(t.achtergrond).toBe('Oude tekst.\nTweede alinea.');
-    expect(t.achtergrondKoppen).toEqual([]);
-    expect(t.achtergrondUitDocument).toBe(false);
-  });
-
-  it('reports a missing field when both the document and the column are empty', async () => {
-    const t = await readBriefingTraining(
-      client(agendaItem(), { achtergrond: '', achtergrondDoc: [] }),
+      client(agendaItem(), { achtergrondDoc: [{ type: 'normal text', tekst: '   ' }] }),
       '1'
     );
     expect(t.achtergrond).toBe('');
-    expect(t.missing.map((m) => m.column)).toContain('itg_achtergrond');
+    expect(t.missing.map((m) => m.column)).toContain('itg_achtergrond_doc');
   });
 
   /** Een cel die naar een verdwenen document wijst is drift, geen lege tekst. */
@@ -875,16 +840,26 @@ describe('readBriefingTraining', () => {
     ).rejects.toThrow(/777/);
   });
 
+  /** Een van type veranderde kolom is schemadrift en moet hard falen, niet stil leeglopen. */
   it('fails when the document column changed type', async () => {
     await expect(
       readBriefingTraining(client(agendaItem(), { oppDocType: 'long_text' }), '1')
     ).rejects.toThrow(/itg_achtergrond_doc/);
   });
 
-  it('fails when the achtergrond column changed type', async () => {
-    await expect(
-      readBriefingTraining(client(agendaItem(), { oppAchtergrondType: 'text' }), '1')
-    ).rejects.toThrow(/itg_achtergrond/);
+  /** De oude lange-tekstkolom mag van het bord; de briefing vraagt hem niet meer op. */
+  it('does not ask for the old long-text column', async () => {
+    const gevraagd: string[] = [];
+    const basis = client(agendaItem());
+    const spion = {
+      ...basis,
+      query: <T>(doc: string, vars?: Record<string, unknown>): Promise<T> => {
+        gevraagd.push(doc);
+        return basis.query<T>(doc, vars);
+      },
+    };
+    await readBriefingTraining(spion, '1');
+    expect(gevraagd.some((doc) => /"itg_achtergrond"/.test(doc))).toBe(false);
   });
 
   /**
