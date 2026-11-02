@@ -511,12 +511,14 @@ const OPPORTUNITY_EXPECTED_COLUMNS: ExpectedColumn[] = [
     settingsIncludes: ['"boardIds":[1279052020]'],
   },
   /**
-   * Het achtergronddocument, door ons aangemaakt met `pnpm opportunity:kolommen`. Hier
-   * controleren zodat een verwijderde of van type veranderde kolom hard faalt: Monday laat een
-   * onbekend kolom-id stilzwijgend weg, en dan is "de adviseur heeft het niet ingevuld" niet te
-   * onderscheiden van "de kolom bestaat niet meer".
+   * Door ons aangemaakt met `pnpm opportunity:achtergrond`. Hier controleren zodat een
+   * verwijderde of van type veranderde kolom hard faalt: Monday laat een onbekend kolom-id
+   * stilzwijgend weg, en dan is "de adviseur heeft het niet ingevuld" niet te onderscheiden
+   * van "de kolom bestaat niet meer".
    */
-  { id: OPPORTUNITY_COLUMNS.achtergrond, type: 'doc' },
+  { id: OPPORTUNITY_COLUMNS.achtergrond, type: 'long_text' },
+  /** Door ons aangemaakt met `pnpm opportunity:kolommen`; om dezelfde reden gecontroleerd. */
+  { id: OPPORTUNITY_COLUMNS.achtergrondDoc, type: 'doc' },
   { id: OPPORTUNITY_COLUMNS.conceptProgramma, type: 'long_text' },
   { id: OPPORTUNITY_COLUMNS.extraInfo, type: 'long_text' },
   { id: OPPORTUNITY_COLUMNS.cyclus, type: 'status' },
@@ -548,6 +550,7 @@ const GEEN_OPPORTUNITY: OpportunityVelden = {
 const OPPORTUNITY_IDS = [
   OPPORTUNITY_COLUMNS.contact,
   OPPORTUNITY_COLUMNS.achtergrond,
+  OPPORTUNITY_COLUMNS.achtergrondDoc,
   OPPORTUNITY_COLUMNS.conceptProgramma,
   OPPORTUNITY_COLUMNS.extraInfo,
   OPPORTUNITY_COLUMNS.cyclus,
@@ -560,15 +563,25 @@ type AchtergrondVelden = Pick<
 >;
 
 /**
- * De achtergrond uit het document op de Opportunity. Geen document, of een document zonder
- * tekst, is niet ingevuld: dan blijft `achtergrond` leeg en meldt de training het ontbrekende veld.
+ * De achtergrond: het document als daar tekst in staat, anders de lange-tekstkolom.
+ *
+ * Het document wint omdat de lange-tekstkolom bij 2.000 tekens afkapt; zie `achtergrond-doc.ts`.
+ * Een leeg document telt als niet ingevuld, zodat een Opportunity waar alleen de oude kolom is
+ * gevuld zijn tekst houdt.
  */
 async function readAchtergrond(
   client: MondayGraphQLClient,
   item: RawItem
 ): Promise<AchtergrondVelden> {
-  const objectId = docObjectId(cell(item, OPPORTUNITY_COLUMNS.achtergrond).value);
+  const objectId = docObjectId(cell(item, OPPORTUNITY_COLUMNS.achtergrondDoc).value);
   const alineas = objectId === null ? [] : await leesAchtergrondDoc(client, objectId);
+  if (alineas.length === 0) {
+    return {
+      achtergrond: herstelAlineas(text(item, OPPORTUNITY_COLUMNS.achtergrond)),
+      achtergrondKoppen: [],
+      achtergrondUitDocument: false,
+    };
+  }
   return {
     achtergrond: alineas.map((a) => a.tekst).join('\n'),
     achtergrondKoppen: alineas.flatMap((a) =>
