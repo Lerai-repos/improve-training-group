@@ -10,7 +10,6 @@ import {
   type HistoryRow,
   type SessionFacts,
 } from '../blocks';
-import { metEigenAchtergrond } from '../achtergrond';
 import { composeBriefing, openIssues, sessionFacts } from '../compose';
 import { briefingFilename } from '../render';
 
@@ -133,7 +132,7 @@ describe('composeBriefing', () => {
   it('neemt de achtergrondtekst van de Opportunity over', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST);
     expect(data.achtergrond).toEqual([
-      { tekst: 'Probiblio ondersteunt openbare bibliotheken.', kop: false, niveau: 0 },
+      { tekst: 'Probiblio ondersteunt openbare bibliotheken.', kop: false },
     ]);
   });
 
@@ -159,68 +158,8 @@ describe('composeBriefing', () => {
       EMPTY_CHECKLIST
     );
     expect(data.achtergrond).toEqual([
-      { tekst: 'De aanleiding', kop: true, niveau: 2 },
-      { tekst: 'Binnen het team gaat het goed.', kop: false, niveau: 0 },
-    ]);
-  });
-
-  /** Een titel in het achtergronddocument komt vet, ook als hij niet in ITG's vaste lijst staat. */
-  it('markeert de titels uit het achtergronddocument als kop', () => {
-    const data = composeBriefing(
-      {
-        ...PROBIBLIO,
-        achtergrond: 'Wat de klant vraagt\nRust in de groep.\nDe aanleiding\nGroei.',
-        achtergrondKoppen: [{ tekst: 'Wat de klant vraagt', niveau: 1 }],
-      },
-      EMPTY_CHECKLIST
-    );
-    expect(data.achtergrond).toEqual([
-      { tekst: 'Wat de klant vraagt', kop: true, niveau: 1 },
-      { tekst: 'Rust in de groep.', kop: false, niveau: 0 },
-      { tekst: 'De aanleiding', kop: true, niveau: 2 },
-      { tekst: 'Groei.', kop: false, niveau: 0 },
-    ]);
-  });
-
-  /**
-   * Uit het document zijn de alinea's en kopjes echt; daar valt niets te raden. `herstelAlineas`
-   * zou "Organisatie X helpt…" splitsen in een vet "Organisatie" en een halve zin.
-   */
-  it('neemt de alinea’s en kopjes van het document over zonder te raden', () => {
-    const data = composeBriefing(
-      {
-        ...PROBIBLIO,
-        achtergrond:
-          'Over ons\nOrganisatie X helpt klanten.\nTwee  spaties blijven één alinea.\nDe aanleiding',
-        achtergrondKoppen: [{ tekst: 'Over ons', niveau: 3 }],
-        achtergrondUitDocument: true,
-      },
-      EMPTY_CHECKLIST
-    );
-    expect(data.achtergrond).toEqual([
-      { tekst: 'Over ons', kop: true, niveau: 3 },
-      { tekst: 'Organisatie X helpt klanten.', kop: false, niveau: 0 },
-      { tekst: 'Twee  spaties blijven één alinea.', kop: false, niveau: 0 },
-      // In het document gewone tekst, dus niet vet, ook al staat het in ITG's vaste lijst.
-      { tekst: 'De aanleiding', kop: false, niveau: 0 },
-    ]);
-  });
-
-  /** Getypt in de tab is geen document meer: daar blijft het herstel, voor oude opgeslagen tekst. */
-  it('herstelt wél de alinea’s van tekst die in de tab over het document heen is getypt', () => {
-    const training = metEigenAchtergrond(
-      {
-        ...PROBIBLIO,
-        achtergrondKoppen: [{ tekst: 'Over ons', niveau: 1 }],
-        achtergrondUitDocument: true,
-      },
-      'Over ons\nDe aanleiding Binnen het team.'
-    );
-    expect(training.achtergrondUitDocument).toBe(false);
-    expect(composeBriefing(training, EMPTY_CHECKLIST).achtergrond).toEqual([
-      { tekst: 'Over ons', kop: true, niveau: 1 },
-      { tekst: 'De aanleiding', kop: true, niveau: 2 },
-      { tekst: 'Binnen het team.', kop: false, niveau: 0 },
+      { tekst: 'De aanleiding', kop: true },
+      { tekst: 'Binnen het team gaat het goed.', kop: false },
     ]);
   });
 
@@ -234,9 +173,9 @@ describe('composeBriefing', () => {
       EMPTY_CHECKLIST
     );
     expect(data.achtergrond).toEqual([
-      { tekst: 'Over de organisatie', kop: true, niveau: 2 },
-      { tekst: 'Windgoo verkoopt fietsen.', kop: false, niveau: 0 },
-      { tekst: 'Meer.', kop: false, niveau: 0 },
+      { tekst: 'Over de organisatie', kop: true },
+      { tekst: 'Windgoo verkoopt fietsen.', kop: false },
+      { tekst: 'Meer.', kop: false },
     ]);
   });
 
@@ -253,7 +192,7 @@ describe('composeBriefing', () => {
   /** De aanroeper mag hem nog steeds overschrijven — de kolom is de bron, niet de baas. */
   it('laat een meegegeven achtergrond voorgaan op de kolom', () => {
     const data = composeBriefing(PROBIBLIO, EMPTY_CHECKLIST, { achtergrond: ['Eigen tekst.'] });
-    expect(data.achtergrond).toEqual([{ tekst: 'Eigen tekst.', kop: false, niveau: 0 }]);
+    expect(data.achtergrond).toEqual([{ tekst: 'Eigen tekst.', kop: false }]);
   });
 
   /**
@@ -949,10 +888,7 @@ describe('de inventarisatie', () => {
 
   /** Leeg is de vervangtekst van het sjabloon ("nog niet ingevuld"), geen openstaande regel. */
   it('laat de lijst leeg als de klant hem nog niet invulde', () => {
-    const data = composeBriefing(
-      { ...PROBIBLIO, inventarisatie: { kind: 'leeg' } },
-      EMPTY_CHECKLIST
-    );
+    const data = composeBriefing({ ...PROBIBLIO, inventarisatie: { kind: 'leeg' } }, EMPTY_CHECKLIST);
     expect(data.inventarisatie).toEqual([]);
     expect(openIssues(data).some((r) => r.includes('inventarisatie'))).toBe(false);
   });

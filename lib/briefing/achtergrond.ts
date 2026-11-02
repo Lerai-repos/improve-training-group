@@ -26,8 +26,6 @@ export function metEigenAchtergrond(
   return {
     ...training,
     achtergrond: eigen,
-    // Getypt in de tab, dus geen documentblokken meer: de briefing mag weer raden.
-    achtergrondUitDocument: false,
     missing:
       eigen.trim() === '' ? [...zonder, { column: kolom, label: 'Achtergrondinformatie' }] : zonder,
   };
