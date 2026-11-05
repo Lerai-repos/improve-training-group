@@ -1,5 +1,5 @@
 {
-  "regions": ["fra1", "lhr1", "cdg1", "arn1"],
+  "regions": ["fra1", "cdg1", "arn1"],
   "crons": [
     {
       "path": "/api/cron/publish-pending",
